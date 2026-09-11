@@ -97,20 +97,25 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `Index` null or > -1 (`DxGridListEditorBase.RequiredProperties`, lines 916-920), so the column
   exists but is not shown.
 - **Lookup ListViews have almost no columns.** `GenerateLookupListViewColumns` creates columns only
-  for `FriendlyKeyProperty`, the display property (sorted ascending) and members with
-  `[VisibleInListView(true)]`; nothing else (`ModelListViewNodesGenerator.cs` 355-383). The default
-  ListView creates a column for every visible member (hidden ones with `Index = -1`). So a
-  `.Lookup(l => l.Column(x => x.Customer))` needs the updater to **add** the column:
-  `columns.AddNode<IModelColumn>(name)` + `PropertyName = name`, which is what the generator's
-  internal `CreateMemberViewItemInternal` does (lines 437-442; its `View_ID` value only matters for
-  list-property editors). Found by the XLB003 fail-fast on the first session 4 run.
-- **Session 4 decision on Index:** the updater sets `IModelColumn.Index` directly. The generator's
-  move into `GeneratedIndex` (read by `ModelColumnLogic.Get_Index` only while `Index` is null,
-  `ModelViewLogic.cs` line 417) has already happened when the updater runs, and
-  `ModelNode.IsInFirstLayer` is internal so the move cannot be mimicked. A stored `Index` in the
-  generated layer is still overridden by module/admin/user differences. Unmentioned and hidden
-  columns get `Index = -1` and their default sort cleared (the stock generator sorts the display
-  member ascending, which would otherwise fight the spec's sort).
+  for `FriendlyKeyProperty`, the display property (sorted ascending) and members whose
+  `IModelMember.IsVisibleInLookupListView` is true (`IsVisibleInView` switches on the generation
+  mode, lines 147-157); if that yields no columns at all it falls back to the ordinary column set
+  (lines 377-383). The default ListView creates a column for every visible member (unshown ones
+  with `Index = -1`). So a `.Lookup(l => l.Column(x => x.Customer))` needs the updater to **add**
+  the column: `columns.AddNode<IModelColumn>(name)` + `PropertyName = name`, which is what the
+  generator's internal `CreateMemberViewItemInternal` does (lines 437-442; its `View_ID` value only
+  matters for list-property editors). Found by the XLB003 fail-fast on the first session 4 run.
+  The same applies to hidden members: they get a column too, so the chooser can offer them.
+- **Session 4 decision on Index (revised after Codex review):** the updater does what the stock
+  generator does: `SetValue<int?>("GeneratedIndex", n)` and `ClearValue("Index")` on the column
+  node. `ModelColumnDomainLogic.Get_Index` (`ModelViewLogic.cs` 417-432) returns that value while
+  `Index` is null, and returns -1 for every generated column when the admin set
+  `IModelListView.FreezeColumnIndices`. Storing `Index` directly would have made a later-added
+  listed column visible despite the freeze. The value name is an internal constant
+  (`ModelListViewColumnsNodesGeneratorBase.GeneratedIndexValueName`), so the literal is repeated in
+  the updater with a comment. Unmentioned and hidden columns get generated index -1 and their
+  default sort cleared (the stock generator sorts the display member ascending, which would
+  otherwise fight the spec's sort).
 
 ## Still open
 

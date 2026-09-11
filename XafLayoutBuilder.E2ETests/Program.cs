@@ -84,6 +84,8 @@ try
             c.classList.contains('dxbl-fl-gt') ? 'tabs' : (c.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? 'group'));
     }");
     Assert(string.Join(",", topLevel) == "Order,Notes,tabs", $"top-level layout nodes are Header, Details, Tabs in that order (got {string.Join(",", topLevel)})");
+    var tabTitles = await form.EvaluateAsync<string[]>("f => [...f.querySelectorAll('.dxbl-fl-gt .dxbl-tabs-item')].map(t => t.innerText.trim())");
+    Assert(string.Join(",", tabTitles) == "Lines,Attachments", $"tabbed group has exactly the tabs Lines, Attachments in that order (got {string.Join(",", tabTitles)})");
     var iNumber = detailText.IndexOf("Number", StringComparison.Ordinal);
     var iNotes = detailText.IndexOf("Notes", StringComparison.Ordinal);
     var iLines = detailText.IndexOf("Lines", StringComparison.Ordinal);
@@ -130,19 +132,16 @@ try
     Console.WriteLine("    header context menu: " + string.Join(" | ", menuItems));
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-05-header-menu.png") });
     var chooserItem = page.Locator("[role=menuitem], .dxbl-context-menu-item, .dxbl-menu-item").Filter(new() { HasText = "Column Chooser" }).First;
-    if (await chooserItem.CountAsync() > 0) {
-        await chooserItem.ClickAsync();
-        await page.WaitForTimeoutAsync(1000);
-        var chooserText = await page.EvaluateAsync<string>("() => [...document.querySelectorAll('.dxbl-grid-column-chooser, .dxbl-column-chooser, .dxbl-popup')].map(p => p.innerText).join(' || ')");
-        Console.WriteLine("    column chooser text: " + chooserText.Replace("\n", " / "));
-        await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-06-column-chooser.png") });
-        Assert(chooserText.Contains("Sync Token"), "SyncToken is offered in the column chooser (hidden, not removed)");
-        await page.Keyboard.PressAsync("Escape");
-    }
-    else {
-        Console.WriteLine("    (no Column Chooser menu item found; see screenshot)");
-        await page.Keyboard.PressAsync("Escape");
-    }
+    Assert(await chooserItem.CountAsync() > 0, "header context menu offers Column Chooser");
+    await chooserItem.ClickAsync();
+    // The chooser's title lives outside the element that lists the columns; find the list by a known column caption.
+    var chooser = page.Locator(".dxbl-popup, .dxbl-grid-column-chooser, .dxbl-column-chooser").Filter(new() { HasText = "Order Date" }).First;
+    await chooser.WaitForAsync(new() { Timeout = 10_000 });
+    var chooserText = await chooser.InnerTextAsync();
+    Console.WriteLine("    column chooser text: " + chooserText.Replace("\n", " / "));
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-06-column-chooser.png") });
+    Assert(chooserText.Contains("Sync Token"), "SyncToken is offered in the column chooser (hidden, not removed)");
+    await page.Keyboard.PressAsync("Escape");
 
     Step("E2E 3: Order_LookupListView shows only Number and Customer");
     // ServiceOrder.OriginalOrder is a plain reference to Order, so its editor uses Order_LookupListView.

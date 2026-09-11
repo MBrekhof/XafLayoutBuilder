@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 4). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 4b). Session plan: `XafLayoutBuilder-START.md` section 9.
 
 ## Where the plan stands
 
@@ -13,6 +13,23 @@ Updated 2026-09-11 (after session 4). Session plan: `XafLayoutBuilder-START.md` 
 | 5. Registry, interface discovery, startup diagnostics | next |
 | 6. Exporter, printer, popup + E2E 4–6 | |
 | 7. SKILL.md, README, docs, screenshots | |
+
+## Session 4b result (Codex review follow-up, 2026-09-11)
+
+- Column index now goes through the generator's own mechanism (`GeneratedIndex` value + cleared
+  `Index`), so `IModelListView.FreezeColumnIndices` set by an admin keeps later-added listed
+  columns hidden, exactly as for stock columns. api-notes revised accordingly.
+- Hidden members without a stock column (typical in the lookup view) now get a column with index
+  -1, so the chooser can offer them.
+- Spec immutability closed for real: list properties freeze in their `init` accessors (covers the
+  constructor, JSON and `with { }`), and `Frozen()` always copies, so a caller's
+  `ReadOnlyCollection` over a mutable list is not aliased. Two tests added (28 total).
+- E2E 1 asserts the tabbed group holds exactly Lines, Attachments in that order. E2E 2 now fails
+  when the Column Chooser menu item is missing instead of logging and moving on.
+- api-notes corrected: the lookup generator tests `IsVisibleInLookupListView` (not
+  `VisibleInListView`) and falls back to the full column set when nothing was generated.
+- `skills/xaf-layout-builder/SKILL.md` drafted with the current surface (session 7 finalises it),
+  so the section 10 "skill sentence per method" rule is met from here on.
 
 ## Session 4 result
 

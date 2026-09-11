@@ -49,6 +49,23 @@ public class ReviewFollowUpTests {
     }
 
     [Fact]
+    public void CallerReadOnlyCollection_IsCopied_NotAliased() {
+        var backing = new List<LayoutNodeSpec> { new LayoutItemSpec("Number") };
+        var g = new LayoutGroupSpec("G", backing.AsReadOnly());
+        backing.Add(new LayoutItemSpec("Notes"));
+        Assert.Single(g.Children);
+    }
+
+    [Fact]
+    public void WithExpression_FreezesTheNewList() {
+        var mutable = new List<LayoutNodeSpec> { new LayoutItemSpec("Number") };
+        var spec = LayoutBuilderTests.Section4Detail() with { Nodes = mutable };
+        mutable.Add(new LayoutItemSpec("Notes"));
+        Assert.Single(spec.Nodes);
+        Assert.Throws<NotSupportedException>(() => ((IList<LayoutNodeSpec>)spec.Nodes).Clear());
+    }
+
+    [Fact]
     public void DeserialisedSpec_IsFrozenToo() {
         var back = LayoutSpecJson.Deserialize<DetailLayoutSpec>(LayoutSpecJson.Serialize(LayoutBuilderTests.Section4Detail()));
         Assert.Throws<NotSupportedException>(() => ((IList<LayoutNodeSpec>)back.Nodes).Clear());
