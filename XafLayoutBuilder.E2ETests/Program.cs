@@ -63,16 +63,42 @@ try
     Assert(body.Contains("SRV-001"), "ListView shows the ServiceOrder SRV-001 (inheritance pair appears in the base list)");
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-02-order-listview.png") });
 
-    Step("Open ORD-001 DetailView (default XAF layout)");
+    Step("E2E 1: Order_DetailView renders the builder layout");
     await page.GetByText("ORD-001", new() { Exact = true }).First.ClickAsync();
     await page.WaitForURLAsync(url => url.Contains("Order_DetailView", StringComparison.OrdinalIgnoreCase), new() { Timeout = 20_000 });
     // NetworkIdle fires while the ListView is still on screen; wait for the form to bind ORD-001
     // into an editor before reading the DOM, otherwise the grid's column headers satisfy the assert.
     await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'ORD-001')",
         null, new() { Timeout = 30_000 });
-    var detailText = await page.InnerTextAsync("body");
-    Assert(detailText.Contains("Sync Token"), "default layout still shows SyncToken (nothing custom yet)");
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-03-order-detailview.png") });
+    await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-03-order-detailview.html"), await page.ContentAsync());
+    // The ListView stays in the DOM on its own (inactive) tab, so scope every assertion to the detail form.
+    var form = page.Locator(".detail-view-content").First;
+    var detailText = await form.InnerTextAsync();
+    Assert(!detailText.Contains("Sync Token"), "SyncToken is not in the detail form (Hide)");
+    var iNumber = detailText.IndexOf("Number", StringComparison.Ordinal);
+    var iNotes = detailText.IndexOf("Notes", StringComparison.Ordinal);
+    var iLines = detailText.IndexOf("Lines", StringComparison.Ordinal);
+    Assert(iNumber >= 0 && iNotes > iNumber && iLines > iNotes, $"groups render in builder order Header < Details < Tabs ({iNumber},{iNotes},{iLines})");
+    var groups = await form.EvaluateAsync<string[]>(@"f => [...f.querySelectorAll('[role=group].dxbl-fl-group')].map(g => {
+        const h = g.querySelector(':scope > .dxbl-group > .dxbl-group-header');
+        return (h ? h.innerText.trim() : '(no header)') + ' | ' + g.className + ' | aria-expanded=' + g.getAttribute('aria-expanded')
+             + ' | header=' + (h ? h.className + ' btn=' + !!h.querySelector('button, [role=button]') : '-');
+    })");
+    foreach (var g in groups) Console.WriteLine("    group: " + g);
+    var notesInCollapsible = await form.EvaluateAsync<bool>(@"f => {
+        const label = f.querySelector('label.xaf-item-notes');
+        const group = label && label.closest('[role=group]');
+        // A captioned group also has a header and aria-expanded; only a collapsible one has the toggle button in it.
+        const header = group && group.querySelector(':scope > .dxbl-group > .dxbl-group-header');
+        return !!header && !!header.querySelector('button, [role=button]');
+    }");
+    Assert(notesInCollapsible, "Notes is inside a collapsible group (group header has the collapse toggle)");
+    var headerNotCollapsible = await form.EvaluateAsync<bool>(@"f => {
+        const header = f.querySelector('label.xaf-item-number').closest('[role=group]').querySelector(':scope > .dxbl-group > .dxbl-group-header');
+        return !!header && !header.querySelector('button, [role=button]');
+    }");
+    Assert(headerNotCollapsible, "Header group shows its caption but has no collapse toggle");
 
     Console.WriteLine("\n=== E2E PASSED ===");
 }

@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 2). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 3). Session plan: `XafLayoutBuilder-START.md` section 9.
 
 ## Where the plan stands
 
@@ -8,11 +8,39 @@ Updated 2026-09-11 (after session 2). Session plan: `XafLayoutBuilder-START.md` 
 |---|---|
 | 1. Solution skeleton, sample module, Blazor host, E2E harness logs in | **done 2026-09-11** |
 | 2. Core: builder, spec records, validation, unit tests | **done 2026-09-11** |
-| 3. `DetailViewLayoutUpdater` + E2E 1 | next |
-| 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | |
+| 3. `DetailViewLayoutUpdater` + E2E 1 | **done 2026-09-11** |
+| 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | next |
 | 5. Registry, interface discovery, startup diagnostics | |
 | 6. Exporter, printer, popup + E2E 4–6 | |
 | 7. SKILL.md, README, docs, screenshots | |
+
+## Session 3 result
+
+- Section 7 verified against dxdocs + installed 26.1 source; everything recorded in
+  `docs/api-notes.md` (generator names, updater signature, layout interfaces, columns model,
+  model-cache caveat, column Index handling for session 4).
+- `XafLayoutBuilder.Module`: `DetailViewLayoutUpdater` (registered in `AddGeneratorUpdaters`),
+  `LayoutRegistry.Register<T>(detail, columns)`, internal `LayoutSpecResolver` (registry first,
+  then `ISupportViewLayoutCustomization` via the interface map, cached per type). Session 5 now
+  only owes the startup diagnostics polish and the "break a member name" test; discovery exists.
+- Sample `Order` implements `ISupportViewLayoutCustomization` in `Order.Layout.cs` with the
+  section 4 layout verbatim (`BuildListViewColumns` returns null until session 4).
+- E2E 1 passes: SyncToken absent from the form, groups in builder order, Notes inside a
+  collapsible group (header has the toggle button), Header group captioned but not collapsible.
+  Screenshot `e2e-03-order-detailview.png`, DOM dump `e2e-03-order-detailview.html`.
+
+### Decisions taken in session 3 (confirm or reverse)
+
+- **XLB002, strict by default:** a visible member that is neither placed nor hidden makes the
+  updater throw at startup, naming the members. Rationale: a new property must not silently
+  vanish from the DetailView. Alternative: append unplaced members to a trailing group.
+- **Derived classes keep XAF's default layout.** `ServiceOrder` inherits `Order`'s static
+  interface implementation, but the resolver only applies a spec whose `TypeName` matches the
+  exact type. Hierarchy composition is phase 2 per the start document.
+- **`Collapsible()` forces the caption on** (Blazor renders the toggle in the header). A group
+  without an explicit caption and with one item shows that item's caption as header (XAF default).
+- Unit-level coverage of the applier is nil: `ModelNode` cannot be built outside an XAF
+  application, so the E2E is the only test of `DetailViewLayoutUpdater`.
 
 ## Session 2 result
 

@@ -1,7 +1,11 @@
 using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.Model.Core;
 
 namespace XafLayoutBuilder.Module;
 
-// Session 1: empty shell. Session 3+ registers the generator updaters in AddGeneratorUpdaters.
 public sealed class XafLayoutBuilderModule : ModuleBase {
+    public override void AddGeneratorUpdaters(ModelNodesGeneratorUpdaters updaters) {
+        base.AddGeneratorUpdaters(updaters);
+        updaters.Add(new DetailViewLayoutUpdater());
+    }
 }

@@ -10,7 +10,7 @@ namespace XafLayoutBuilder.Sample.Module.BusinessObjects;
 // (session 3+) is the only source of its DetailView layout and ListView columns.
 [DefaultClassOptions]
 [DefaultProperty(nameof(Number))]
-public class Order : BaseObject {
+public partial class Order : BaseObject {
     public virtual string Number { get; set; } = "";
     public virtual Customer? Customer { get; set; }
     public virtual DateTime OrderDate { get; set; }

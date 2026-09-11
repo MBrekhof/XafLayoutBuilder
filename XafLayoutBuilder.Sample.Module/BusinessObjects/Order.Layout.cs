@@ -1,0 +1,26 @@
+using XafLayoutBuilder.Core;
+
+namespace XafLayoutBuilder.Sample.Module.BusinessObjects;
+
+// The section 4 example from the start document, verbatim. This file is Order's only layout source.
+public partial class Order : ISupportViewLayoutCustomization {
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<Order>.Create()
+            .Group("Header", g => g
+                .Caption("Order")
+                .Flow(FlowDirection.Horizontal)
+                .Item(x => x.Number)
+                .Item(x => x.Customer)
+                .Item(x => x.OrderDate))
+            .Group("Details", g => g
+                .Collapsible()
+                .Item(x => x.Notes, relativeSize: 100))
+            .Tabs("Tabs", t => t
+                .TabFor(x => x.Lines, imageName: "BO_Order_Item")
+                .TabFor(x => x.Attachments))
+            .Hide(x => x.SyncToken)
+            .Build();
+
+    // Session 4.
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
