@@ -117,6 +117,20 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   default sort cleared (the stock generator sorts the display member ascending, which would
   otherwise fight the spec's sort).
 
+## Startup forcing (session 5)
+
+- `XafApplication.SetupComplete` (`XafApplication.cs` line 2947) fires from `OnSetupComplete`
+  once `Model` exists; `BlazorApplication.OnSetupComplete` calls the base first. A handler can
+  read `application.Model.BOModel` (`IModelBOModel : IModelList<IModelClass>`,
+  `CommonInterfaces.cs` 165) and each class's `DefaultDetailView` / `DefaultListView` /
+  `DefaultLookupListView` (lines 250-258).
+- Reading `IModelNode.NodeCount` on a view's `Layout` or `Columns` node generates its children
+  (`ModelNode.EnsureNodes`), which runs the generator updaters. That is how the diagnostics are
+  forced before the first user.
+- In the Blazor template the application is built while the ASP.NET host starts (the exception
+  stack goes through `Microsoft.Extensions.Hosting.Internal.Host.ForeachService`), so an exception
+  from `SetupComplete` is unhandled and terminates the process before Kestrel listens.
+
 ## Still open
 
 - Bands (`IModelListView.BandsLayout`, `IModelBandsLayout` is added as a child node at

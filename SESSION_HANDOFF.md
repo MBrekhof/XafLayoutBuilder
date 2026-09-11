@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 4b). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 5). Session plan: `XafLayoutBuilder-START.md` section 9.
 
 ## Where the plan stands
 
@@ -10,9 +10,27 @@ Updated 2026-09-11 (after session 4b). Session plan: `XafLayoutBuilder-START.md`
 | 2. Core: builder, spec records, validation, unit tests | **done 2026-09-11** |
 | 3. `DetailViewLayoutUpdater` + E2E 1 | **done 2026-09-11** |
 | 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | **done 2026-09-11** |
-| 5. Registry, interface discovery, startup diagnostics | next |
-| 6. Exporter, printer, popup + E2E 4–6 | |
+| 5. Registry, interface discovery, startup diagnostics | **done 2026-09-11** |
+| 6. Exporter, printer, popup + E2E 4–6 | next |
 | 7. SKILL.md, README, docs, screenshots | |
+
+## Session 5 result
+
+- Registry and interface discovery were already in place since session 3; this session added
+  the missing piece: `LayoutStartupCheck.Run` (hooked to `XafApplication.SetupComplete` in
+  `XafLayoutBuilderModule.Setup`) enumerates `Model.BOModel`, and for every type with a spec
+  touches `DefaultDetailView.Layout`, `DefaultListView.Columns` and, with a lookup spec,
+  `DefaultLookupListView.Columns`. Touching `NodeCount` makes XAF generate the nodes, which runs
+  the updaters, which throw XLB001-003. XLB004 if a spec'd type has no default view.
+- **In XAF Blazor this is a real process-level startup failure.** The template host builds the
+  application (and its model) while the host starts, so a broken layout throws from
+  `OnSetupComplete` as an unhandled exception and the process exits before listening. Verified by
+  hand and by the gate.
+- Fixture: `Customer.InternalCode` (`[Browsable(false)]`) and `BrokenLayouts.Register()` in the
+  sample module, wired to the host's `--break-layout` argument (a command-line switch, not an
+  environment variable). The gate's last step starts the host with it and asserts: process exits
+  non-zero, nothing serves on :5100, output contains `XLB001 Customer_DetailView ... 'InternalCode'`.
+- SKILL.md's "until session 5" caveat removed.
 
 ## Session 4b result (Codex review follow-up, 2026-09-11)
 

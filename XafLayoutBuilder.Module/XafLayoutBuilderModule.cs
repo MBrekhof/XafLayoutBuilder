@@ -9,4 +9,9 @@ public sealed class XafLayoutBuilderModule : ModuleBase {
         updaters.Add(new DetailViewLayoutUpdater());
         updaters.Add(new ListViewColumnsUpdater());
     }
+
+    public override void Setup(XafApplication application) {
+        base.Setup(application);
+        application.SetupComplete += (_, _) => LayoutStartupCheck.Run(application);
+    }
 }

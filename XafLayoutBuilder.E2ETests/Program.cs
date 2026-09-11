@@ -183,6 +183,23 @@ try
     Assert(dropdownLines.Any(l => l.Contains("Acme Corp")), "lookup rows show the Customer column's values");
     await page.Keyboard.PressAsync("Escape");
 
+    Step("Session 5: a broken layout is reported at startup (host started with --break-layout)");
+    KillApp(ref app);
+    lock (appOutput) appOutput.Clear();
+    // The XAF Blazor host builds the application (and so the model) while the host starts, so the diagnostic
+    // kills the process before it ever listens. Expect: no HTTP, non-zero exit, XLB001 in the output.
+    app = StartApp(blazorProj, appOutput, "--break-layout");
+    var exited = app.WaitForExit(90_000);
+    if (exited) app.WaitForExit(); // flushes the async stdout/stderr readers
+    string log; lock (appOutput) log = appOutput.ToString();
+    var line = log.Split('\n').FirstOrDefault(l => l.Contains("XLB001"))?.Trim() ?? "(not in app output)";
+    Console.WriteLine("    app output: " + line);
+    Assert(exited, "host process exits instead of serving");
+    Assert(app.ExitCode != 0, $"host exit code is non-zero (got {app.ExitCode})");
+    Assert(!await IsServing(), "nothing is serving on :5100 after the failed start");
+    Assert(line.Contains("XLB001"), "XLB001 is reported in the host output");
+    Assert(line.Contains("Customer_DetailView") && line.Contains("InternalCode"), "the diagnostic names the view id and the member");
+
     Console.WriteLine("\n=== E2E PASSED ===");
 }
 catch (Exception ex)
@@ -251,12 +268,12 @@ static async Task<IPage> NewPage(IBrowser browser)
     return page;
 }
 
-static Process StartApp(string blazorProj, System.Text.StringBuilder appOutput)
+static Process StartApp(string blazorProj, System.Text.StringBuilder appOutput, string extraArgs = "")
 {
     // launchSettings.json's applicationUrl overrides ASPNETCORE_URLS unless --no-launch-profile
     // is passed; --urls on the command line wins over both. Belt and braces.
     var psi = new ProcessStartInfo("dotnet",
-        $"run --no-build --no-launch-profile --project \"{blazorProj}\" --urls {BaseUrl}")
+        $"run --no-build --no-launch-profile --project \"{blazorProj}\" --urls {BaseUrl} {extraArgs}")
     {
         UseShellExecute = false,
         RedirectStandardOutput = true,
@@ -269,6 +286,17 @@ static Process StartApp(string blazorProj, System.Text.StringBuilder appOutput)
     p.BeginOutputReadLine();
     p.BeginErrorReadLine();
     return p;
+}
+
+static async Task<bool> PollForLog(System.Text.StringBuilder buffer, string needle, TimeSpan timeout)
+{
+    var deadline = DateTime.UtcNow + timeout;
+    while (DateTime.UtcNow < deadline)
+    {
+        lock (buffer) { if (buffer.ToString().Contains(needle)) return true; }
+        await Task.Delay(1000);
+    }
+    return false;
 }
 
 static void KillApp(ref Process? app)

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Blazor.DesignTime;
 using DevExpress.ExpressApp.Blazor.Services;
@@ -28,6 +28,10 @@ public class Program : IDesignTimeApplicationFactory {
             DevExpress.ExpressApp.Blazor.Editors.LookupPropertyEditor.DefaultUseViewMode = true;
             DevExpress.ExpressApp.FrameworkSettings.DefaultSettingsCompatibilityMode = DevExpress.ExpressApp.FrameworkSettingsCompatibilityMode.Latest;
             DevExpress.ExpressApp.Security.SecurityStrategy.AutoAssociationReferencePropertyMode = DevExpress.ExpressApp.Security.ReferenceWithoutAssociationPermissionsMode.AllMembers;
+            // E2E fixture: register a layout that fails XLB001, to prove the diagnostics fire at startup.
+            if(ContainsArgument(args, "break-layout")) {
+                XafLayoutBuilder.Sample.Module.BrokenLayouts.Register();
+            }
             IHost host = CreateHostBuilder(args).Build();
             if(ContainsArgument(args, "updateDatabase")) {
                 using(var serviceScope = host.Services.CreateScope()) {

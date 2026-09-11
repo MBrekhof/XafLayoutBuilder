@@ -7,7 +7,7 @@ description: Declare a DevExpress XAF class's DetailView layout and ListView col
 
 Typed, compile-checked layout for XAF. The builder output becomes the generated (zero) layer of
 the Application Model; module XAFML, admin and user differences still apply on top. Changes show
-after an application restart. Draft as of session 4; finalised in session 7.
+after an application restart. Draft as of session 5; finalised in session 7.
 
 ## Opt in
 
@@ -90,5 +90,8 @@ and hidden, `Lookup` inside `Lookup`, a non-simple member lambda.
 - XLB001: a placed member has no view item (for example `[Browsable(false)]`).
 - XLB002: a visible member is neither placed nor hidden.
 - XLB003: a column names a collection or a non-member.
+- XLB004: a type has a spec but no default view.
 
-Until session 5 lands, these fire when the view is first opened rather than at application start.
+The module forces generation of every spec'd view when the application model is built
+(`XafApplication.SetupComplete`), so these are startup failures. In XAF Blazor the host process
+exits before it listens; the message is in the console output.

@@ -9,4 +9,7 @@ namespace XafLayoutBuilder.Sample.Module.BusinessObjects;
 public class Customer : BaseObject {
     public virtual string Name { get; set; } = "";
     public virtual string? City { get; set; }
+    /// <summary>Not a view item. BrokenLayouts places it on purpose to trigger XLB001 at startup.</summary>
+    [Browsable(false)]
+    public virtual string? InternalCode { get; set; }
 }
