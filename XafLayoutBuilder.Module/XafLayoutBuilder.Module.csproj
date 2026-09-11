@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>XAF module: generator updaters, layout registry, export controller.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DevExpress.ExpressApp" Version="26.1.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XafLayoutBuilder.Core\XafLayoutBuilder.Core.csproj" />
+  </ItemGroup>
+</Project>
