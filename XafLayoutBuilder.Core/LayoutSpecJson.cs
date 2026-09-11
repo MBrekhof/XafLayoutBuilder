@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace XafLayoutBuilder.Core;
 
-/// <summary>JSON form of the specs: the contract BPG emits against (phase 2 loader) and a handy test fixture format.</summary>
+/// <summary>JSON form of the specs: the contract a generator emits against (phase 2 loader) and a handy test fixture format.</summary>
 public static class LayoutSpecJson {
     public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) {
         WriteIndented = true,

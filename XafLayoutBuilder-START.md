@@ -19,7 +19,7 @@ If yes: AI agents get a two-page API instead of XAFML, member references become 
 instead of runtime surprises, and layout changes are reviewable diffs in git.
 
 Origin: DevExpress Support Center ticket T1206756 (Model Editor / non-Windows development),
-Gat's comment of 2026-09-11 describing a closed-source implementation. This is the open one.
+where a comment of 2026-09-11 described a closed-source implementation. This is the open one.
 
 ---
 
@@ -58,7 +58,7 @@ Gat's comment of 2026-09-11 describing a closed-source implementation. This is t
 
 ## 3. Architecture
 
-Three layers, deliberately separated so BPG can reuse the middle one:
+Three layers, deliberately separated so other tools can reuse the middle one:
 
 ```
 Fluent builder  ──►  LayoutSpec (immutable IR)  ──►  Model applier (generator updaters)
@@ -70,7 +70,7 @@ Running view (IModelDetailView)  ┘  ◄── Exporter walks model → LayoutS
 - **Builder** — the thing humans and agents write. Lambdas for members. Produces a `LayoutSpec`.
 - **LayoutSpec** — plain records: `DetailLayoutSpec`, `LayoutGroupSpec`, `TabbedGroupSpec`,
   `LayoutItemSpec`, `ListColumnsSpec`, `ColumnSpec`. No XAF types. Serialisable to JSON.
-  This is the contract BPG emits against, and what the exporter produces before printing code.
+  This is the contract a generator emits against, and what the exporter produces before printing code.
 - **Applier** — `DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDetailViewLayoutNodesGenerator>`
   and `ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelListViewColumnsNodesGenerator>`,
   registered in `ModuleBase.AddGeneratorUpdaters`. They find the spec for the view's
@@ -287,7 +287,7 @@ Small sessions, each ending green. Update `SESSION_HANDOFF.md` at the end of eac
    screenshots in `docs/screenshots/`.
 
 Phase 2 candidates, not in this POC: hierarchy composition (`Extend<TBase>()`), bands, nested
-member paths, localised captions via message keys, a `spec.json` loader so BPG can ship
+member paths, localised captions via message keys, a `spec.json` loader so a generator can ship
 layouts as data instead of code.
 
 ---
@@ -313,7 +313,7 @@ layouts as data instead of code.
 - **XafMergerTool** — stays as the answer for stock XAF where XAFML is the only source form.
   Gains an "export as builder C#" option once this exists, by referencing `XafLayoutBuilder.Core`.
 - **XafMcp** — could expose `LayoutSpec` read/write as tools later. Not here.
-- **BPG** — emits `LayoutSpec` (as generated C# via the printer, or as JSON in phase 2) from
-  the spec's view section. Compile-checked layouts in generated apps; readable by the
-  customer's developer; regenerated deterministically.
+- **Code generators** — can emit `LayoutSpec` (as generated C# via the printer, or as JSON in
+  phase 2). Compile-checked layouts in generated apps, readable by the customer's developer,
+  regenerated deterministically.
 - **xafskills** — `skills/xaf-layout-builder/SKILL.md` is copied there on release.

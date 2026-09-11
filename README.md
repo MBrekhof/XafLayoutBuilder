@@ -8,6 +8,9 @@ becomes a fluent builder next to the business class instead of `Model.xafml`.
 Built and tested with DevExpress XAF 26.1.4, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
 Server. One subject (the sample `Order`), one end-to-end gate, and the limitations listed below.
 
+> **Inspired by [DevExpress Support Center ticket T1206756](https://supportcenter.devexpress.com/ticket/details/T1206756)**,
+> on using the Model Editor and developing XAF outside Windows.
+
 ## What it looks like
 
 ```csharp
@@ -198,8 +201,11 @@ docs/                                   how-it-works, api-notes, screenshots
 
 - **XafMergerTool** stays the answer for stock XAF, where XAFML is the only source form. It can gain
   an "export as builder C#" option by referencing `XafLayoutBuilder.Core`.
-- **BPG** can emit `LayoutSpec` for generated applications, as C# through the printer or later as
-  JSON (`LayoutSpecJson` already round-trips).
+- A code generator can emit `LayoutSpec` for generated applications, as C# through the printer or
+  later as JSON (`LayoutSpecJson` already round-trips).
 - **xafskills** receives a copy of the skill on release.
 
-Origin: DevExpress Support Center ticket T1206756 (Model Editor and non-Windows development).
+## License
+
+MIT, see [LICENSE](LICENSE). DevExpress XAF is not included here and is licensed separately:
+building or running the sample needs your own DevExpress subscription.

@@ -32,7 +32,7 @@ Fluent builder ──► LayoutSpec (immutable records, JSON) ──► generato
 ```
 
 - **XafLayoutBuilder.Core** has no DevExpress reference: builders, spec records, validation, JSON
-  and the C# printer. BPG and XafMergerTool can emit or read specs without dragging XAF along.
+  and the C# printer. Other tools can emit or read specs without dragging XAF along.
 - **XafLayoutBuilder.Module** references `DevExpress.ExpressApp` and `DevExpress.Persistent.Base`
   only, so it is platform neutral: the two updaters, discovery and registry, the startup check, the
   exporter and the export action.

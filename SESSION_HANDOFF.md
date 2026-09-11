@@ -103,7 +103,7 @@ and invariant number formatting.
   `XafLayoutBuilder.Core`.
 - **Phase 2 candidates**, unchanged from the start document plus what the sessions added:
   hierarchy composition (`Extend<TBase>()`), ListView bands, nested member paths, localised
-  captions through message keys, a `spec.json` loader so BPG can ship layouts as data; and from
+  captions through message keys, a `spec.json` loader so a generator can ship layouts as data; and from
   here: an in-process XAF Application Model in the unit tests, so the updaters and the exporter can
   be tested without the E2E; driving the Blazor layout editor's drag and drop in E2E 4; exercising
   `FreezeColumnIndices`, which is currently reasoned from source only.

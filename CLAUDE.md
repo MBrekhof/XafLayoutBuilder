@@ -12,7 +12,7 @@ pour that into the Application Model as generated-layer defaults, and an admin a
 view's current layout back to the same fluent C#.
 
 - `XafLayoutBuilder.Core`: builders, `LayoutSpec` records, JSON, `CSharpLayoutPrinter`. **No
-  DevExpress dependency.** Keep it that way; BPG and XafMergerTool reuse it.
+  DevExpress dependency.** Keep it that way; XafMergerTool and code generators reuse it.
 - `XafLayoutBuilder.Module`: `XafLayoutBuilderModule`, `DetailViewLayoutUpdater`,
   `ListViewColumnsUpdater`, `LayoutRegistry` + resolver, `LayoutStartupCheck`, `LayoutExporter`,
   `ExportLayoutController`. References `DevExpress.ExpressApp` and `DevExpress.Persistent.Base`

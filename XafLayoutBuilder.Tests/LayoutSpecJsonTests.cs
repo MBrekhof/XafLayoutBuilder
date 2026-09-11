@@ -13,7 +13,7 @@ public class LayoutSpecJsonTests {
         Assert.IsType<LayoutGroupSpec>(back.Nodes[0]);
         Assert.IsType<TabbedGroupSpec>(back.Nodes[2]);
         Assert.Equal(100, ((LayoutItemSpec)((LayoutGroupSpec)back.Nodes[1]).Children[0]).RelativeSize);
-        Assert.Contains("\"direction\": \"Horizontal\"", json); // enums as strings, so BPG can hand-write it
+        Assert.Contains("\"direction\": \"Horizontal\"", json); // enums as strings, so a generator can hand-write it
         Assert.Contains("\"$type\": \"tabs\"", json);
     }
 
