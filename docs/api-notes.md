@@ -65,6 +65,20 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `label.xaf-item-<member>` and `.dxbl-fl-ctrl`. Tab headers: `.dxbl-tabs-item` with
   `div.xaf-item-<member>`; the `imageName` renders as `img.xaf-layout-tab-icon`.
 
+- Grid header cells (`th.dxbl-grid-header`) include the filter button's accessibility text
+  "No filter applied"; strip it before comparing captions. The first header is the selection
+  column ("Selection").
+- Column chooser: right-click a header → context menu item "Column Chooser" (XAF's
+  `ColumnChooserController` action, also reachable from the toolbar's hidden actions). The
+  chooser lists every model column including `Index = -1` ones.
+- Lookup editor (`LookupPropertyEditor.DefaultUseViewMode = true` in the template's Program.cs):
+  view mode shows a link plus an "Edit" button; edit mode shows "Add" and "Open or close the
+  drop-down window" buttons. The dropdown is a `.dxbl-dropdown` holding a grid of the
+  LookupListView's columns without `<th>` headers; its first `innerText` line is the tab-separated
+  header row. Other `.dxbl-dropdown` elements (filter menus) exist in the DOM, so select by content.
+- XAF hides an aggregated child's back-reference (`OrderLine.Order`) in the nested DetailView; a
+  lookup to `Order` has to come from a plain reference such as `ServiceOrder.OriginalOrder`.
+
 ## Columns model (`Model/IModelListView.cs`)
 
 - `IModelColumn : IModelMemberViewItem`: `int Width`, `DevExpress.Data.ColumnSortOrder SortOrder`,
@@ -78,8 +92,25 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `GenerateNodesCore`), and should check whether the domain logic that reads the generated index
   interferes. [lines 397-402]
 - `Index = -1` as "hidden but available in the column chooser": the stock generator itself sets
-  `columnInfo.Index = -1` for members it does not show (line 336). Whether `DxGridListEditor`
-  honours it is still to be verified in session 4 (E2E 2).
+  `columnInfo.Index = -1` for members it does not show (line 336). The Blazor grid maps it to
+  `VisibleIndex = -1` (`DxGridColumnWrapperBase.GetIsVisible`) and only fetches columns with
+  `Index` null or > -1 (`DxGridListEditorBase.RequiredProperties`, lines 916-920), so the column
+  exists but is not shown.
+- **Lookup ListViews have almost no columns.** `GenerateLookupListViewColumns` creates columns only
+  for `FriendlyKeyProperty`, the display property (sorted ascending) and members with
+  `[VisibleInListView(true)]`; nothing else (`ModelListViewNodesGenerator.cs` 355-383). The default
+  ListView creates a column for every visible member (hidden ones with `Index = -1`). So a
+  `.Lookup(l => l.Column(x => x.Customer))` needs the updater to **add** the column:
+  `columns.AddNode<IModelColumn>(name)` + `PropertyName = name`, which is what the generator's
+  internal `CreateMemberViewItemInternal` does (lines 437-442; its `View_ID` value only matters for
+  list-property editors). Found by the XLB003 fail-fast on the first session 4 run.
+- **Session 4 decision on Index:** the updater sets `IModelColumn.Index` directly. The generator's
+  move into `GeneratedIndex` (read by `ModelColumnLogic.Get_Index` only while `Index` is null,
+  `ModelViewLogic.cs` line 417) has already happened when the updater runs, and
+  `ModelNode.IsInFirstLayer` is internal so the move cannot be mimicked. A stored `Index` in the
+  generated layer is still overridden by module/admin/user differences. Unmentioned and hidden
+  columns get `Index = -1` and their default sort cleared (the stock generator sorts the display
+  member ascending, which would otherwise fight the spec's sort).
 
 ## Still open
 

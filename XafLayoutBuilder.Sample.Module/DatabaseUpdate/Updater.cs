@@ -66,12 +66,13 @@ public class Updater : ModuleUpdater {
             var acme = ObjectSpace.CreateObject<Customer>();   acme.Name = "Acme Corp"; acme.City = "Leeuwarden";
             var globex = ObjectSpace.CreateObject<Customer>(); globex.Name = "Globex";  globex.City = "Groningen";
             var today = DateTime.Today;
-            Seed(ObjectSpace.CreateObject<Order>(), "ORD-001", today.AddDays(-2), acme);
+            var ord1 = ObjectSpace.CreateObject<Order>();
+            Seed(ord1, "ORD-001", today.AddDays(-2), acme);
             Seed(ObjectSpace.CreateObject<Order>(), "ORD-002", today.AddDays(-30), acme);
             Seed(ObjectSpace.CreateObject<Order>(), "ORD-003", today.AddDays(-1), globex);
             var svc = ObjectSpace.CreateObject<ServiceOrder>();
             Seed(svc, "SRV-001", today.AddDays(-5), globex);
-            svc.ServiceDate = today.AddDays(3); svc.Technician = "J. de Vries";
+            svc.ServiceDate = today.AddDays(3); svc.Technician = "J. de Vries"; svc.OriginalOrder = ord1;
             ObjectSpace.CommitChanges();
 
             void Seed(Order o, string number, DateTime date, Customer c) {

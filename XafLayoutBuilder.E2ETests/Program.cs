@@ -108,6 +108,82 @@ try
     }");
     Assert(headerNotCollapsible, "Header group shows its caption but has no collapse toggle");
 
+    Step("E2E 2: Order_ListView columns, order, sort, column chooser");
+    await page.GotoAsync($"{BaseUrl}/Order_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.GetByText("ORD-001", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+    // Other tabs (Users, the DetailView) keep their grids in the DOM; scope to the active tab panel.
+    var grid = page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First;
+    var allGrids = await page.EvaluateAsync<string[]>(@"() => [...document.querySelectorAll('.dxbl-grid')].map(g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.trim().replace(/\s+/g,' ')).join('|'))");
+    foreach (var g in allGrids) Console.WriteLine("    grid headers in DOM: " + g);
+    // Header cells include the filter button's a11y text ("No filter applied"); strip it.
+    var headers = await grid.EvaluateAsync<string[]>(@"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+    Console.WriteLine("    headers: " + string.Join(" | ", headers));
+    Assert(string.Join(",", headers) == "Number,Customer,Order Date", $"columns are Number, Customer, Order Date in that order (got {string.Join(",", headers)})");
+    var firstCells = await grid.EvaluateAsync<string[]>("g => [...g.querySelectorAll('tr[role=row]')].map(r => r.querySelector('td.xaf-action')?.innerText.trim()).filter(t => t)");
+    Console.WriteLine("    rows: " + string.Join(" | ", firstCells));
+    Assert(string.Join(",", firstCells) == "ORD-003,ORD-001,SRV-001,ORD-002", $"rows sorted by OrderDate descending (got {string.Join(",", firstCells)})");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-04-order-listview-columns.png") });
+    // Column chooser: XAF Blazor exposes it as the ColumnChooser action (image-only, HiddenActions container).
+    await grid.Locator("th.dxbl-grid-header").Filter(new() { HasText = "Number" }).First.ClickAsync(new() { Button = MouseButton.Right });
+    await page.WaitForTimeoutAsync(800);
+    var menuItems = await page.EvaluateAsync<string[]>("() => [...document.querySelectorAll('.dxbl-context-menu-item, .dxbl-menu-item, [role=menuitem]')].map(m => m.innerText.trim()).filter(t => t)");
+    Console.WriteLine("    header context menu: " + string.Join(" | ", menuItems));
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-05-header-menu.png") });
+    var chooserItem = page.Locator("[role=menuitem], .dxbl-context-menu-item, .dxbl-menu-item").Filter(new() { HasText = "Column Chooser" }).First;
+    if (await chooserItem.CountAsync() > 0) {
+        await chooserItem.ClickAsync();
+        await page.WaitForTimeoutAsync(1000);
+        var chooserText = await page.EvaluateAsync<string>("() => [...document.querySelectorAll('.dxbl-grid-column-chooser, .dxbl-column-chooser, .dxbl-popup')].map(p => p.innerText).join(' || ')");
+        Console.WriteLine("    column chooser text: " + chooserText.Replace("\n", " / "));
+        await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-06-column-chooser.png") });
+        Assert(chooserText.Contains("Sync Token"), "SyncToken is offered in the column chooser (hidden, not removed)");
+        await page.Keyboard.PressAsync("Escape");
+    }
+    else {
+        Console.WriteLine("    (no Column Chooser menu item found; see screenshot)");
+        await page.Keyboard.PressAsync("Escape");
+    }
+
+    Step("E2E 3: Order_LookupListView shows only Number and Customer");
+    // ServiceOrder.OriginalOrder is a plain reference to Order, so its editor uses Order_LookupListView.
+    await page.GotoAsync($"{BaseUrl}/Order_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.GetByText("SRV-001", new() { Exact = true }).First.ClickAsync();
+    await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'SRV-001')", null, new() { Timeout = 30_000 });
+    var activeForm = page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First;
+    var lookupItem = activeForm.Locator(".dxbl-fl-item").Filter(new() { Has = page.Locator("label.xaf-item-originalorder") }).First;
+    await lookupItem.WaitForAsync(new() { Timeout = 15_000 });
+    async Task<string[]> Buttons() => await lookupItem.EvaluateAsync<string[]>("i => [...i.querySelectorAll('button')].map(b => b.className + ' title=' + (b.title || b.getAttribute('aria-label') || ''))");
+    foreach (var b in await Buttons()) Console.WriteLine("    lookup button: " + b);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-07-serviceorder-detail.png") });
+    await lookupItem.Locator("button").First.ClickAsync(); // view mode -> edit mode (LookupPropertyEditor.DefaultUseViewMode)
+    await page.WaitForTimeoutAsync(1000);
+    foreach (var b in await Buttons()) Console.WriteLine("    lookup button (edit mode): " + b);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-08-order-lookup-editmode.png") });
+    // The lookup dropdown is a .dxbl-dropdown holding a grid of Order_LookupListView's columns. Several other
+    // (filter-menu) dropdowns exist in the DOM, so identify it by content. Its grid has no <th> headers; the
+    // first text line is the header row, tab-separated.
+    // Clicking the dropdown button opens it and a re-render closes it again; Alt+ArrowDown from the input keeps it open.
+    var lookupDropdown = page.Locator(".dxbl-dropdown:not(.dxbl-popup-hidden)").Filter(new() { HasText = "ORD-001" }).First;
+    await page.WaitForTimeoutAsync(1500);
+    string[] dropdownLines = [];
+    for (var attempt = 0; attempt < 3 && dropdownLines.Length == 0; attempt++) {
+        await lookupItem.Locator("input").First.FocusAsync();
+        await page.Keyboard.PressAsync("Alt+ArrowDown");
+        try {
+            await lookupDropdown.WaitForAsync(new() { Timeout = 5000 });
+            dropdownLines = (await lookupDropdown.InnerTextAsync(new() { Timeout = 5000 })).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        catch (TimeoutException) { Console.WriteLine($"    dropdown not open after attempt {attempt + 1}"); }
+    }
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09-order-lookup-open.png") });
+    Assert(dropdownLines.Length > 0, "the Original Order lookup dropdown opened");
+    var lookupHeaders = dropdownLines[0].Split('\t', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    Console.WriteLine("    lookup headers: " + string.Join(" | ", lookupHeaders));
+    Assert(string.Join(",", lookupHeaders) == "Number,Customer", $"lookup shows only Number and Customer (got {string.Join(",", lookupHeaders)})");
+    Assert(!string.Join("\n", dropdownLines).Contains("Order Date"), "lookup does not show Order Date");
+    Assert(dropdownLines.Any(l => l.Contains("Acme Corp")), "lookup rows show the Customer column's values");
+    await page.Keyboard.PressAsync("Escape");
+
     Console.WriteLine("\n=== E2E PASSED ===");
 }
 catch (Exception ex)

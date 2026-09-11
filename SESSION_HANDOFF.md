@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 3). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 4). Session plan: `XafLayoutBuilder-START.md` section 9.
 
 ## Where the plan stands
 
@@ -9,10 +9,32 @@ Updated 2026-09-11 (after session 3). Session plan: `XafLayoutBuilder-START.md` 
 | 1. Solution skeleton, sample module, Blazor host, E2E harness logs in | **done 2026-09-11** |
 | 2. Core: builder, spec records, validation, unit tests | **done 2026-09-11** |
 | 3. `DetailViewLayoutUpdater` + E2E 1 | **done 2026-09-11** |
-| 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | next |
-| 5. Registry, interface discovery, startup diagnostics | |
+| 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | **done 2026-09-11** |
+| 5. Registry, interface discovery, startup diagnostics | next |
 | 6. Exporter, printer, popup + E2E 4–6 | |
 | 7. SKILL.md, README, docs, screenshots | |
+
+## Session 4 result
+
+- `ListViewColumnsUpdater` (registered after the detail updater): applies the spec to
+  `{Type}_ListView`, and to `{Type}_LookupListView` when the spec has `.Lookup(...)`. Listed
+  columns get `Index` 0..n-1, `Width`, `Caption`, `SortOrder`/`SortIndex`; every other stock
+  column (hidden or just unmentioned) gets `Index = -1` and its default sort cleared. Unlike the
+  DetailView there is no XLB002 equivalent: an unmentioned member is still reachable through the
+  column chooser, nothing vanishes.
+- **Found by the fail-fast on the first run:** XAF's lookup ListView only generates columns for
+  the display property and `[VisibleInListView(true)]` members, so `Customer` had no column in
+  `Order_LookupListView`. The updater now adds a missing column the way the stock generator does
+  (`AddNode<IModelColumn>` + `PropertyName`); XLB003 remains for collections and unknown members.
+- Sample: `ServiceOrder.OriginalOrder` (reference to `Order`) added so E2E 3 has a lookup editor
+  that targets `Order_LookupListView`; the aggregated `OrderLine.Order` back-reference is hidden
+  by XAF in the nested detail, so it could not serve. Seeded for SRV-001 on a fresh database only.
+- E2E 2 passes: headers Number, Customer, Order Date; rows ORD-003, ORD-001, SRV-001, ORD-002
+  (OrderDate descending); header context menu → Column Chooser lists Sync Token (and ID, Notes).
+- E2E 3 passes: SRV-001 detail → Original Order editor → edit mode → dropdown shows a grid whose
+  header row is exactly Number, Customer.
+- Index decision recorded in `docs/api-notes.md` (set `Index` directly; the generator's
+  `GeneratedIndex` move is internal and already done when the updater runs).
 
 ## Session 3b result (Codex review follow-up, 2026-09-11)
 

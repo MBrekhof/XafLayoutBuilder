@@ -21,6 +21,14 @@ public partial class Order : ISupportViewLayoutCustomization {
             .Hide(x => x.SyncToken)
             .Build();
 
-    // Session 4.
-    public static ListColumnsSpec? BuildListViewColumns() => null;
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<Order>.Create()
+            .Column(x => x.Number, width: 90)
+            .Column(x => x.Customer)
+            .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+            .Hide(x => x.SyncToken)
+            .Lookup(l => l
+                .Column(x => x.Number)
+                .Column(x => x.Customer))
+            .Build();
 }
