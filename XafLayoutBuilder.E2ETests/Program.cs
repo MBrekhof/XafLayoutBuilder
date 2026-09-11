@@ -31,8 +31,11 @@ try
     RunOrThrow("dotnet", $"build \"{blazorProj}\" -v q --nologo");
 
     Step("Start Blazor app on :5100");
+    // Codex review (session 1): a foreign process already serving :5100 would let the gate pass
+    // without ever starting this checkout's host. Refuse to run against an occupied port.
+    if (await IsServing()) throw new Exception($"{BaseUrl} is already serving before the harness started its host; stop that process first.");
     app = StartApp(blazorProj, appOutput);
-    await WaitForHttpOk(appOutput);
+    await WaitForHttpOk(app, appOutput);
 
     Step("Launch Chromium");
     playwright = await Playwright.CreateAsync();
@@ -167,17 +170,19 @@ static void KillApp(ref Process? app)
     app = null;
 }
 
-static async Task WaitForHttpOk(System.Text.StringBuilder appOutput)
+static async Task<bool> IsServing()
 {
     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+    try { return (await http.GetAsync(BaseUrl)).IsSuccessStatusCode; }
+    catch { return false; }
+}
+
+static async Task WaitForHttpOk(Process app, System.Text.StringBuilder appOutput)
+{
     for (var i = 0; i < 90; i++)
     {
-        try
-        {
-            var resp = await http.GetAsync(BaseUrl);
-            if (resp.IsSuccessStatusCode) { Console.WriteLine($"    app ready at {BaseUrl}"); return; }
-        }
-        catch { /* not up yet */ }
+        if (app.HasExited) break;
+        if (await IsServing()) { Console.WriteLine($"    app ready at {BaseUrl}"); return; }
         await Task.Delay(2000);
     }
     string tail;
