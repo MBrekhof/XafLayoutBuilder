@@ -8,8 +8,13 @@ namespace XafLayoutBuilder.Module;
 public static class LayoutRegistry {
     internal static readonly ConcurrentDictionary<Type, (DetailLayoutSpec? Detail, ListColumnsSpec? Columns)> Entries = new();
 
-    public static void Register<T>(DetailLayoutSpec? detail, ListColumnsSpec? columns) =>
+    /// <summary>Throws <see cref="LayoutSpecException"/> when a spec names a member <typeparamref name="T"/> does not have,
+    /// so a spec built for one type cannot be registered for an unrelated one by accident.</summary>
+    public static void Register<T>(DetailLayoutSpec? detail, ListColumnsSpec? columns) {
+        if (detail is not null) LayoutSpecChecks.EnsureMembersExist(typeof(T), detail.Members());
+        if (columns is not null) LayoutSpecChecks.EnsureMembersExist(typeof(T), columns.Members());
         Entries[typeof(T)] = (detail, columns);
+    }
 
     /// <summary>Test hook. Not needed by applications.</summary>
     public static void Clear() => Entries.Clear();

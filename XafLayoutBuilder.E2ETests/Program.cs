@@ -76,6 +76,14 @@ try
     var form = page.Locator(".detail-view-content").First;
     var detailText = await form.InnerTextAsync();
     Assert(!detailText.Contains("Sync Token"), "SyncToken is not in the detail form (Hide)");
+    Assert(await form.Locator("label.xaf-item-synctoken, .xaf-item-synctoken").CountAsync() == 0, "no SyncToken editor element exists in the form DOM");
+    // Main group's row holds the top-level nodes in builder order: Header (caption Order), Details (caption from Notes), tabbed group.
+    var topLevel = await form.EvaluateAsync<string[]>(@"f => {
+        const main = f.querySelector('[role=group].dxbl-fl-group');
+        return [...main.querySelector(':scope > .dxbl-row').children].map(c =>
+            c.classList.contains('dxbl-fl-gt') ? 'tabs' : (c.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? 'group'));
+    }");
+    Assert(string.Join(",", topLevel) == "Order,Notes,tabs", $"top-level layout nodes are Header, Details, Tabs in that order (got {string.Join(",", topLevel)})");
     var iNumber = detailText.IndexOf("Number", StringComparison.Ordinal);
     var iNotes = detailText.IndexOf("Notes", StringComparison.Ordinal);
     var iLines = detailText.IndexOf("Lines", StringComparison.Ordinal);

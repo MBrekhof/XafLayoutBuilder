@@ -31,32 +31,46 @@ public sealed class LayoutBuilder<T> {
         return this;
     }
 
-    /// <summary>Validates and freezes. Throws <see cref="LayoutSpecException"/> on duplicate items, hidden-and-placed items, duplicate group ids.</summary>
+    /// <summary>
+    /// Validates and freezes. Throws <see cref="LayoutSpecException"/> on: a member placed twice, a member both placed
+    /// and hidden, a group id used twice in the view, and a group and an item with the same id under the same parent
+    /// (XAF requires unique ids among siblings; an item's id is its member name). Parent/child reuse is fine, which is
+    /// exactly what <see cref="TabsBuilder{T}.TabFor"/> produces: group "Lines" holding item "Lines".
+    /// </summary>
     public DetailLayoutSpec Build() {
         var groupIds = new HashSet<string>(StringComparer.Ordinal);
         var members = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var n in nodes) Walk(n);
+        Walk(nodes);
 
         return new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray());
 
-        void Walk(LayoutNodeSpec node) {
-            switch (node) {
-                case LayoutItemSpec item:
-                    if (!members.Add(item.Member)) throw new LayoutSpecException($"{typeof(T).Name}: member '{item.Member}' is placed twice.");
-                    if (hidden.Contains(item.Member)) throw new LayoutSpecException($"{typeof(T).Name}: member '{item.Member}' is both placed and hidden.");
-                    break;
-                case LayoutGroupSpec g:
-                    AddGroupId(g.Id);
-                    foreach (var c in g.Children) Walk(c);
-                    break;
-                case TabbedGroupSpec t:
-                    AddGroupId(t.Id);
-                    foreach (var tab in t.Tabs) Walk(tab);
-                    break;
+        void Walk(IEnumerable<LayoutNodeSpec> siblings) {
+            var siblingIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var node in siblings) {
+                string id;
+                switch (node) {
+                    case LayoutItemSpec item:
+                        id = item.Member;
+                        if (!members.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is placed twice.");
+                        if (hidden.Contains(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is both placed and hidden.");
+                        break;
+                    case LayoutGroupSpec g:
+                        id = g.Id;
+                        if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
+                        Walk(g.Children);
+                        break;
+                    case TabbedGroupSpec t:
+                        id = t.Id;
+                        if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
+                        Walk(t.Tabs);
+                        break;
+                    default:
+                        continue;
+                }
+                // Same-kind duplicates were caught above, so a repeat here is a group next to an item with the same id.
+                if (!siblingIds.Add(id))
+                    throw new LayoutSpecException($"{typeof(T).Name}: '{id}' names both a group and an item under the same parent; ids must be unique among siblings.");
             }
-        }
-        void AddGroupId(string id) {
-            if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
         }
     }
 }

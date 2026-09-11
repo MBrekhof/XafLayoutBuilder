@@ -14,6 +14,23 @@ Updated 2026-09-11 (after session 3). Session plan: `XafLayoutBuilder-START.md` 
 | 6. Exporter, printer, popup + E2E 4–6 | |
 | 7. SKILL.md, README, docs, screenshots | |
 
+## Session 3b result (Codex review follow-up, 2026-09-11)
+
+- XLB002 strictness **confirmed by the owner**: unplaced-and-unhidden members fail at startup.
+- Fixed from the review: a group and an item with the same id under one parent now fail at
+  `Build()` (XAF sibling-uniqueness; parent/child reuse as in `TabFor` stays legal); spec lists
+  are frozen copies (`ReadOnlyCollection`), so a registered spec cannot be mutated through a cast,
+  and deserialised specs are frozen too; `LayoutRegistry.Register<T>` throws when the spec names
+  a member `T` lacks; tests for group `RelativeSize`/`Image`, nested `Tabs`, `Tab(id, ...)`,
+  column captions, `Members()`; E2E 1 now also asserts no SyncToken element exists and that the
+  three top-level nodes are Header, Details, Tabs by DOM inspection.
+- **Carried to session 5 (first item there):** XAF generates view nodes lazily, so XLB001/XLB002
+  fire on first open of the DetailView, not at application start. Session 5 forces generation of
+  every spec'd type's DetailView/ListView layout nodes right after the model is built so the
+  diagnostics really are startup failures.
+- Not done, by design: SKILL.md coverage of the surface beyond section 4 is session 7's job;
+  the handoff's session 2 list is the checklist.
+
 ## Session 3 result
 
 - Section 7 verified against dxdocs + installed 26.1 source; everything recorded in
