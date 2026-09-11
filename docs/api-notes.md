@@ -140,6 +140,13 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   default instead: `ModelLayoutGroupLogic.Get_Caption` returns the single view item's caption for a
   one-item group, otherwise the group id (`IModelDetailView.cs` 172-180). `RelativeSize` and
   `Width` are not localizable, so `HasValue` works for them.
+- The same trap applies to a **column** caption, which falls back to its member's caption
+  (`IModelColumn : IModelMemberViewItem`, `CommonInterfaces.cs` 665). The exporter compares with
+  `IModelColumn.ModelMember.Caption`; until session 7 it used `HasValue` there and silently dropped
+  an explicitly set column caption. Now covered by E2E 5a through `Customer.Layout.cs`.
+- XAF Blazor's loading toast is `Templates/LoadingIndicatorComponent.razor`: a span with the
+  localized text "Loading". The E2E waits for it to disappear before taking a screenshot, matching
+  the text as a substring because it renders with an ellipsis.
 - `IModelLayoutGroup.ImageName` also has a computed default (`Get_ImageName`, from the property
   editor's view image for one-item groups); the exporter treats an empty string as "not set".
 - **User model persistence in XAF Blazor is deferred.** `BlazorApplication.LoadUserDifferences`

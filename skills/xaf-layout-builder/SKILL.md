@@ -1,20 +1,29 @@
 ---
 name: xaf-layout-builder
-description: Declare a DevExpress XAF class's DetailView layout and ListView columns in fluent C# with XafLayoutBuilder instead of Model.xafml. Use when adding or changing the layout of an XAF business class in a solution that references XafLayoutBuilder.Module.
+description: Declare a DevExpress XAF class's DetailView layout and ListView columns in fluent C# with XafLayoutBuilder instead of Model.xafml. Use when adding or changing the layout of an XAF business class, or adding a property to a class that already has a layout, in a solution that references XafLayoutBuilder.Module.
 ---
 
 # XafLayoutBuilder
 
-Typed, compile-checked layout for XAF. The builder output becomes the generated (zero) layer of
-the Application Model; module XAFML, admin and user differences still apply on top. Changes show
-after an application restart. Draft as of session 5; finalised in session 7.
+Typed, compile-checked layout for XAF (26.1, EF Core, Blazor tested). The builder output becomes
+the generated (zero) layer of the Application Model. Module XAFML, the administrator's shared
+differences and each user's differences still apply on top: the builder replaces the *default*,
+nothing else. Changes appear after an application restart.
 
-## Opt in
+## Setup (once per solution)
 
-Implement `ISupportViewLayoutCustomization` on the business class (both static members are
-required; return `null` from one to leave that view to XAF). Put it in a `*.Layout.cs` partial.
+- The app's module references `XafLayoutBuilder.Module` and requires it:
+  `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
+- Do not create `Model.xafml` or `Model.DesignedDiffs.xafml` entries for views a builder owns.
+
+## Declare a layout
+
+Implement `ISupportViewLayoutCustomization` in a partial `{Type}.Layout.cs` next to the class.
+Both static members are required; return `null` from one to leave that view to XAF.
 
 ```csharp
+using XafLayoutBuilder.Core;
+
 public partial class Order : ISupportViewLayoutCustomization
 {
     public static DetailLayoutSpec? BuildDetailViewLayout() =>
@@ -47,72 +56,79 @@ public partial class Order : ISupportViewLayoutCustomization
 }
 ```
 
-For a type you do not own: `LayoutRegistry.Register<ReportDataV2>(detail, columns)` in your
-module's constructor. Registry entries win over the interface. Registration throws if the spec
-names a member the type does not have.
+Keep that file's only using `XafLayoutBuilder.Core`. `FlowDirection` and `ColumnSortOrder` also
+exist in `DevExpress.ExpressApp.Layout` and `DevExpress.Data`; importing those in the same file
+makes the names ambiguous.
+
+For a type you do not own, register in your module's constructor:
+`LayoutRegistry.Register<ReportDataV2>(detail, columns);` Registry entries win over the interface.
+Registration throws if a spec names a member the type does not have.
 
 ## DetailView surface
 
-- `LayoutBuilder<T>.Create()` then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Item(x => x.M)` (directly
-  under the root; mainly what an export produces when a user dragged an editor out of every group),
-  `.Hide(x => x.M)`, `.Build()`.
-- Group: `.Caption("...")`, `.Flow(FlowDirection.Horizontal|Vertical)`, `.Collapsible()`,
-  `.RelativeSize(percent)`, `.Image("ImageName")`, `.Item(x => x.M, relativeSize: null)`,
-  and nested `.Group(...)` / `.Tabs(...)`.
-- Tabs: `.TabFor(x => x.Collection, imageName: null, caption: null)` makes one tab holding that
-  member; `.Tab(id, g => ...)` makes a tab with arbitrary content.
-- `Collapsible()` always shows the group caption (XAF Blazor puts the toggle in the caption
-  header). A group without an explicit caption and with one item shows that item's caption.
-- Member lambdas must be simple: `x => x.Customer`. `x => x.Customer.Name` throws.
-- Every visible member must be placed or hidden. An unplaced member fails at startup with
-  XLB002 naming it, so a new property cannot silently vanish from the form.
-- `Hide` removes the item from the DetailView entirely.
-- Derived classes keep XAF's default layout unless they declare their own; a base class's spec is
+- `LayoutBuilder<T>.Create()`, then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Hide(x => x.M)`,
+  `.Build()`. `.Item(x => x.M)` directly on the builder places an editor under the root, outside
+  any group; exports produce it when a user dragged an editor out of every group.
+- In a group: `.Caption("...")`, `.Flow(FlowDirection.Horizontal)` (default is vertical),
+  `.Collapsible()`, `.RelativeSize(percent)`, `.Image("ImageName")`,
+  `.Item(x => x.M, relativeSize: null)`, and nested `.Group(...)` and `.Tabs(...)`.
+- In tabs: `.TabFor(x => x.Collection, imageName: null, caption: null)` makes one tab holding that
+  member. `.Tab(id, g => ...)` makes a tab with arbitrary group content.
+- `Collapsible()` always shows the group caption, because XAF Blazor puts the toggle in the caption
+  header. A group without an explicit caption and with one item shows that item's caption.
+- `Hide` removes the editor from the DetailView entirely.
+- Every visible member must be placed or hidden, or startup fails with XLB002 naming it.
+- Member lambdas are simple member access: `x => x.Customer`. `x => x.Customer.Name` throws.
+- Derived classes keep XAF's default layout unless they declare their own. A base class's spec is
   not inherited.
 
 ## ListView surface
 
-- `ListViewColumnsBuilder<T>.Create()` then `.Column(x => x.M, width: null, sort:
-  ColumnSortOrder.None, caption: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
-- Column order is call order; sorted columns get sort priority in call order.
-- `Hide` keeps the column available in the column chooser (index -1). Members not mentioned at all
-  are treated the same way, so nothing is lost. Any column XAF sorted by default (the display
-  property) is unsorted unless the spec sorts it.
-- `.Lookup(...)` describes `{Type}_LookupListView`; without it XAF's default lookup stays.
-  Lookup cannot nest.
-
-## Export Layout To Code
-
-On any DetailView or ListView, the Tools tab shows **Export Layout To Code** for administrators
-when a debugger is attached or the host set `XafLayoutBuilderModule.EnableExport` (the sample reads
-`XafLayoutBuilder:EnableExport` from appsettings.Development.json). It walks the merged model of the
-type's default DetailView, ListView and lookup ListView, every layer applied, and shows the printed
-`{Type}.Layout.cs` in a popup. Nothing is written to disk: select all, copy, paste over the file.
-
-What the export prints:
-
-- Groups, tabs, items, captions that differ from XAF's default, horizontal flow, collapsible,
-  explicit relative sizes and images. Layout items that are not property editors are skipped and
-  listed in a leading comment.
-- Every visible member not placed becomes `.Hide(...)` in the DetailView. Every column without an
-  index becomes `.Hide(...)` in the ListView, except the key; the model cannot tell a hidden column
-  from an unmentioned one, so the export is explicit where your builder may have been silent.
-- Column sort priority follows column order; a spec whose sort order differs from its column order
-  does not round-trip exactly.
+- `ListViewColumnsBuilder<T>.Create()`, then `.Column(x => x.M, width: null,
+  sort: ColumnSortOrder.None, caption: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
+- Column order is call order. Sorted columns get sort priority in call order.
+- `Hide` keeps the column in the column chooser. Unmentioned members behave the same, so nothing
+  is lost. A column XAF sorted by default is unsorted unless the spec sorts it.
+- `.Lookup(...)` describes `{Type}_LookupListView`. Without it XAF's default lookup stays.
 
 ## Rules that throw at Build()
 
-A member placed twice, a member both placed and hidden, a group id used twice in the view, a
-group and an item with the same id under one parent, a column listed twice, a column both listed
-and hidden, `Lookup` inside `Lookup`, a non-simple member lambda.
+A member placed twice, a member both placed and hidden, a group id used twice in the view, a group
+and an item with the same id under one parent, a column listed twice, a column both listed and
+hidden, `Lookup` inside `Lookup`, a non-simple member lambda.
 
 ## Startup diagnostics
 
-- XLB001: a placed member has no view item (for example `[Browsable(false)]`).
+The module generates every view that has a spec when the application model is built, so these
+stop the application at startup. In XAF Blazor the host exits before it listens; read the console.
+
+- XLB001: a placed member has no view item, for example `[Browsable(false)]`.
 - XLB002: a visible member is neither placed nor hidden.
-- XLB003: a column names a collection or a non-member.
+- XLB003: a column names a collection or something that is not a member.
 - XLB004: a type has a spec but no default view.
 
-The module forces generation of every spec'd view when the application model is built
-(`XafApplication.SetupComplete`), so these are startup failures. In XAF Blazor the host process
-exits before it listens; the message is in the console output.
+## When you change a business class
+
+- **Added a property?** Place it with `.Item(...)` or `.Hide(...)` in `BuildDetailViewLayout`, or
+  the app will not start. Add a `.Column(...)` only if the list should show it.
+- **Renamed or removed one?** The lambda stops compiling; fix it where the compiler points.
+- **Layout looks unchanged after a restart?** An administrator or user customised that view and
+  their differences win. The layout editor's context menu has Reset Layout; resetting their
+  differences shows the builder output again.
+
+## Export Layout To Code
+
+The running app is the visual designer. On any DetailView or ListView the Tools tab shows
+**Export Layout To Code** for administrators, when a debugger is attached or the host sets
+`XafLayoutBuilderModule.EnableExport` (the sample reads `XafLayoutBuilder:EnableExport` from
+appsettings.Development.json). It prints the type's current DetailView, ListView and lookup, with
+every layer applied, as the `{Type}.Layout.cs` class above. It writes nothing: copy it from the
+popup over the file.
+
+- Prints groups, tabs, items, captions that differ from XAF's default, flow, collapsible, explicit
+  relative sizes and images. Layout items that are not property editors are listed in a comment.
+- Lists every unplaced visible member as `.Hide(...)`, and every unshown column except the key.
+  The model cannot tell a hidden column from an unmentioned one, so the export is more explicit
+  than hand-written code; the result renders the same.
+- Sort priority follows column order, so a spec whose sort order differs from its column order
+  does not round-trip exactly.

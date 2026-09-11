@@ -75,7 +75,8 @@ public static class LayoutExporter {
                 c.Id,
                 Explicit(c, "Width") ? c.Width : null,
                 c.SortOrder switch { DxSort.Ascending => ColumnSortOrder.Ascending, DxSort.Descending => ColumnSortOrder.Descending, _ => ColumnSortOrder.None },
-                Explicit(c, "Caption") ? c.Caption : null))
+                // Localizable, so not HasValue (see ConvertGroup): compare with the member caption XAF falls back to.
+                c.Caption != c.ModelMember?.Caption ? c.Caption : null))
             .ToList();
 
         static List<string> Hidden(IModelListView v, string? key) => v.Columns.Where(c => c.Index is null or < 0 && c.Id != key).Select(c => c.Id).ToList();

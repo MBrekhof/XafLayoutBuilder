@@ -1,6 +1,10 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 7). Session plan: `XafLayoutBuilder-START.md` section 9.
+
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 33 unit tests
+pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip and the
+startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
 
 ## Where the plan stands
 
@@ -12,7 +16,53 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
 | 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | **done 2026-09-11** |
 | 5. Registry, interface discovery, startup diagnostics | **done 2026-09-11** |
 | 6. Exporter, printer, popup + E2E 4–6 | **done 2026-09-11** |
-| 7. SKILL.md, README, docs, screenshots | next |
+| 7. SKILL.md, README, docs, screenshots | **done 2026-09-11** |
+
+## Session 7 result
+
+- `README.md` rewritten: what it is, the section 4 example, how to run, how to adopt it, the
+  diagnostics table, screenshots, and a limitations section that lists every gap honestly
+  (scope decisions, export verbosity, engineering caveats).
+- `docs/how-it-works.md`: the design for XAF developers. Layer table, both updaters, discovery,
+  startup check, exporter and printer, the user layer in XAF Blazor, testing, and a decisions log
+  that says which choices came from the owner and which from the Codex reviews.
+- `skills/xaf-layout-builder/SKILL.md` finalised: setup, full surface, build-time rules,
+  diagnostics, the "when you change a business class" checklist, and the export. Two agent traps
+  are called out: the `{Type}.Layout.cs` partial must import only `XafLayoutBuilder.Core`
+  (`FlowDirection` and `ColumnSortOrder` also live in DevExpress namespaces), and a property added
+  to a class with a layout must be placed or hidden.
+- `docs/screenshots/` holds seven pictures from a real gate run, referenced by the README. The
+  `.gitignore` rule `**/screenshots/` was removed; it would have hidden them (the E2E's own
+  screenshots are under `bin/`, already ignored).
+- `CLAUDE.md` updated to the finished repository.
+- **New in the gate, E2E 5a:** exporting the untouched layout reproduces `Order.Layout.cs` modulo
+  whitespace, and every column the source hides is hidden in the export. This is the start
+  document's section 6 round-trip property, which section 8 wanted as a unit test; the exporter
+  needs a live Application Model, so it is asserted here instead.
+- **Bug found by that check:** column captions were exported through `HasValue`, which misses
+  localizable values (the same trap already fixed for group captions). A column caption was
+  silently dropped. Fixed by comparing with the member caption XAF falls back to, and covered by a
+  new sample spec: `Customer.Layout.cs` has `.Column(x => x.Name, caption: "Customer name")`, and
+  E2E 5a asserts both the rendered header and the round trip.
+
+## Open points
+
+- **No git remote.** Create a private repository under `MBrekhof` when the owner says so.
+- **Sessions 5, 6 and 7 have not had a Codex review.** Sessions 1 to 4 did, and both reviews found
+  real defects, so the remaining sessions are worth one before release.
+- **Release step (start document section 11):** copy `skills/xaf-layout-builder/SKILL.md` into
+  `xafskills`, and consider the `XafMergerTool` "export as builder C#" option that references
+  `XafLayoutBuilder.Core`.
+- **Phase 2 candidates**, unchanged from the start document plus what the sessions added:
+  hierarchy composition (`Extend<TBase>()`), ListView bands, nested member paths, localised
+  captions through message keys, a `spec.json` loader so BPG can ship layouts as data; and from
+  here: an in-process XAF Application Model in the unit tests, so the updaters and the exporter can
+  be tested without the E2E; driving the Blazor layout editor's drag and drop in E2E 4; exercising
+  `FreezeColumnIndices`, which is currently reasoned from source only.
+- **Known gaps kept as limitations** (all in the README): no copy button and no write-to-file in
+  the export popup, exported hidden columns are more verbose than hand-written code, only the
+  default views are handled, and only XAF 26.1.4 Blazor with EF Core and LocalDB was tested.
+- **No ContextBoard project and no TODO.md** for this repo; open items live in this file.
 
 ## Session 6 result
 
@@ -20,8 +70,8 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   is a fixed point: builder -> spec -> print reproduces its own source byte for byte (tests).
 - `LayoutExporter` (Module): merged model -> spec for the DetailView (root "Main" unwrapped, skipped
   non-editor items reported) and for ListView + lookup. Only explicitly stored values are exported
-  (`HasValue`), except `Caption`, which is localizable and is compared with XAF's default rule
-  instead (see api-notes).
+  (`HasValue`), except captions, which are localizable and are compared with XAF's default rule
+  instead (see api-notes; the column half of that was fixed in session 7).
 - `ExportLayoutController` (Module): "Export Layout To Code" in the Tools category on any object
   view; active for administrators (`ISecurityUserWithRoles` + `IPermissionPolicyRole.IsAdministrative`,
   hence the new `DevExpress.Persistent.Base` reference) and only with a debugger or
@@ -54,7 +104,6 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   sample module, wired to the host's `--break-layout` argument (a command-line switch, not an
   environment variable). The gate's last step starts the host with it and asserts: process exits
   non-zero, nothing serves on :5100, output contains `XLB001 Customer_DetailView ... 'InternalCode'`.
-- SKILL.md's "until session 5" caveat removed.
 
 ## Session 4b result (Codex review follow-up, 2026-09-11)
 
@@ -70,19 +119,18 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   when the Column Chooser menu item is missing instead of logging and moving on.
 - api-notes corrected: the lookup generator tests `IsVisibleInLookupListView` (not
   `VisibleInListView`) and falls back to the full column set when nothing was generated.
-- `skills/xaf-layout-builder/SKILL.md` drafted with the current surface (session 7 finalises it),
-  so the section 10 "skill sentence per method" rule is met from here on.
+- `skills/xaf-layout-builder/SKILL.md` drafted with the current surface.
 
 ## Session 4 result
 
 - `ListViewColumnsUpdater` (registered after the detail updater): applies the spec to
   `{Type}_ListView`, and to `{Type}_LookupListView` when the spec has `.Lookup(...)`. Listed
-  columns get `Index` 0..n-1, `Width`, `Caption`, `SortOrder`/`SortIndex`; every other stock
-  column (hidden or just unmentioned) gets `Index = -1` and its default sort cleared. Unlike the
-  DetailView there is no XLB002 equivalent: an unmentioned member is still reachable through the
-  column chooser, nothing vanishes.
+  columns get their order, `Width`, `Caption`, `SortOrder`/`SortIndex`; every other stock column
+  (hidden or just unmentioned) is not shown and its default sort cleared. Unlike the DetailView
+  there is no XLB002 equivalent: an unmentioned member is still reachable through the column
+  chooser, nothing vanishes.
 - **Found by the fail-fast on the first run:** XAF's lookup ListView only generates columns for
-  the display property and `[VisibleInListView(true)]` members, so `Customer` had no column in
+  the display property and members visible in lookups, so `Customer` had no column in
   `Order_LookupListView`. The updater now adds a missing column the way the stock generator does
   (`AddNode<IModelColumn>` + `PropertyName`); XLB003 remains for collections and unknown members.
 - Sample: `ServiceOrder.OriginalOrder` (reference to `Order`) added so E2E 3 has a lookup editor
@@ -92,8 +140,8 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   (OrderDate descending); header context menu → Column Chooser lists Sync Token (and ID, Notes).
 - E2E 3 passes: SRV-001 detail → Original Order editor → edit mode → dropdown shows a grid whose
   header row is exactly Number, Customer.
-- Index decision recorded in `docs/api-notes.md` (set `Index` directly; the generator's
-  `GeneratedIndex` move is internal and already done when the updater runs).
+- The session's original Index decision (set `IModelColumn.Index` directly) was **superseded by
+  session 4b** after the Codex review; see there and `docs/api-notes.md`.
 
 ## Session 3b result (Codex review follow-up, 2026-09-11)
 
@@ -105,12 +153,8 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   a member `T` lacks; tests for group `RelativeSize`/`Image`, nested `Tabs`, `Tab(id, ...)`,
   column captions, `Members()`; E2E 1 now also asserts no SyncToken element exists and that the
   three top-level nodes are Header, Details, Tabs by DOM inspection.
-- **Carried to session 5 (first item there):** XAF generates view nodes lazily, so XLB001/XLB002
-  fire on first open of the DetailView, not at application start. Session 5 forces generation of
-  every spec'd type's DetailView/ListView layout nodes right after the model is built so the
-  diagnostics really are startup failures.
-- Not done, by design: SKILL.md coverage of the surface beyond section 4 is session 7's job;
-  the handoff's session 2 list is the checklist.
+- Carried to session 5 and done there: XAF generates view nodes lazily, so XLB001/XLB002 fired on
+  first open of the DetailView rather than at application start.
 
 ## Session 3 result
 
@@ -119,26 +163,23 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   model-cache caveat, column Index handling for session 4).
 - `XafLayoutBuilder.Module`: `DetailViewLayoutUpdater` (registered in `AddGeneratorUpdaters`),
   `LayoutRegistry.Register<T>(detail, columns)`, internal `LayoutSpecResolver` (registry first,
-  then `ISupportViewLayoutCustomization` via the interface map, cached per type). Session 5 now
-  only owes the startup diagnostics polish and the "break a member name" test; discovery exists.
+  then `ISupportViewLayoutCustomization` via the interface map, cached per type).
 - Sample `Order` implements `ISupportViewLayoutCustomization` in `Order.Layout.cs` with the
-  section 4 layout verbatim (`BuildListViewColumns` returns null until session 4).
+  section 4 layout verbatim.
 - E2E 1 passes: SyncToken absent from the form, groups in builder order, Notes inside a
   collapsible group (header has the toggle button), Header group captioned but not collapsible.
-  Screenshot `e2e-03-order-detailview.png`, DOM dump `e2e-03-order-detailview.html`.
 
-### Decisions taken in session 3 (confirm or reverse)
+### Decisions taken in session 3
 
 - **XLB002, strict by default:** a visible member that is neither placed nor hidden makes the
-  updater throw at startup, naming the members. Rationale: a new property must not silently
-  vanish from the DetailView. Alternative: append unplaced members to a trailing group.
+  updater throw at startup, naming the members. Confirmed by the owner in session 3b.
 - **Derived classes keep XAF's default layout.** `ServiceOrder` inherits `Order`'s static
   interface implementation, but the resolver only applies a spec whose `TypeName` matches the
   exact type. Hierarchy composition is phase 2 per the start document.
 - **`Collapsible()` forces the caption on** (Blazor renders the toggle in the header). A group
   without an explicit caption and with one item shows that item's caption as header (XAF default).
 - Unit-level coverage of the applier is nil: `ModelNode` cannot be built outside an XAF
-  application, so the E2E is the only test of `DetailViewLayoutUpdater`.
+  application, so the E2E is the only test of the updaters (and, since session 6, the exporter).
 
 ## Session 2 result
 
@@ -151,10 +192,8 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   `Lookup()` inside `Lookup()`.
 - 16 xUnit tests: the section 4 example for both builders, every rule, JSON round trip with
   `$type` discriminators (`group` / `tabs` / `item`) and enums as strings.
-- Beyond section 4, and therefore owed a SKILL.md sentence in session 7: `GroupBuilder.Group`
-  and `GroupBuilder.Tabs` (nesting, needed for real exported layouts), `GroupBuilder.RelativeSize`,
-  `GroupBuilder.Image`, `TabsBuilder.Tab(id, g => ...)` for a tab with arbitrary content,
-  `Column(..., caption:)`. `TabFor` = a tab group whose id is the member name holding one item.
+- Methods beyond section 4 (nested `Group`/`Tabs`, `RelativeSize`, `Image`, `Tab(id, ...)`,
+  `Column(..., caption:)`) are documented in the skill and tested since session 3b.
 - Codex review of session 1 found one gate weakness: the E2E accepted any process serving
   :5100. Fixed: the harness now refuses to start if :5100 already answers, and gives up as soon
   as its own host process exits.
@@ -167,14 +206,11 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   Lines, Attachments` (the exact members section 4 of the start document uses),
   `OrderLine`, `OrderAttachment`, `ServiceOrder : Order`. Seeded: 2 customers, ORD-001..003,
   SRV-001, one line each.
-- `XafLayoutBuilderModule` is an empty `ModuleBase`, already required by `SampleModule`, so
-  session 3 only has to add `AddGeneratorUpdaters`.
 - E2E gate (exit 0): build, start on :5100, log in as Admin, Order ListView shows ORD-001 and
-  SRV-001, ORD-001 DetailView binds with the default XAF layout (SyncToken still visible).
-  Screenshots land in `XafLayoutBuilder.E2ETests/bin/Debug/net10.0/screenshots/`.
-- Unit tests: one placeholder test so `dotnet test` is green; session 2 replaces it.
+  SRV-001, ORD-001 DetailView binds with the default XAF layout.
+- Unit tests: one placeholder test so `dotnet test` is green; session 2 replaced it.
 
-## Gotchas found
+## Gotchas found along the way
 
 - .NET 10 SDK creates `.slnx`, not `.sln`; the E2E `FindRepoRoot` looks for `*.slnx`.
 - `.dxbl-grid-data-row` (the grid row class XafReportScheduler's harness used) does not match
@@ -183,12 +219,9 @@ Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` 
   rendered. Wait for an `input` whose value is the seeded key before reading the DOM.
 - The template's `DatabaseVersionMismatch` handler only auto-updates with a debugger attached;
   changed to `#if EASYTEST || DEBUG` so the headless E2E run updates the schema.
-
-## Open points
-
-- No git remote yet. Create a private repo under `MBrekhof` when the owner says so.
-- Section 7 of the start document (verify 26.1 generator/model API names via dxdocs) is
-  still to do; it is the first step of session 3. Record findings in `docs/api-notes.md`.
-- `XafLayoutBuilder.Core` currently has no DevExpress reference at all. The start document
-  allows `DevExpress.ExpressApp` for `IModel*` interfaces; add it only if session 6's exporter
-  needs the spec side to see model types (it should not — the exporter lives in Module).
+- Grid header cells carry the filter button's accessibility text; strip "No filter applied" before
+  comparing captions.
+- The login form occasionally rejects the first fill ("The user name must not be empty") when the
+  Blazor circuit is still connecting; the harness verifies the bound value before submitting and
+  the failure has not recurred since.
+- Everything else XAF-specific is in `docs/api-notes.md` with file and line references.

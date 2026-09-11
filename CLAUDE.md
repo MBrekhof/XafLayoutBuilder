@@ -1,24 +1,31 @@
 # CLAUDE.md
 
-Instructions for working in this repo. `XafLayoutBuilder-START.md` is the design document
-and session plan; read it first. `SESSION_HANDOFF.md` says where the session plan stands.
+Instructions for working in this repo. `README.md` says what it is, `XafLayoutBuilder-START.md` is
+the original design and session plan (all seven sessions done), `SESSION_HANDOFF.md` says where
+things stand and what is open.
 
 ## Project overview
 
 DevExpress XAF 26.1 Blazor Server POC (.NET 10, EF Core 10, SQL Server LocalDB): a fluent C#
-builder declares a business class's DetailView layout and ListView columns, generator
-updaters pour that into the Application Model as generated-layer defaults, and an admin
-action exports any view's current layout back to the same fluent C#.
+builder declares a business class's DetailView layout and ListView columns, generator updaters
+pour that into the Application Model as generated-layer defaults, and an admin action exports any
+view's current layout back to the same fluent C#.
 
-- `XafLayoutBuilder.Core` — builder, `LayoutSpec` records, C# printer. **No DevExpress
-  dependency.** Keep it that way; BPG and XafMergerTool reuse it.
-- `XafLayoutBuilder.Module` — `XafLayoutBuilderModule`, generator updaters, registry,
-  export controller. References `DevExpress.ExpressApp` only (platform-neutral).
-- `XafLayoutBuilder.Sample.Module` — `Customer`, `Order` (+ `OrderLine`, `OrderAttachment`),
-  `ServiceOrder : Order`, seeding in `DatabaseUpdate/Updater.cs`.
-- `XafLayoutBuilder.Sample.Blazor.Server` — template host, port 5000/5001 from launchSettings.
-- `XafLayoutBuilder.Tests` — xUnit against Core.
-- `XafLayoutBuilder.E2ETests` — console app, C# Playwright, the phase gate.
+- `XafLayoutBuilder.Core`: builders, `LayoutSpec` records, JSON, `CSharpLayoutPrinter`. **No
+  DevExpress dependency.** Keep it that way; BPG and XafMergerTool reuse it.
+- `XafLayoutBuilder.Module`: `XafLayoutBuilderModule`, `DetailViewLayoutUpdater`,
+  `ListViewColumnsUpdater`, `LayoutRegistry` + resolver, `LayoutStartupCheck`, `LayoutExporter`,
+  `ExportLayoutController`. References `DevExpress.ExpressApp` and `DevExpress.Persistent.Base`
+  only (platform neutral).
+- `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, columns only), `Order`
+  (+ `Order.Layout.cs`, the start document's section 4 example verbatim), `OrderLine`,
+  `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test),
+  `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
+- `XafLayoutBuilder.Sample.Blazor.Server`: template host. `--break-layout` registers the broken
+  fixture; `XafLayoutBuilder:EnableExport` in appsettings.Development.json enables the export.
+- `XafLayoutBuilder.Tests`: xUnit against Core.
+- `XafLayoutBuilder.E2ETests`: console app, C# Playwright, the phase gate. Its file header lists
+  every assertion.
 
 ## Build / test / E2E
 
@@ -26,35 +33,34 @@ action exports any view's current layout back to the same fluent C#.
 dotnet build XafLayoutBuilder.slnx
 dotnet test XafLayoutBuilder.Tests
 dotnet run --project XafLayoutBuilder.E2ETests     # builds + starts the sample on :5100, asserts, exits 0/1/2
-dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://localhost:5000
+dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://localhost:5000, Admin / empty password
 ```
 
-LocalDB catalog `XafLayoutBuilder.Sample` on `(localdb)\mssqllocaldb`. DEBUG builds
-auto-update the schema on startup (no debugger needed — the E2E harness relies on it).
-Login: `Admin`, empty password (DEBUG-only seeding).
+LocalDB catalog `XafLayoutBuilder.Sample` on `(localdb)\mssqllocaldb`. Debug builds auto-update the
+schema on startup, no debugger needed. The gate writes and deletes Admin's `ModelDifferences`
+rows and restarts the host around those writes (XAF Blazor's deferred user-model save would
+overwrite them otherwise); it refuses to start if :5100 is already serving.
 
-Playwright 1.49 uses `chromium-1148`; if the E2E exits 2, run
+Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
 `pwsh XafLayoutBuilder.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium`.
 
-## Non-negotiables (from the start document, section 10)
+## Non-negotiables (start document section 10, plus what the sessions added)
 
 - **DevExpress 26.1.\* only.** Never mix in 25.2 packages.
 - **EF Core only, never XPO.**
-- **Verify every DevExpress API claim** in dxdocs (`devexpress_docs_search` /
-  `devexpress_docs_get_content`) or the installed source at
-  `C:\Program Files\DevExpress 26.1\Components\Sources\DevExpress.ExpressApp`. Findings go
-  into `docs/api-notes.md`.
-- **No `ModelNodesGenerator` subclasses — updaters only.** If something seems to need a
-  generator, stop and write why in `BACKBURNER.md`.
-- **No XAFML for `Order`** in the sample module beyond what the template ships. The builder
-  is its only layout source.
-- **Builder API stays at section 4 of the start document.** A new method needs a sentence
-  in `skills/xaf-layout-builder/SKILL.md` and a test, or it doesn't go in.
-- Every session ends with `dotnet build`, unit tests green, and the E2E gate at its
-  current expected level. Don't advance the session plan on a red gate.
-- E2E selectors: wait on seeded text or bound input values, never on DevExpress grid CSS
-  class names (`.dxbl-grid-data-row` does not exist in 26.1).
+- **Verify every DevExpress API claim** in dxdocs or the installed source at
+  `C:\Program Files\DevExpress 26.1\Components\Sources\DevExpress.ExpressApp`. Findings go into
+  `docs/api-notes.md` with file and line.
+- **No `ModelNodesGenerator` subclasses, updaters only.** If something seems to need a generator,
+  stop and write why in `BACKBURNER.md` (does not exist yet; nothing has needed one).
+- **No XAFML for `Order`** in the sample module. The builder is its only layout source.
+- **Builder API changes need a sentence in `skills/xaf-layout-builder/SKILL.md` and a test.**
+- Every change ends with `dotnet build`, unit tests green, and the E2E gate at exit 0.
+- No environment variables for configuration: switches go in appsettings or on the command line.
+- E2E selectors: wait on seeded text or bound input values, never on DevExpress grid CSS class
+  names. Scope assertions to the active tab panel; inactive tabs stay in the DOM.
 
 ## Task state
 
-No `TODO.md` — open items live in `SESSION_HANDOFF.md` until a ContextBoard project exists.
+No `TODO.md` and no ContextBoard project yet; open items live in `SESSION_HANDOFF.md`.
+No git remote yet.

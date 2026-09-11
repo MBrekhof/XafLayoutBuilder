@@ -1,13 +1,21 @@
 using System.Diagnostics;
 using Microsoft.Playwright;
 
-// E2E phase gate for XafLayoutBuilder. Same shape as XafReportScheduler's harness.
+// E2E phase gate for XafLayoutBuilder (start document section 8). Same shape as XafReportScheduler's harness.
 // Run with:  dotnet run --project XafLayoutBuilder.E2ETests
 // Exit codes: 0 pass, 1 fail, 2 Playwright browser missing.
 //
-// Session 1 level: the sample app builds, starts on :5100, Admin logs in, the Orders
-// ListView renders the seeded rows with XAF's default layout. Later sessions add the
-// builder assertions listed in XafLayoutBuilder-START.md section 8.
+// Builds and starts the sample on :5100, logs in as Admin, then:
+//   E2E 1   Order_DetailView renders the builder layout (hidden member absent, group and tab order, collapsible group)
+//   E2E 2   Order_ListView column order, OrderDate-descending sort, hidden column offered by the column chooser
+//   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
+//   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
+//   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder
+//   E2E 5   Export Layout To Code prints OrderDate under Details
+//   E2E 6   deleting the user differences brings the builder layout back
+//   Session 5: the host started with --break-layout exits at startup with XLB001
+// Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
+// those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
 const string BaseUrl = "http://localhost:5100";
 const string ConnectionString = @"Data Source=(localdb)\mssqllocaldb;Integrated Security=SSPI;Initial Catalog=XafLayoutBuilder.Sample;Encrypt=False";
@@ -71,6 +79,7 @@ try
     // into an editor before reading the DOM, otherwise the grid's column headers satisfy the assert.
     await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'ORD-001')",
         null, new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-03-order-detailview.png") });
     await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-03-order-detailview.html"), await page.ContentAsync());
     // The ListView stays in the DOM on its own (inactive) tab, so scope every assertion to the detail form.
@@ -125,6 +134,7 @@ try
     var firstCells = await grid.EvaluateAsync<string[]>("g => [...g.querySelectorAll('tr[role=row]')].map(r => r.querySelector('td.xaf-action')?.innerText.trim()).filter(t => t)");
     Console.WriteLine("    rows: " + string.Join(" | ", firstCells));
     Assert(string.Join(",", firstCells) == "ORD-003,ORD-001,SRV-001,ORD-002", $"rows sorted by OrderDate descending (got {string.Join(",", firstCells)})");
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-04-order-listview-columns.png") });
     // Column chooser: XAF Blazor exposes it as the ColumnChooser action (image-only, HiddenActions container).
     await grid.Locator("th.dxbl-grid-header").Filter(new() { HasText = "Number" }).First.ClickAsync(new() { Button = MouseButton.Right });
@@ -140,6 +150,7 @@ try
     await chooser.WaitForAsync(new() { Timeout = 10_000 });
     var chooserText = await chooser.InnerTextAsync();
     Console.WriteLine("    column chooser text: " + chooserText.Replace("\n", " / "));
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-06-column-chooser.png") });
     Assert(chooserText.Contains("Sync Token"), "SyncToken is offered in the column chooser (hidden, not removed)");
     await page.Keyboard.PressAsync("Escape");
@@ -175,6 +186,7 @@ try
         }
         catch (TimeoutException) { Console.WriteLine($"    dropdown not open after attempt {attempt + 1}"); }
     }
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09-order-lookup-open.png") });
     Assert(dropdownLines.Length > 0, "the Original Order lookup dropdown opened");
     var lookupHeaders = dropdownLines[0].Split('\t', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -183,6 +195,32 @@ try
     Assert(!string.Join("\n", dropdownLines).Contains("Order Date"), "lookup does not show Order Date");
     Assert(dropdownLines.Any(l => l.Contains("Acme Corp")), "lookup rows show the Customer column's values");
     await page.Keyboard.PressAsync("Escape");
+
+    Step("E2E 5a: exporting the untouched builder layout reproduces the source (section 6 round trip)");
+    await OpenOrd001Detail(page);
+    var roundTrip = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-09b-export-roundtrip.png"));
+    await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-09b-exported-roundtrip.cs"), roundTrip);
+    await ClosePopup(page);
+    var layoutSource = await File.ReadAllTextAsync(Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Module", "BusinessObjects", "Order.Layout.cs"));
+    Assert(Squash(BuilderExpression(roundTrip, "LayoutBuilder<Order>.Create()")) == Squash(BuilderExpression(layoutSource, "LayoutBuilder<Order>.Create()")),
+        "exported DetailView builder equals the one in Order.Layout.cs (modulo whitespace)");
+    var sourceColumns = BuilderExpression(layoutSource, "ListViewColumnsBuilder<Order>.Create()");
+    var exportedColumns = BuilderExpression(roundTrip, "ListViewColumnsBuilder<Order>.Create()");
+    Assert(Squash(WithoutHideCalls(exportedColumns)) == Squash(WithoutHideCalls(sourceColumns)),
+        "exported columns and lookup equal the source apart from Hide calls");
+    var exportedHides = HideCalls(exportedColumns);
+    Assert(HideCalls(sourceColumns).All(exportedHides.Contains),
+        $"every column the source hides is hidden in the export (export hides: {string.Join(" ", exportedHides)})");
+    // Column captions are localizable model values; this is the case that needs the exporter's default-caption rule.
+    await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.GetByText("Acme Corp", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+    var customerHeaders = await page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<string[]>(
+        @"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+    Assert(string.Join(",", customerHeaders) == "Customer name,City", $"Customer_ListView shows the captioned column (got {string.Join(",", customerHeaders)})");
+    var customerExport = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-09c-export-customer.png"));
+    await ClosePopup(page);
+    Assert(customerExport.Contains(".Column(x => x.Name, caption: \"Customer name\")"), "the column caption round-trips through the export");
+    Assert(customerExport.Contains("public static DetailLayoutSpec? BuildDetailViewLayout() =>"), "export prints the Customer class");
 
     Step("E2E 4: the user layer wins: Admin moves OrderDate into Details");
     // XAF Blazor's layout editor persists its result through Application.SaveModelChanges into the user
@@ -220,20 +258,13 @@ try
     await OpenOrd001Detail(page);
     Console.WriteLine("    user diff rows for Admin: " + SqlScalar($"SELECT COUNT(*) FROM ModelDifferences WHERE UserId = '{adminId}'")
         + ", aspect mentions OrderDate: " + SqlScalar($"SELECT MAX(CASE WHEN CAST(a.Xml AS NVARCHAR(MAX)) LIKE '%OrderDate%' THEN 1 ELSE 0 END) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'"));
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-10-user-layer-orderdate-in-details.png") });
     Assert(await OrderDateGroup(page) == "Details", "after reload OrderDate renders inside the Details group (user layer over builder)");
 
     Step("E2E 5: Export Layout To Code shows the merged layout as builder C#");
-    // The action's category is Tools; XAF Blazor renders that as a "Tools" tab next to Home and View.
-    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
-    var exportAction = page.GetByText("Export Layout To Code", new() { Exact = true }).First;
-    await exportAction.WaitForAsync(new() { Timeout = 10_000 });
-    await exportAction.ClickAsync();
-    var exportBox = page.Locator(".dxbl-popup textarea, .dxbl-modal textarea, textarea").First;
-    await exportBox.WaitForAsync(new() { Timeout = 15_000 });
-    var exported = await exportBox.InputValueAsync();
+    var exported = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-11-export-popup.png"));
     await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-11-exported-Order.Layout.cs"), exported);
-    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-11-export-popup.png") });
     Console.WriteLine("    exported:\n" + string.Join("\n", exported.Split('\n').Select(l => "      " + l.TrimEnd())));
     Assert(exported.Contains("public partial class Order : ISupportViewLayoutCustomization"), "export is the Order partial class");
     Assert(System.Text.RegularExpressions.Regex.IsMatch(exported, @"\.Group\(""Details""[\s\S]*?\.Item\(x => x\.OrderDate[,)]"),
@@ -247,13 +278,14 @@ try
     Assert(!exported.Contains(".Hide(x => x.ID)"), "export does not list the key as a hidden column");
     Assert(exported.Contains(".Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)") && exported.Contains(".Lookup(l => l"),
         "export includes the ListView columns and the lookup");
-    await page.Keyboard.PressAsync("Escape");
+    await ClosePopup(page);
 
     Step("E2E 6: resetting the user model brings the builder layout back");
     KillApp(ref app);
     ResetUserModel(adminId);
     app = await RestartApp(app, blazorProj, appOutput);
     await OpenOrd001Detail(page);
+    await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-12-user-layer-reset.png") });
     Assert(await OrderDateGroup(page) == "Header", "after reset OrderDate renders inside the Header group again");
 
@@ -389,6 +421,51 @@ static string? SqlScalar(string sql)
     using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
     return cmd.ExecuteScalar()?.ToString();
 }
+
+// XAF Blazor shows a "Loading..." toast while a server callback runs; wait it out so screenshots are clean.
+static async Task WaitForNoLoading(IPage page)
+{
+    // Substring, not exact: the toast's text is "Loading…" in some renders and sits next to a spinner element.
+    try { await page.GetByText("Loading").First.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 10_000 }); }
+    catch (TimeoutException) { /* screenshot anyway */ }
+    await page.WaitForTimeoutAsync(300); // let the fade-out finish
+}
+
+// Tools tab -> Export Layout To Code; returns the printed class from the popup's memo.
+static async Task<string> ExportLayoutCode(IPage page, string screenshotPath)
+{
+    // PredefinedCategory.Tools renders as a "Tools" tab next to Home and View in the Blazor template.
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var exportAction = page.GetByText("Export Layout To Code", new() { Exact = true }).First;
+    await exportAction.WaitForAsync(new() { Timeout = 10_000 });
+    await exportAction.ClickAsync();
+    const string isExport = "t => t.value.startsWith('using XafLayoutBuilder.Core;')";
+    await page.WaitForFunctionAsync($"() => [...document.querySelectorAll('textarea')].some({isExport})", null, new() { Timeout = 15_000 });
+    var code = await page.EvaluateAsync<string>($"() => [...document.querySelectorAll('textarea')].find({isExport}).value");
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = screenshotPath });
+    return code;
+}
+
+static async Task ClosePopup(IPage page)
+{
+    var cancel = page.Locator(".dxbl-popup, .dxbl-modal").GetByRole(AriaRole.Button, new() { Name = "Cancel" });
+    if (await cancel.CountAsync() > 0) await cancel.First.ClickAsync();
+    else await page.Keyboard.PressAsync("Escape");
+}
+
+// Round-trip helpers: cut one builder expression out of C# text and compare modulo whitespace.
+static string BuilderExpression(string code, string start)
+{
+    var from = code.IndexOf(start, StringComparison.Ordinal);
+    if (from < 0) throw new Exception($"'{start}' not found in the code");
+    var to = code.IndexOf(".Build()", from, StringComparison.Ordinal);
+    return code[from..(to + ".Build()".Length)];
+}
+
+static string Squash(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\s+", "");
+static string[] HideCalls(string s) => System.Text.RegularExpressions.Regex.Matches(s, @"\.Hide\(x => x\.\w+\)").Select(m => m.Value).ToArray();
+static string WithoutHideCalls(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\s*\.Hide\(x => x\.\w+\)", "");
 
 static async Task<IPage> NewPage(IBrowser browser)
 {
