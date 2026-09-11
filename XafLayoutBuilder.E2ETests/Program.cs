@@ -10,6 +10,7 @@ using Microsoft.Playwright;
 // builder assertions listed in XafLayoutBuilder-START.md section 8.
 
 const string BaseUrl = "http://localhost:5100";
+const string ConnectionString = @"Data Source=(localdb)\mssqllocaldb;Integrated Security=SSPI;Initial Catalog=XafLayoutBuilder.Sample;Encrypt=False";
 
 var repoRoot = FindRepoRoot();
 var blazorProj = Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Blazor.Server");
@@ -183,6 +184,79 @@ try
     Assert(dropdownLines.Any(l => l.Contains("Acme Corp")), "lookup rows show the Customer column's values");
     await page.Keyboard.PressAsync("Escape");
 
+    Step("E2E 4: the user layer wins: Admin moves OrderDate into Details");
+    // XAF Blazor's layout editor persists its result through Application.SaveModelChanges into the user
+    // ModelDifference store (ContextId "Blazor"). Driving its drag-and-drop with Playwright is out of proportion for
+    // the POC, so the harness writes the same difference XML the editor would. E2E 6 deletes it again.
+    var adminId = SqlScalar("SELECT LOWER(CAST(ID AS NVARCHAR(36))) FROM PermissionPolicyUser WHERE UserName = 'Admin'")
+        ?? throw new Exception("Admin user not found in the sample database");
+    const string MoveOrderDateXml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <Application>
+          <Views>
+            <DetailView Id="Order_DetailView">
+              <Layout>
+                <LayoutGroup Id="Main">
+                  <LayoutGroup Id="Header">
+                    <LayoutItem Id="OrderDate" Removed="True" />
+                  </LayoutGroup>
+                  <LayoutGroup Id="Details">
+                    <LayoutItem Id="OrderDate" ViewItem="OrderDate" Index="1" IsNewNode="True" />
+                  </LayoutGroup>
+                </LayoutGroup>
+              </Layout>
+            </DetailView>
+          </Views>
+        </Application>
+        """;
+    KillApp(ref app); // the running host's deferred save would otherwise flush its in-memory user model over our rows
+    ResetUserModel(adminId);
+    Sql($"""
+        DECLARE @d UNIQUEIDENTIFIER = NEWID();
+        INSERT INTO ModelDifferences (ID, UserId, ContextId, Version, GCRecord) VALUES (@d, '{adminId}', 'Blazor', 0, 0);
+        INSERT INTO ModelDifferenceAspects (ID, Name, Xml, OwnerID, GCRecord) VALUES (NEWID(), '', @xml, @d, 0);
+        """, ("@xml", MoveOrderDateXml)); // GCRecord = 0: XAF's deferred-deletion query filter hides NULL rows
+    app = await RestartApp(app, blazorProj, appOutput);
+    await OpenOrd001Detail(page);
+    Console.WriteLine("    user diff rows for Admin: " + SqlScalar($"SELECT COUNT(*) FROM ModelDifferences WHERE UserId = '{adminId}'")
+        + ", aspect mentions OrderDate: " + SqlScalar($"SELECT MAX(CASE WHEN CAST(a.Xml AS NVARCHAR(MAX)) LIKE '%OrderDate%' THEN 1 ELSE 0 END) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'"));
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-10-user-layer-orderdate-in-details.png") });
+    Assert(await OrderDateGroup(page) == "Details", "after reload OrderDate renders inside the Details group (user layer over builder)");
+
+    Step("E2E 5: Export Layout To Code shows the merged layout as builder C#");
+    // The action's category is Tools; XAF Blazor renders that as a "Tools" tab next to Home and View.
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var exportAction = page.GetByText("Export Layout To Code", new() { Exact = true }).First;
+    await exportAction.WaitForAsync(new() { Timeout = 10_000 });
+    await exportAction.ClickAsync();
+    var exportBox = page.Locator(".dxbl-popup textarea, .dxbl-modal textarea, textarea").First;
+    await exportBox.WaitForAsync(new() { Timeout = 15_000 });
+    var exported = await exportBox.InputValueAsync();
+    await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-11-exported-Order.Layout.cs"), exported);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-11-export-popup.png") });
+    Console.WriteLine("    exported:\n" + string.Join("\n", exported.Split('\n').Select(l => "      " + l.TrimEnd())));
+    Assert(exported.Contains("public partial class Order : ISupportViewLayoutCustomization"), "export is the Order partial class");
+    Assert(System.Text.RegularExpressions.Regex.IsMatch(exported, @"\.Group\(""Details""[\s\S]*?\.Item\(x => x\.OrderDate[,)]"),
+        "exported code places OrderDate in the Details group");
+    var headerBlock = exported[exported.IndexOf(".Group(\"Header\"", StringComparison.Ordinal)..exported.IndexOf(".Group(\"Details\"", StringComparison.Ordinal)];
+    Assert(!headerBlock.Contains("OrderDate"), "exported Header group no longer contains OrderDate");
+    Assert(exported.Contains(".TabFor(x => x.Lines, imageName: \"BO_Order_Item\")") && exported.Contains(".Hide(x => x.SyncToken)"),
+        "export keeps the builder's tabs and hidden member");
+    Assert(exported.Contains(".Caption(\"Order\")") && !exported.Contains(".Caption(\"Details\")") && !exported.Contains(".Caption(\"Lines\")"),
+        "export prints the explicit Header caption and not XAF's computed captions");
+    Assert(!exported.Contains(".Hide(x => x.ID)"), "export does not list the key as a hidden column");
+    Assert(exported.Contains(".Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)") && exported.Contains(".Lookup(l => l"),
+        "export includes the ListView columns and the lookup");
+    await page.Keyboard.PressAsync("Escape");
+
+    Step("E2E 6: resetting the user model brings the builder layout back");
+    KillApp(ref app);
+    ResetUserModel(adminId);
+    app = await RestartApp(app, blazorProj, appOutput);
+    await OpenOrd001Detail(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-12-user-layer-reset.png") });
+    Assert(await OrderDateGroup(page) == "Header", "after reset OrderDate renders inside the Header group again");
+
     Step("Session 5: a broken layout is reported at startup (host started with --break-layout)");
     KillApp(ref app);
     lock (appOutput) appOutput.Clear();
@@ -260,6 +334,62 @@ static async Task Login(IPage page)
     await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 20_000 });
 }
 
+// A fresh page load starts a new Blazor circuit, which reloads the user model differences.
+static async Task OpenOrd001Detail(IPage page)
+{
+    // A fresh circuit may restore the last open view (DocumentManagerState) and interrupt the first navigation.
+    for (var attempt = 0; attempt < 3; attempt++) {
+        try { await page.GotoAsync($"{BaseUrl}/Order_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle }); }
+        catch (PlaywrightException ex) when (ex.Message.Contains("interrupted")) { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); continue; }
+        if (page.Url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase)) { await Login(page); continue; }
+        if (page.Url.Contains("Order_ListView", StringComparison.OrdinalIgnoreCase)) break;
+    }
+    await page.GetByText("ORD-001", new() { Exact = true }).First.ClickAsync();
+    await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'ORD-001')", null, new() { Timeout = 30_000 });
+}
+
+// "Header" when OrderDate shares its group with Number, "Details" when it shares it with Notes, else the group's id-ish header.
+static async Task<string> OrderDateGroup(IPage page) =>
+    await page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First.EvaluateAsync<string>(@"f => {
+        const g = m => f.querySelector('label.xaf-item-' + m)?.closest('[role=group]');
+        const od = g('orderdate');
+        if (!od) return '(missing)';
+        if (od === g('number')) return 'Header';
+        if (od === g('notes')) return 'Details';
+        return od.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? '(other)';
+    }");
+
+static async Task<Process> RestartApp(Process? app, string blazorProj, System.Text.StringBuilder appOutput)
+{
+    KillApp(ref app);
+    lock (appOutput) appOutput.Clear();
+    var restarted = StartApp(blazorProj, appOutput);
+    await WaitForHttpOk(restarted, appOutput);
+    return restarted;
+}
+
+static void ResetUserModel(string userId)
+{
+    Sql($"DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{userId}'; DELETE FROM ModelDifferences WHERE UserId = '{userId}';");
+}
+
+static int Sql(string sql, params (string Name, string Value)[] parameters)
+{
+    using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionString);
+    conn.Open();
+    using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+    foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value);
+    return cmd.ExecuteNonQuery();
+}
+
+static string? SqlScalar(string sql)
+{
+    using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionString);
+    conn.Open();
+    using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+    return cmd.ExecuteScalar()?.ToString();
+}
+
 static async Task<IPage> NewPage(IBrowser browser)
 {
     var page = await browser.NewPageAsync(new() { ViewportSize = new() { Width = 1400, Height = 900 } });
@@ -286,17 +416,6 @@ static Process StartApp(string blazorProj, System.Text.StringBuilder appOutput, 
     p.BeginOutputReadLine();
     p.BeginErrorReadLine();
     return p;
-}
-
-static async Task<bool> PollForLog(System.Text.StringBuilder buffer, string needle, TimeSpan timeout)
-{
-    var deadline = DateTime.UtcNow + timeout;
-    while (DateTime.UtcNow < deadline)
-    {
-        lock (buffer) { if (buffer.ToString().Contains(needle)) return true; }
-        await Task.Delay(1000);
-    }
-    return false;
 }
 
 static void KillApp(ref Process? app)

@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="DevExpress.ExpressApp" Version="26.1.*" />
+    <PackageReference Include="DevExpress.Persistent.Base" Version="26.1.*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XafLayoutBuilder.Core\XafLayoutBuilder.Core.csproj" />

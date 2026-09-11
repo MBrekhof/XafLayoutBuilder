@@ -131,6 +131,41 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   stack goes through `Microsoft.Extensions.Hosting.Internal.Host.ForeachService`), so an exception
   from `SetupComplete` is unhandled and terminates the process before Kestrel listens.
 
+## Exporter and user layer (session 6)
+
+- `ModelNode.HasValue(name)` is public and tells a stored value from a computed default, **but for
+  localizable values (`Caption`) it checks the current language aspect**
+  (`GetValueCurrentAspectIndex`, `ModelNode.cs` 848), so a caption the updater set in the default
+  aspect reads as "no value" once a language is active. The exporter compares against XAF's
+  default instead: `ModelLayoutGroupLogic.Get_Caption` returns the single view item's caption for a
+  one-item group, otherwise the group id (`IModelDetailView.cs` 172-180). `RelativeSize` and
+  `Width` are not localizable, so `HasValue` works for them.
+- `IModelLayoutGroup.ImageName` also has a computed default (`Get_ImageName`, from the property
+  editor's view image for one-item groups); the exporter treats an empty string as "not set".
+- **User model persistence in XAF Blazor is deferred.** `BlazorApplication.LoadUserDifferences`
+  (line 103) first flushes the `IUserModelSaveDispatcher`'s in-memory copy of the user model to the
+  store, then loads. A `ModelDifferences` row written from outside is therefore overwritten before
+  it is read unless the process is restarted first. `SaveModelDifferencesController` compares the
+  serialised user layer with a cached string and saves on change.
+- `ModelDifferenceDbStore` finds the user row by `UserId` (the security user id as an invariant
+  string, lowercase Guid here) and `ContextId` (`"Blazor"` in the template); the aspect with
+  `Name = ""` holds the XAFML (`ModelDifferenceDbStore.cs` 94-150, 173-212).
+- XAF EF Core deferred deletion adds a query filter `GCRecord == 0`
+  (`EFCoreDeferredDeletionRegistration.cs` 81). Rows inserted with `GCRecord NULL` are invisible.
+- A user-layer XAFML that moves an item: under `<LayoutGroup Id="Header">` write
+  `<LayoutItem Id="OrderDate" Removed="True" />`, under the target group
+  `<LayoutItem Id="OrderDate" ViewItem="OrderDate" Index="1" IsNewNode="True" />`. Verified by
+  E2E 4-6: the layout renders, exports and resets accordingly.
+- The user layer also stores `DocumentManagerState` (the open tabs); a fresh circuit restores the
+  last active view, which can interrupt a Playwright navigation.
+- Actions in `PredefinedCategory.Tools` render as a "Tools" tab next to Home and View in the
+  Blazor template.
+- The export popup is a DetailView of a `NonPersistentBaseObject` with one unlimited-size string;
+  `AddNonPersistent()` in the host is required (the template has it).
+- The Blazor layout editor (`Layout/LayoutEditor/LayoutEditor.razor`) moves elements only by
+  drag-and-drop; its context menu offers hide/show text, rename, best fit, collapsible toggles and
+  reset. The E2E therefore writes the user-layer XAFML directly.
+
 ## Still open
 
 - Bands (`IModelListView.BandsLayout`, `IModelBandsLayout` is added as a child node at

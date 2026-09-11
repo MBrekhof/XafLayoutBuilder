@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 5). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-11 (after session 6). Session plan: `XafLayoutBuilder-START.md` section 9.
 
 ## Where the plan stands
 
@@ -11,8 +11,32 @@ Updated 2026-09-11 (after session 5). Session plan: `XafLayoutBuilder-START.md` 
 | 3. `DetailViewLayoutUpdater` + E2E 1 | **done 2026-09-11** |
 | 4. `ListViewColumnsUpdater` incl. lookup + E2E 2–3 | **done 2026-09-11** |
 | 5. Registry, interface discovery, startup diagnostics | **done 2026-09-11** |
-| 6. Exporter, printer, popup + E2E 4–6 | next |
-| 7. SKILL.md, README, docs, screenshots | |
+| 6. Exporter, printer, popup + E2E 4–6 | **done 2026-09-11** |
+| 7. SKILL.md, README, docs, screenshots | next |
+
+## Session 6 result
+
+- `CSharpLayoutPrinter` (Core): `PrintDetail`, `PrintColumns`, `PrintClass`. The section 4 example
+  is a fixed point: builder -> spec -> print reproduces its own source byte for byte (tests).
+- `LayoutExporter` (Module): merged model -> spec for the DetailView (root "Main" unwrapped, skipped
+  non-editor items reported) and for ListView + lookup. Only explicitly stored values are exported
+  (`HasValue`), except `Caption`, which is localizable and is compared with XAF's default rule
+  instead (see api-notes).
+- `ExportLayoutController` (Module): "Export Layout To Code" in the Tools category on any object
+  view; active for administrators (`ISecurityUserWithRoles` + `IPermissionPolicyRole.IsAdministrative`,
+  hence the new `DevExpress.Persistent.Base` reference) and only with a debugger or
+  `XafLayoutBuilderModule.EnableExport`. The sample host sets it from
+  `XafLayoutBuilder:EnableExport` in appsettings.Development.json. The popup is a DetailView of the
+  non-persistent `LayoutCode` (one unlimited string). **No copy button**: that needs Blazor JS
+  interop, which the platform-neutral Module cannot host; select-all/copy in the memo does the job.
+- `LayoutBuilder<T>.Item(...)` at root level added so exported layouts with root items compile.
+- E2E 4-6 pass. **Deviation from section 8:** E2E 4 does not drive the Blazor layout editor (drag
+  and drop only); it writes the user-layer XAFML XAF's editor would persist, with the host restarted
+  around the write because XAF Blazor's deferred user-model save otherwise overwrites the row. E2E 5
+  exports and asserts OrderDate under Details; E2E 6 deletes the rows, restarts, and asserts the
+  builder layout is back.
+- Exported columns list every unshown column as `.Hide(...)` except the key. Hidden and
+  unmentioned are the same thing in the model; documented in SKILL.md.
 
 ## Session 5 result
 

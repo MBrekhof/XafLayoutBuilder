@@ -1,4 +1,4 @@
-﻿using DevExpress.ExpressApp.Security;
+using DevExpress.ExpressApp.Security;
 using DevExpress.ExpressApp.ApplicationBuilder;
 using DevExpress.ExpressApp.Blazor.ApplicationBuilder;
 using DevExpress.ExpressApp.Blazor.Services;
@@ -27,6 +27,8 @@ public class Startup {
         services.AddServerSideBlazor();
         services.AddHttpContextAccessor();
         services.AddScoped<CircuitHandler, CircuitHandlerProxy>();
+        // Export action without a debugger: appsettings "XafLayoutBuilder:EnableExport" (Development only in the sample).
+        XafLayoutBuilder.Module.XafLayoutBuilderModule.EnableExport = Configuration.GetValue<bool>("XafLayoutBuilder:EnableExport");
         services.AddXaf(Configuration, builder => {
             builder.UseApplication<SampleBlazorApplication>();
             builder.Modules

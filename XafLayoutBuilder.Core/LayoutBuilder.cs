@@ -25,6 +25,12 @@ public sealed class LayoutBuilder<T> {
         return this;
     }
 
+    /// <summary>An item directly under the root group. Exists so an exported layout whose user dragged an editor to the root round-trips.</summary>
+    public LayoutBuilder<T> Item(Expression<Func<T, object?>> member, double? relativeSize = null) {
+        nodes.Add(new LayoutItemSpec(MemberPath.Of(member), relativeSize));
+        return this;
+    }
+
     /// <summary>Do not place this member at all. Differs from ListView hiding: a hidden detail item is gone, not "available".</summary>
     public LayoutBuilder<T> Hide(Expression<Func<T, object?>> member) {
         hidden.Add(MemberPath.Of(member));

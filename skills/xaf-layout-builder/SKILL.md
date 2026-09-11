@@ -53,7 +53,9 @@ names a member the type does not have.
 
 ## DetailView surface
 
-- `LayoutBuilder<T>.Create()` then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Hide(x => x.M)`, `.Build()`.
+- `LayoutBuilder<T>.Create()` then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Item(x => x.M)` (directly
+  under the root; mainly what an export produces when a user dragged an editor out of every group),
+  `.Hide(x => x.M)`, `.Build()`.
 - Group: `.Caption("...")`, `.Flow(FlowDirection.Horizontal|Vertical)`, `.Collapsible()`,
   `.RelativeSize(percent)`, `.Image("ImageName")`, `.Item(x => x.M, relativeSize: null)`,
   and nested `.Group(...)` / `.Tabs(...)`.
@@ -78,6 +80,25 @@ names a member the type does not have.
   property) is unsorted unless the spec sorts it.
 - `.Lookup(...)` describes `{Type}_LookupListView`; without it XAF's default lookup stays.
   Lookup cannot nest.
+
+## Export Layout To Code
+
+On any DetailView or ListView, the Tools tab shows **Export Layout To Code** for administrators
+when a debugger is attached or the host set `XafLayoutBuilderModule.EnableExport` (the sample reads
+`XafLayoutBuilder:EnableExport` from appsettings.Development.json). It walks the merged model of the
+type's default DetailView, ListView and lookup ListView, every layer applied, and shows the printed
+`{Type}.Layout.cs` in a popup. Nothing is written to disk: select all, copy, paste over the file.
+
+What the export prints:
+
+- Groups, tabs, items, captions that differ from XAF's default, horizontal flow, collapsible,
+  explicit relative sizes and images. Layout items that are not property editors are skipped and
+  listed in a leading comment.
+- Every visible member not placed becomes `.Hide(...)` in the DetailView. Every column without an
+  index becomes `.Hide(...)` in the ListView, except the key; the model cannot tell a hidden column
+  from an unmentioned one, so the export is explicit where your builder may have been silent.
+- Column sort priority follows column order; a spec whose sort order differs from its column order
+  does not round-trip exactly.
 
 ## Rules that throw at Build()
 
