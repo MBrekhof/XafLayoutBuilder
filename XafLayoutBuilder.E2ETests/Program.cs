@@ -460,6 +460,8 @@ static async Task<string> ExportLayoutCode(IPage page, string screenshotPath)
     await page.WaitForFunctionAsync($"() => [...document.querySelectorAll('textarea')].some({isExport})", null, new() { Timeout = 15_000 });
     var code = await page.EvaluateAsync<string>($"() => [...document.querySelectorAll('textarea')].find({isExport}).value");
     await WaitForNoLoading(page);
+    // Show the top of the file (namespace, export comment) instead of wherever the memo happens to be scrolled.
+    await page.EvaluateAsync("() => document.querySelectorAll('textarea').forEach(t => { t.scrollTop = 0; })");
     await page.ScreenshotAsync(new() { Path = screenshotPath });
     return code;
 }
