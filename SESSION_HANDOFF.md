@@ -4,7 +4,7 @@ Updated 2026-09-11 (after session 7). Session plan: `XafLayoutBuilder-START.md` 
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 36 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip and the
-startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
+startup-failure check. The repository is public on GitHub, MIT licensed.
 
 ## Where the plan stands
 
@@ -94,7 +94,13 @@ and invariant number formatting.
 
 ## Open points
 
-- **No git remote.** Create a private repository under `MBrekhof` when the owner says so.
+- **Public on GitHub:** https://github.com/MBrekhof/XafLayoutBuilder, owner account `MBrekhof`,
+  MIT licensed. The commit messages were rewritten before the first push to drop the assistant
+  attribution trailers and session links, so that history differs from any older local clone.
+  Worth a second look now that it is public: the sample carries the XAF template's demo
+  `UrlSigningKey` in `appsettings.json` and seeds `Admin` with an empty password in Debug builds,
+  and the repository name contains "Xaf", which is the subject of an open DevExpress ticket about
+  naming and publishing terms for a sibling repository.
 - **Codex has now reviewed every session.** The final review of 2026-09-12 confirmed the session 4b
   fixes and raised eleven items on sessions 5 to 7; see "Session 7b result" for what was changed and
   what was answered with documentation.
