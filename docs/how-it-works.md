@@ -107,9 +107,12 @@ candidate.
 
 XAF generates view nodes lazily, on first access. Left alone, a broken layout would surface when a
 user first opens the view. The module hooks `XafApplication.SetupComplete` and, for every type with
-a spec, reads `NodeCount` on its default DetailView layout, ListView columns and, with a lookup
-spec, lookup columns. Reading the count generates the nodes, which runs the updaters, which throw.
-A spec for a type without a default view is **XLB004**.
+a spec, reads `NodeCount` on the layout and columns nodes of the views the updaters actually handle,
+looked up by their fixed ids: `{Type}_DetailView`, `{Type}_ListView` and, with a lookup spec,
+`{Type}_LookupListView`. Reading the count generates the nodes, which runs the updaters, which
+throw. Following `IModelClass.DefaultDetailView` instead would be wrong: a model difference can
+repoint it at another view, and the check would then validate a view no spec applies to while
+leaving the real one unchecked. A missing view is **XLB004**.
 
 In the Blazor template the application is built while the ASP.NET host starts, so the exception
 ends the process before Kestrel listens. The E2E gate proves it with the sample's `--break-layout`
@@ -119,17 +122,29 @@ touches views that have specs, and those would be generated on first use anyway.
 ## Exporter and printer
 
 The **Export Layout To Code** action is a `ViewController<ObjectView>` in the Tools category. It is
-active for administrators only, and only with a debugger attached or `EnableExport` set by the
-host from its configuration. It reads the current type's default DetailView, ListView and lookup
-from `Application.Model`, which is the merged model with every layer applied, and prints them.
+active for administrators, and only with a debugger attached or `EnableExport` set by the host from
+its configuration. A host with no security system has no roles to ask, so there the debugger or the
+flag is the only gate. It exports the view it was invoked from and fills the other half from the
+type's default views, all from the merged model with every layer applied, and names the view ids in
+the printed comment.
 
 - **Only values a layer stored are exported,** tested with `ModelNode.HasValue`. XAF computes most
   properties when nothing is stored, and those computed defaults must not turn into builder calls.
 - **Captions are the exception.** `Caption` is localizable, and `HasValue` looks in the current
   language aspect while the generated value sits in the default aspect. The first export dropped
-  the Header group's explicit caption for that reason. The exporter now compares a caption with
-  XAF's own default instead: for a group, the single item's caption or else the group id; for a
-  column, its member's caption.
+  the Header group's explicit caption for that reason. The exporter compares a caption with XAF's
+  own default instead: for a group, the single item's caption or else the group id; for a column,
+  its member's caption. A caption equal to that default is still printed when the group would
+  otherwise lose its header, because the applier shows a caption only for a captioned, collapsible
+  or tab group.
+- **Member names come from `PropertyName`,** not from the node id. The two usually match, but only
+  the property name is a CLR member that a lambda can name.
+- **A customised root group is kept.** The stock root is one plain `Main` group and is unwrapped so
+  its children become the spec's top level. A root group with its own direction, caption or size is
+  a customisation and is exported as an ordinary group instead of being dropped.
+- **What the builder cannot express is skipped,** not printed: a layout item that is not a property
+  editor, and any member bound to a nested path such as `Customer.Name`. Each becomes a comment at
+  the top of the exported file.
 - **Hidden is inferred.** A visible member that is not placed is exported as `.Hide(...)`. A column
   without an index is exported as hidden, except the key; the model does not record whether the
   original builder hid a column or never mentioned it.

@@ -18,7 +18,9 @@ using Microsoft.Playwright;
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
 const string BaseUrl = "http://localhost:5100";
-const string ConnectionString = @"Data Source=(localdb)\mssqllocaldb;Integrated Security=SSPI;Initial Catalog=XafLayoutBuilder.Sample;Encrypt=False";
+// Pooling off: the harness talks to LocalDB right after killing the host, and a pooled connection
+// left over from that moment comes back as a dead named pipe.
+const string ConnectionString = @"Data Source=(localdb)\mssqllocaldb;Integrated Security=SSPI;Initial Catalog=XafLayoutBuilder.Sample;Encrypt=False;Pooling=false";
 
 var repoRoot = FindRepoRoot();
 var blazorProj = Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Blazor.Server");
@@ -202,11 +204,14 @@ try
     await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-09b-exported-roundtrip.cs"), roundTrip);
     await ClosePopup(page);
     var layoutSource = await File.ReadAllTextAsync(Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Module", "BusinessObjects", "Order.Layout.cs"));
-    Assert(Squash(BuilderExpression(roundTrip, "LayoutBuilder<Order>.Create()")) == Squash(BuilderExpression(layoutSource, "LayoutBuilder<Order>.Create()")),
-        "exported DetailView builder equals the one in Order.Layout.cs (modulo whitespace)");
+    Assert(roundTrip.Contains("namespace XafLayoutBuilder.Sample.Module.BusinessObjects;"), "export declares the business object's namespace");
+    Assert(roundTrip.Contains("public partial class Order : ISupportViewLayoutCustomization {"), "export declares the partial class");
+    Assert(roundTrip.Contains("Views: Order_DetailView, Order_ListView, Order_LookupListView."), "export names the views it read");
+    Assert(NormalizeCode(BuilderExpression(roundTrip, "LayoutBuilder<Order>.Create()")) == NormalizeCode(BuilderExpression(layoutSource, "LayoutBuilder<Order>.Create()")),
+        "exported DetailView builder equals the one in Order.Layout.cs (modulo indentation)");
     var sourceColumns = BuilderExpression(layoutSource, "ListViewColumnsBuilder<Order>.Create()");
     var exportedColumns = BuilderExpression(roundTrip, "ListViewColumnsBuilder<Order>.Create()");
-    Assert(Squash(WithoutHideCalls(exportedColumns)) == Squash(WithoutHideCalls(sourceColumns)),
+    Assert(NormalizeCode(WithoutHideCalls(exportedColumns)) == NormalizeCode(WithoutHideCalls(sourceColumns)),
         "exported columns and lookup equal the source apart from Hide calls");
     var exportedHides = HideCalls(exportedColumns);
     Assert(HideCalls(sourceColumns).All(exportedHides.Contains),
@@ -267,8 +272,8 @@ try
     await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-11-exported-Order.Layout.cs"), exported);
     Console.WriteLine("    exported:\n" + string.Join("\n", exported.Split('\n').Select(l => "      " + l.TrimEnd())));
     Assert(exported.Contains("public partial class Order : ISupportViewLayoutCustomization"), "export is the Order partial class");
-    Assert(System.Text.RegularExpressions.Regex.IsMatch(exported, @"\.Group\(""Details""[\s\S]*?\.Item\(x => x\.OrderDate[,)]"),
-        "exported code places OrderDate in the Details group");
+    var detailsBlock = exported[exported.IndexOf(".Group(\"Details\"", StringComparison.Ordinal)..exported.IndexOf(".Tabs(\"Tabs\"", StringComparison.Ordinal)];
+    Assert(detailsBlock.Contains(".Item(x => x.OrderDate)"), "exported code places OrderDate inside the Details group");
     var headerBlock = exported[exported.IndexOf(".Group(\"Header\"", StringComparison.Ordinal)..exported.IndexOf(".Group(\"Details\"", StringComparison.Ordinal)];
     Assert(!headerBlock.Contains("OrderDate"), "exported Header group no longer contains OrderDate");
     Assert(exported.Contains(".TabFor(x => x.Lines, imageName: \"BO_Order_Item\")") && exported.Contains(".Hide(x => x.SyncToken)"),
@@ -405,21 +410,33 @@ static void ResetUserModel(string userId)
     Sql($"DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{userId}'; DELETE FROM ModelDifferences WHERE UserId = '{userId}';");
 }
 
-static int Sql(string sql, params (string Name, string Value)[] parameters)
+static int Sql(string sql, params (string Name, string Value)[] parameters) => Retry(() =>
 {
     using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionString);
     conn.Open();
     using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
     foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value);
     return cmd.ExecuteNonQuery();
-}
+});
 
-static string? SqlScalar(string sql)
+static string? SqlScalar(string sql) => Retry<string?>(() =>
 {
     using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionString);
     conn.Open();
     using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
     return cmd.ExecuteScalar()?.ToString();
+});
+
+// LocalDB drops the odd connection around the host restarts this gate does; one retry covers it.
+static T Retry<T>(Func<T> action)
+{
+    try { return action(); }
+    catch (Microsoft.Data.SqlClient.SqlException ex)
+    {
+        Console.WriteLine("    SQL retry after: " + ex.Message.Split('\n')[0].Trim());
+        Thread.Sleep(2000);
+        return action();
+    }
 }
 
 // XAF Blazor shows a "Loading..." toast while a server callback runs; wait it out so screenshots are clean.
@@ -463,7 +480,8 @@ static string BuilderExpression(string code, string start)
     return code[from..(to + ".Build()".Length)];
 }
 
-static string Squash(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\s+", "");
+static string NormalizeCode(string s) =>
+    string.Join("\n", s.Replace("\r", "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
 static string[] HideCalls(string s) => System.Text.RegularExpressions.Regex.Matches(s, @"\.Hide\(x => x\.\w+\)").Select(m => m.Value).ToArray();
 static string WithoutHideCalls(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\s*\.Hide\(x => x\.\w+\)", "");
 

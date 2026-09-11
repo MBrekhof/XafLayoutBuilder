@@ -152,13 +152,19 @@ specs, and a printer turns specs into the builder C#.
 
 - The popup has no copy button and no option to write the file. A copy button needs Blazor JS
   interop, which the platform-neutral module cannot host. Select all and copy.
-- Exported ListViews list every unshown column as `.Hide(...)`, except the key. The model does
-  not record whether a column was hidden or never mentioned. The result renders the same but is
-  more verbose than hand-written code.
+- Exported ListViews list every unshown column as `.Hide(...)`, except the key. The model does not
+  record whether a column was hidden or never mentioned, so the export is more verbose than
+  hand-written code. One difference is not cosmetic: a hidden column that still carried a sort
+  order loses it, because the applier clears the sort of every column the spec does not list.
+- Columns and layout items bound to a nested path, such as `Customer.Name`, cannot be expressed by
+  the builder. They are skipped and named in the leading comment instead of printed.
 - Sort priority follows column order in the export.
 - A group caption XAF derived earlier can survive a user's change and is then exported as an
   explicit caption. In the sample, Details keeps the caption "Notes" after Order Date moves in.
-- The action is for administrators only, and only with a debugger attached or `EnableExport` set.
+- The view you invoke the action from is the one exported. The other half of the class comes from
+  the type's default views, and the printed comment names the three view ids it read.
+- The action is for administrators, and only with a debugger attached or `EnableExport` set. A host
+  with no security system has no roles to ask, so there every user sees it.
 
 **Engineering caveats:**
 

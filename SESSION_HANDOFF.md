@@ -2,7 +2,7 @@
 
 Updated 2026-09-11 (after session 7). Session plan: `XafLayoutBuilder-START.md` section 9.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 33 unit tests
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 36 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip and the
 startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
 
@@ -17,6 +17,53 @@ startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
 | 5. Registry, interface discovery, startup diagnostics | **done 2026-09-11** |
 | 6. Exporter, printer, popup + E2E 4–6 | **done 2026-09-11** |
 | 7. SKILL.md, README, docs, screenshots | **done 2026-09-11** |
+
+## Session 7b result (Codex final review follow-up, 2026-09-12)
+
+Codex confirmed all four earlier findings closed, and raised eleven new ones. Seven were real
+defects in the new exporter and startup check; all seven are fixed:
+
+- **The export omitted the namespace.** The printed partial class declared a different type from
+  the business class, so pasting it did not compile. `CSharpLayoutPrinter.PrintClass` now takes the
+  namespace and emits a file-scoped `namespace`; the controller passes `type.Namespace`.
+- **The printer could emit invalid C#.** Captions are now escaped for newlines, tabs and control
+  characters, a member whose name is a C# keyword gets the `@` prefix, and an empty group or tab
+  set prints `_ => { }` instead of `g => g`, which is an expression and does not convert to
+  `Action<GroupBuilder<T>>`.
+- **Export could turn a group caption off.** A caption equal to XAF's computed default was dropped,
+  but the applier only shows a caption for a captioned, collapsible or tab group, so a plain group
+  lost its header on the way back. The exporter now prints such a caption unless the group is
+  collapsible or a tab.
+- **Export silently dropped a customised root group.** The sole root group is only unwrapped when it
+  is the stock plain `Main`; anything else is exported as an ordinary group.
+- **The action exported the default views, not the one in front of the user.** It now exports the
+  view it runs on and fills the other half from the defaults, and the printed comment names all
+  three view ids.
+- **Model node ids were printed as member names.** Both halves now read `PropertyName`, and a member
+  bound to a nested path such as `Customer.Name` is skipped with a comment instead of printed as
+  code that would not compile or would throw.
+- **The startup check followed configurable default views.** It now resolves the same fixed
+  `{Type}_...` ids the updaters handle, and a missing lookup view with a lookup spec is XLB004
+  rather than silently skipped.
+
+Two weak assertions in the gate were tightened, which is how the namespace bug would have been
+caught: the round trip now also asserts the namespace, the class header and the view-ids comment,
+code is compared line by line instead of with all whitespace removed (squashing also ignored
+differences inside string literals), and E2E 5 asserts OrderDate inside the Details block rather
+than anywhere after it. Four printer unit tests were added, 36 in total.
+
+Two findings were answered with documentation rather than code, deliberately:
+
+- **A hidden column loses its sort order.** Keeping it would mean either a new builder argument or
+  leaving the stock display-member sort in place, which is what the applier clears on purpose. The
+  README and the skill now say so.
+- **A host without a security system shows the action to every user.** Such an application has no
+  roles to ask, and the debugger or `EnableExport` condition still gates it. Documented in the
+  controller, the README and the skill.
+
+Codex also confirmed clean: the popup's ObjectSpace ownership, the `EnableExport` static for a
+single-host process, `NodeCount` as the forcing mechanism, index ordering, the `TabFor` heuristic
+and invariant number formatting.
 
 ## Session 7 result
 
@@ -48,8 +95,9 @@ startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
 ## Open points
 
 - **No git remote.** Create a private repository under `MBrekhof` when the owner says so.
-- **Sessions 5, 6 and 7 have not had a Codex review.** Sessions 1 to 4 did, and both reviews found
-  real defects, so the remaining sessions are worth one before release.
+- **Codex has now reviewed every session.** The final review of 2026-09-12 confirmed the session 4b
+  fixes and raised eleven items on sessions 5 to 7; see "Session 7b result" for what was changed and
+  what was answered with documentation.
 - **Release step (start document section 11):** copy `skills/xaf-layout-builder/SKILL.md` into
   `xafskills`, and consider the `XafMergerTool` "export as builder C#" option that references
   `XafLayoutBuilder.Core`.
@@ -224,4 +272,6 @@ startup-failure check. Nothing is pushed anywhere; there is no git remote yet.
 - The login form occasionally rejects the first fill ("The user name must not be empty") when the
   Blazor circuit is still connecting; the harness verifies the bound value before submitting and
   the failure has not recurred since.
+- LocalDB can hand back a dead named pipe on the first query after the gate kills the host ("The
+  pipe has been ended"). The harness turns connection pooling off and retries a failed query once.
 - Everything else XAF-specific is in `docs/api-notes.md` with file and line references.

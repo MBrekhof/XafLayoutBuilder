@@ -2,6 +2,11 @@ using XafLayoutBuilder.Core;
 
 namespace XafLayoutBuilder.Tests;
 
+public class KeywordHolder {
+    public string @event { get; set; } = "";
+    public string Normal { get; set; } = "";
+}
+
 public class CSharpLayoutPrinterTests {
     // Exactly the section 4 text, so builder -> spec -> print is a fixed point.
     const string Section4DetailCode = """
@@ -45,13 +50,21 @@ public class CSharpLayoutPrinterTests {
         Assert.Equal(Norm(Section4ColumnsCode), Norm(CSharpLayoutPrinter.PrintColumns(ListViewColumnsBuilderTests.Section4Columns(), "TestOrder")));
 
     [Fact]
-    public void PrintClass_EmitsBothMembers_AndNotesAsComments() {
-        var code = CSharpLayoutPrinter.PrintClass("TestOrder", LayoutBuilderTests.Section4Detail(), null, ["skipped: ActionContainer \"Save\""]);
+    public void PrintClass_EmitsNamespace_BothMembers_AndNotesAsComments() {
+        var code = Norm(CSharpLayoutPrinter.PrintClass("Sample.BusinessObjects", "TestOrder",
+            LayoutBuilderTests.Section4Detail(), null, ["skipped: ActionContainer \"Save\""]));
+        Assert.Contains("using XafLayoutBuilder.Core;", code);
+        // Without the namespace the printed partial declares a different type and the member lambdas do not compile.
+        Assert.Contains("namespace Sample.BusinessObjects;", code);
         Assert.Contains("// skipped: ActionContainer \"Save\"", code);
         Assert.Contains("public partial class TestOrder : ISupportViewLayoutCustomization {", code);
-        Assert.Contains("    public static DetailLayoutSpec? BuildDetailViewLayout() =>\n        LayoutBuilder<TestOrder>.Create()", code.Replace("\r\n", "\n"));
-        Assert.Contains("    public static ListColumnsSpec? BuildListViewColumns() =>\n        null;", code.Replace("\r\n", "\n"));
+        Assert.Contains("    public static DetailLayoutSpec? BuildDetailViewLayout() =>\n        LayoutBuilder<TestOrder>.Create()", code);
+        Assert.Contains("    public static ListColumnsSpec? BuildListViewColumns() =>\n        null;", code);
     }
+
+    [Fact]
+    public void PrintClass_WithoutNamespace_EmitsNoNamespaceLine() =>
+        Assert.DoesNotContain("namespace", Norm(CSharpLayoutPrinter.PrintClass(null, "TestOrder", null, null)));
 
     [Fact]
     public void NonTabForTab_RootItem_GroupOptions_AndCaptionColumn_Print() {
@@ -79,9 +92,36 @@ public class CSharpLayoutPrinterTests {
     }
 
     [Fact]
-    public void PrintedCode_ParsesBackThroughTheBuilder_ForTheSection4Example() {
-        // No C# parser here; the equivalence is: spec -> print -> (this file's literal) == what the builder in
-        // LayoutBuilderTests produced from that literal. Both directions are asserted above.
-        Assert.Equal(LayoutSpecJson.Serialize(LayoutBuilderTests.Section4Detail()), LayoutSpecJson.Serialize(LayoutBuilderTests.Section4Detail()));
+    public void ControlCharactersInCaptions_AreEscaped() {
+        var spec = LayoutBuilder<TestOrder>.Create()
+            .Group("G", g => g.Caption("two\nlines\tand a \\ and \"quotes\"").Item(x => x.Number))
+            .Build();
+        var code = CSharpLayoutPrinter.PrintDetail(spec, "TestOrder");
+        Assert.Contains("""".Caption("two\nlines\tand a \\ and \"quotes\"")"""", code);
+        // The whole caption stays on its own line: a raw newline would break the string literal.
+        var captionLine = code.Split('\n').First(l => l.Contains(".Caption(")).Trim();
+        Assert.Equal(""".Caption("two\nlines\tand a \\ and \"quotes\"")""", captionLine);
+    }
+
+    [Fact]
+    public void MemberNamedLikeAKeyword_GetsTheAtPrefix() {
+        var spec = LayoutBuilder<KeywordHolder>.Create()
+            .Group("G", g => g.Item(x => x.@event).Item(x => x.Normal))
+            .Build();
+        var code = CSharpLayoutPrinter.PrintDetail(spec, "KeywordHolder");
+        Assert.Contains(".Item(x => x.@event)", code);
+        Assert.Contains(".Item(x => x.Normal)", code);
+    }
+
+    [Fact]
+    public void EmptyGroupAndEmptyTabs_PrintABlockLambda() {
+        // `g => g` is an expression, not a statement, so it does not convert to Action<GroupBuilder<T>>.
+        var spec = LayoutBuilder<TestOrder>.Create()
+            .Group("Empty", _ => { })
+            .Tabs("NoTabs", _ => { })
+            .Build();
+        var code = CSharpLayoutPrinter.PrintDetail(spec, "TestOrder");
+        Assert.Contains(".Group(\"Empty\", _ => { })", code);
+        Assert.Contains(".Tabs(\"NoTabs\", _ => { })", code);
     }
 }

@@ -172,6 +172,12 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 - The Blazor layout editor (`Layout/LayoutEditor/LayoutEditor.razor`) moves elements only by
   drag-and-drop; its context menu offers hide/show text, rename, best fit, collapsible toggles and
   reset. The E2E therefore writes the user-layer XAFML directly.
+- `IModelMemberViewItem.PropertyName` is the bound member; the node `Id` is free text and only
+  usually the same. Anything printed as a member lambda must come from `PropertyName`
+  (`CommonInterfaces.cs` 665).
+- `IModelViews` is an `IModelList<IModelView>`, so `application.Model.Views[id]` resolves a view by
+  id. The startup check uses that instead of `IModelClass.DefaultDetailView` and friends
+  (`CommonInterfaces.cs` 250-258), which a model difference can repoint to another view.
 
 ## Still open
 

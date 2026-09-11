@@ -87,8 +87,11 @@ Registration throws if a spec names a member the type does not have.
 - `ListViewColumnsBuilder<T>.Create()`, then `.Column(x => x.M, width: null,
   sort: ColumnSortOrder.None, caption: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
 - Column order is call order. Sorted columns get sort priority in call order.
-- `Hide` keeps the column in the column chooser. Unmentioned members behave the same, so nothing
-  is lost. A column XAF sorted by default is unsorted unless the spec sorts it.
+- `Hide` keeps the column in the column chooser, and leaving a member out does the same, as long as
+  XAF generated a column for it. Lookup views generate almost none, so in a `.Lookup(...)` list a
+  member you neither list nor hide has no column at all.
+- A column XAF sorted by default is unsorted unless the spec sorts it, and a hidden column does not
+  keep a sort order.
 - `.Lookup(...)` describes `{Type}_LookupListView`. Without it XAF's default lookup stays.
 
 ## Rules that throw at Build()
@@ -121,14 +124,17 @@ stop the application at startup. In XAF Blazor the host exits before it listens;
 The running app is the visual designer. On any DetailView or ListView the Tools tab shows
 **Export Layout To Code** for administrators, when a debugger is attached or the host sets
 `XafLayoutBuilderModule.EnableExport` (the sample reads `XafLayoutBuilder:EnableExport` from
-appsettings.Development.json). It prints the type's current DetailView, ListView and lookup, with
-every layer applied, as the `{Type}.Layout.cs` class above. It writes nothing: copy it from the
-popup over the file.
+appsettings.Development.json; a host without a security system shows it to everyone). It prints the
+type's DetailView, ListView and lookup with every layer applied, as the `{Type}.Layout.cs` class
+above, namespace included. The view you run it from is the one exported, and the comment at the top
+names the view ids it read. It writes nothing: copy it from the popup over the file.
 
 - Prints groups, tabs, items, captions that differ from XAF's default, flow, collapsible, explicit
   relative sizes and images. Layout items that are not property editors are listed in a comment.
 - Lists every unplaced visible member as `.Hide(...)`, and every unshown column except the key.
   The model cannot tell a hidden column from an unmentioned one, so the export is more explicit
-  than hand-written code; the result renders the same.
+  than hand-written code. A hidden column's sort order is not carried over.
+- Skips what the builder cannot express, such as a column bound to a nested path, and names it in
+  the leading comment instead of printing code that would not compile or would throw.
 - Sort priority follows column order, so a spec whose sort order differs from its column order
   does not round-trip exactly.
