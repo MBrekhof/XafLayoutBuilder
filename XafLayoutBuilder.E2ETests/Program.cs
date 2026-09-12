@@ -21,6 +21,8 @@ using Microsoft.Playwright;
 //            user model after the next save, while the same difference's caption on a builder group applies and is kept
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
+//   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
+//            and the export prints it as .Column(x => x.Customer.City)
 //   Session 5: the host started with --break-layout exits at startup reporting XLB001, and for Order both a throwing
 //              detail factory and XLB003 (registered factories are checked at startup, each view on its own)
 //   TEST-001:  adding --break-factory (a registered columns factory throwing a non-layout exception), fail-fast
@@ -518,6 +520,31 @@ try
     await page.Keyboard.PressAsync("Escape");
     KillApp(ref app);
     ResetUserModel(adminId);
+
+    Step("NEST-001: a column over a reference's member (Customer.City) shows the customer's data and exports as a chained lambda");
+    // --nested-column registers Order's columns plus Customer.City, the dotted path XAF's own generator gives a column over
+    // a reference's member. The updater adds that column the way the generator does, and the export has to print it.
+    lock (appOutput) appOutput.Clear();
+    app = StartApp(blazorProj, appOutput, "--nested-column");
+    await WaitForHttpOk(app, appOutput);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-20-nested-column.png") });
+    var nestedHeaders = (await GridHeaders(page)).ToList();
+    Console.WriteLine("    headers: " + string.Join(" | ", nestedHeaders));
+    Assert(nestedHeaders.Count == 4 && nestedHeaders[3].Contains("City"),
+        $"the Customer.City column is the fourth column (got {string.Join(",", nestedHeaders)})");
+    var nestedRows = await page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<string[]>(
+        "g => [...g.querySelectorAll('tr[role=row]')].map(r => [...r.querySelectorAll('td')].map(c => c.innerText.trim()).filter(t => t).join('|')).filter(t => t)");
+    Console.WriteLine("    rows: " + string.Join(" / ", nestedRows));
+    Assert(nestedRows.Any(r => r.StartsWith("ORD-001|") && r.EndsWith("|Leeuwarden")), "ORD-001's row shows Acme Corp's city, Leeuwarden");
+    Assert(nestedRows.Any(r => r.StartsWith("ORD-003|") && r.EndsWith("|Groningen")), "ORD-003's row shows Globex's city, Groningen");
+    var nestedExport = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-20-nested-column-export.png"));
+    await ClosePopup(page);
+    Console.WriteLine("    exported nested column: " + (nestedExport.Split('\n').FirstOrDefault(l => l.Contains("Customer.City"))?.Trim() ?? "(none)"));
+    Assert(nestedExport.Contains(".Column(x => x.Customer.City"), "the export prints the nested column as .Column(x => x.Customer.City...)");
+    Assert(!nestedExport.Contains("nested path"), "the export skips nothing for the nested column");
+    KillApp(ref app);
 
     Step("Session 5: a broken layout is reported at startup (host started with --break-layout)");
     KillApp(ref app);

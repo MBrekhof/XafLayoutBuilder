@@ -40,6 +40,10 @@ public class Program : IDesignTimeApplicationFactory {
             if(ContainsArgument(args, "extra-column")) {
                 XafLayoutBuilder.Sample.Module.GateFixtures.RegisterExtraOrderColumn();
             }
+            // E2E fixture: Order's columns plus Customer.City, a column over a reference's member (NEST-001).
+            if(ContainsArgument(args, "nested-column")) {
+                XafLayoutBuilder.Sample.Module.GateFixtures.RegisterNestedOrderColumn();
+            }
             // E2E fixture: an administrator's frozen Order_ListView column set, as an application-level difference (FREEZE-001).
             if(ContainsArgument(args, "freeze-order-columns")) {
                 SampleBlazorModule.FreezeOrderColumnsFixture = true;

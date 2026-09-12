@@ -186,7 +186,8 @@ specs, and a printer turns specs into the builder C#.
 
 - Only the default views are handled: `{Type}_DetailView`, `{Type}_ListView` and
   `{Type}_LookupListView`. View variants, nested ListViews and custom views are left to XAF.
-- Member lambdas must be simple member access. `x => x.Customer.Name` is rejected.
+- Member lambdas must be simple member access, except that a column may follow references:
+  `Column(x => x.Customer.City)`. A detail item stays simple; `Item(x => x.Customer.Name)` is rejected.
 - Builder changes appear after a restart. With XAF's model cache enabled, the cache must be
   invalidated as well; the sample does not enable it.
 - Administrator and user differences override the builder, by design. A user who customised a
@@ -209,8 +210,10 @@ specs, and a printer turns specs into the builder C#.
   record whether a column was hidden or never mentioned, so the export is more verbose than
   hand-written code. One difference is not cosmetic: a hidden column that still carried a sort
   order loses it, because the applier clears the sort of every column the spec does not list.
-- Columns and layout items bound to a nested path, such as `Customer.Name`, cannot be expressed by
-  the builder. They are skipped and named in the leading comment instead of printed.
+- Layout items bound to a nested path, such as `Customer.Name`, and columns whose path casts to a
+  descendant class (`<Descendant>Member`), cannot be expressed by the builder. They are skipped and
+  named in the leading comment instead of printed. A column over a reference's member is exported
+  as `.Column(x => x.Customer.City)`.
 - A class that opted into `.Unplaced(...)` exports that call again rather than the members the
   catch-all happened to hold, so adopting the exported file does not quietly restore the strict
   rule. A catch-all group holding anything other than plain editors is reported in the comment.

@@ -60,13 +60,13 @@ public static class CSharpLayoutPrinter {
 
     static void PrintColumnCalls(StringBuilder sb, ListColumnsSpec spec, int depth) {
         foreach (var c in spec.Columns) {
-            sb.AppendLine().Append(Pad(depth)).Append(".Column(x => x.").Append(Ident(c.Member));
+            sb.AppendLine().Append(Pad(depth)).Append(".Column(x => x.").Append(PathIdent(c.Member));
             if (c.Width is { } w) sb.Append(", width: ").Append(w);
             if (c.SortOrder != ColumnSortOrder.None) sb.Append(", sort: ColumnSortOrder.").Append(c.SortOrder);
             if (c.Caption is not null) sb.Append(", caption: ").Append(Quote(c.Caption));
             sb.Append(')');
         }
-        foreach (var hidden in spec.HiddenMembers) sb.AppendLine().Append(Pad(depth)).Append(".Hide(x => x.").Append(Ident(hidden)).Append(')');
+        foreach (var hidden in spec.HiddenMembers) sb.AppendLine().Append(Pad(depth)).Append(".Hide(x => x.").Append(PathIdent(hidden)).Append(')');
     }
 
     static void PrintNode(StringBuilder sb, LayoutNodeSpec node, int depth) {
@@ -143,6 +143,9 @@ public static class CSharpLayoutPrinter {
 
     /// <summary>A member or type whose name is a C# keyword needs the @ prefix to compile.</summary>
     static string Ident(string name) => Keywords.Contains(name) ? "@" + name : name;
+
+    // A column over a reference's member ("Customer.City") prints as the chained lambda, each segment escaped on its own.
+    static string PathIdent(string path) => string.Join(".", path.Split('.').Select(Ident));
 
     static readonly HashSet<string> Keywords = new(StringComparer.Ordinal) {
         "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const",

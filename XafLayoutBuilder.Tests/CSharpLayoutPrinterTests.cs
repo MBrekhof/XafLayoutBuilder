@@ -113,6 +113,18 @@ public class CSharpLayoutPrinterTests {
         Assert.Contains(".Item(x => x.Normal)", code);
     }
 
+    // NEST-001: a column over a reference's member prints as the chained lambda, each segment escaped on its own.
+    [Fact]
+    public void NestedColumn_PrintsAChainedLambda() {
+        var built = ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Customer!.Name).Hide(x => x.Customer!.City).Build();
+        var code = CSharpLayoutPrinter.PrintColumns(built, "TestOrder");
+        Assert.Contains(".Column(x => x.Customer.Name)", code);
+        Assert.Contains(".Hide(x => x.Customer.City)", code);
+
+        var raw = new ListColumnsSpec(typeof(TestOrder).FullName!, [new ColumnSpec("Customer.event")], []);
+        Assert.Contains(".Column(x => x.Customer.@event)", CSharpLayoutPrinter.PrintColumns(raw, "TestOrder"));
+    }
+
     [Fact]
     public void EmptyGroupAndEmptyTabs_PrintABlockLambda() {
         // `g => g` is an expression, not a statement, so it does not convert to Action<GroupBuilder<T>>.

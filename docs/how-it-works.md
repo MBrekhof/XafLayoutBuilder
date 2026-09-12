@@ -168,8 +168,9 @@ the printed comment.
   its children become the spec's top level. A root group with its own direction, caption or size is
   a customisation and is exported as an ordinary group instead of being dropped.
 - **What the builder cannot express is skipped,** not printed: a layout item that is not a property
-  editor, and any member bound to a nested path such as `Customer.Name`. Each becomes a comment at
-  the top of the exported file.
+  editor, a layout item bound to a nested path such as `Customer.Name`, and a column whose path casts
+  to a descendant class (`<Descendant>Member`). Each becomes a comment at the top of the exported
+  file. A column over a reference's member is printed as a chained lambda, `x => x.Customer.City`.
 - **Hidden is inferred.** A visible member that is not placed is exported as `.Hide(...)`. A column
   without an index is exported as hidden, except the key; the model does not record whether the
   original builder hid a column or never mentioned it.

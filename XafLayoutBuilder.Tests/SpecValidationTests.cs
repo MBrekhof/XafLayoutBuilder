@@ -74,6 +74,42 @@ public class SpecValidationTests {
                 new ListColumnsSpec(Order, [new ColumnSpec("Customer"), new ColumnSpec("Customer")], [])))).Message);
     }
 
+    // NEST-001: nested paths are for columns. A detail item's id is its member name, and the builder keeps it simple.
+    [Fact]
+    public void RawDetailSpec_WithANestedMember_Throws() {
+        Assert.Contains("'Customer.Name' is a nested path", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(Detail([Group("A", Item("Customer.Name"))]))).Message);
+        Assert.Contains("'Customer.Name' is a nested path", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(Detail([Group("A", Item("Number"))], hidden: ["Customer.Name"]))).Message);
+    }
+
+    [Theory]
+    [InlineData("Customer..Name")]
+    [InlineData(".Name")]
+    [InlineData("Customer.")]
+    public void RawColumns_EmptyPathSegment_Throws(string member) {
+        Assert.Contains("empty segment", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [new ColumnSpec(member)], []))).Message);
+        Assert.Contains("empty segment", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [], [member]))).Message);
+    }
+
+    sealed class NestedRegistered {
+        public Reference? Ref { get; set; }
+
+        public sealed class Reference {
+            public string? City { get; set; }
+        }
+    }
+
+    [Fact]
+    public void EnsureMembersExist_FollowsNestedPaths() {
+        LayoutSpecChecks.EnsureMembersExist(typeof(NestedRegistered), ["Ref", "Ref.City"]);
+        var ex = Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.EnsureMembersExist(typeof(NestedRegistered), ["Ref.Nope", "Nope.City"]));
+        Assert.Contains("Ref.Nope, Nope.City", ex.Message);
+    }
+
     [Fact]
     public void BuilderOutput_AndTheSection4Example_AreValid() {
         LayoutSpecChecks.Validate(LayoutBuilderTests.Section4Detail());

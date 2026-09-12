@@ -108,24 +108,38 @@ public sealed record ListColumnsSpec(
 }
 
 public static class LayoutSpecChecks {
-    /// <summary>Throws when a spec names a property or field that <paramref name="type"/> does not have. Used by the registry.</summary>
+    /// <summary>
+    /// Throws when a spec names a property or field that <paramref name="type"/> does not have. A dotted column path
+    /// ("Customer.City") is followed segment by segment through each member's type. Used by the registry.
+    /// </summary>
     public static void EnsureMembersExist(Type type, IEnumerable<string> members) {
-        var missing = members.Distinct().Where(m => type.GetProperty(m) is null && type.GetField(m) is null).ToList();
+        var missing = members.Distinct().Where(m => !Resolves(type, m)).ToList();
         if (missing.Count > 0)
             throw new LayoutSpecException($"{type.Name} has no member(s) {string.Join(", ", missing)} named in its layout spec.");
+
+        static bool Resolves(Type type, string path) {
+            Type? current = type;
+            foreach (var segment in path.Split('.')) {
+                if (current is null) return false;
+                current = current.GetProperty(segment)?.PropertyType ?? current.GetField(segment)?.FieldType;
+            }
+            return current is not null;
+        }
     }
 
     /// <summary>
     /// The structural rules, for a spec from any source: a builder (Build() calls this), a record constructed by hand or
     /// reshaped with <c>with</c>, or JSON. Throws <see cref="LayoutSpecException"/> on a blank id or member name, a
     /// member placed twice, a member both placed and hidden, a group id used twice in the view, two siblings sharing an
-    /// id (XAF requires unique ids among siblings; an item's id is its member name), and a catch-all group whose id is
-    /// already taken at the root. Parent/child reuse is fine, which is exactly what TabFor produces: group "Lines"
-    /// holding item "Lines".
+    /// id (XAF requires unique ids among siblings; an item's id is its member name), a catch-all group whose id is
+    /// already taken at the root, and a placed or hidden member with a nested path (those are for columns).
+    /// Parent/child reuse is fine, which is exactly what TabFor produces: group "Lines" holding item "Lines".
     /// </summary>
     public static void Validate(DetailLayoutSpec spec) {
         var type = ShortName(spec.TypeName);
         if (spec.HiddenMembers.Any(string.IsNullOrWhiteSpace)) throw new LayoutSpecException($"{type}: a hidden member has no name.");
+        if (spec.Members().FirstOrDefault(m => m?.Contains('.') == true) is { } nested)
+            throw new LayoutSpecException($"{type}: '{nested}' is a nested path. Nested paths are for columns; a detail item names a member of {type} itself.");
         var hidden = spec.HiddenMembers.ToHashSet(StringComparer.Ordinal);
         var groupIds = new HashSet<string>(StringComparer.Ordinal);
         var members = new HashSet<string>(StringComparer.Ordinal);
@@ -188,6 +202,9 @@ public static class LayoutSpecChecks {
         void Check(ListColumnsSpec s) {
             if (s.Columns.Any(c => string.IsNullOrWhiteSpace(c?.Member)) || s.HiddenMembers.Any(string.IsNullOrWhiteSpace))
                 throw new LayoutSpecException($"{type}: a column has no member name.");
+            // A column may follow references ("Customer.City"); every segment of that path needs a name.
+            if (s.Columns.Select(c => c.Member).Concat(s.HiddenMembers).FirstOrDefault(m => m.Split('.').Any(string.IsNullOrWhiteSpace)) is { } broken)
+                throw new LayoutSpecException($"{type}: column '{broken}' has an empty segment in its path.");
             var hidden = s.HiddenMembers.ToHashSet(StringComparer.Ordinal);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var c in s.Columns) {

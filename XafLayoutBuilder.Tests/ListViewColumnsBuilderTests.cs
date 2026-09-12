@@ -63,4 +63,24 @@ public class ListViewColumnsBuilderTests {
         Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create()
             .Lookup(l => l.Column(x => x.Number).Column(x => x.Number)).Build());
     }
+
+    // NEST-001: a column may follow a reference, named the way XAF's own generator names such a column ("Customer.City").
+    [Fact]
+    public void NestedColumnHideAndLookup_BuildDottedPaths() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.Customer!.Name, caption: "Customer name")
+            .Hide(x => x.Customer!.City)
+            .Lookup(l => l.Column(x => x.Customer!.Name))
+            .Build();
+
+        Assert.Equal("Customer.Name", Assert.Single(spec.Columns).Member);
+        Assert.Equal(["Customer.City"], spec.HiddenMembers);
+        Assert.Equal("Customer.Name", Assert.Single(spec.Lookup!.Columns).Member);
+    }
+
+    [Fact]
+    public void NestedPathThroughAMethodCall_IsRejected() {
+        var ex = Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Customer!.Name.Trim()));
+        Assert.Contains("not a member access", ex.Message);
+    }
 }

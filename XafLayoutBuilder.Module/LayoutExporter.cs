@@ -148,7 +148,9 @@ public static class LayoutExporter {
         string? Simple(IModelColumn column) {
             var name = column.PropertyName;
             if (string.IsNullOrEmpty(name)) { skipped.Add($"skipped: column \"{column.Id}\" has no property name"); return null; }
-            if (name.Contains('.')) { skipped.Add($"skipped: column \"{column.Id}\" uses the nested path \"{name}\", which the builder cannot express"); return null; }
+            // A column over a reference's member ("Customer.City") prints as a chained lambda (NEST-001). A path that casts
+            // to a descendant class ("<Descendant>Member", ModelClassLogic.FindComplexMember) has no lambda form.
+            if (name.Contains('<')) { skipped.Add($"skipped: column \"{column.Id}\" uses the cast path \"{name}\", which the builder cannot express"); return null; }
             return name;
         }
     }

@@ -99,7 +99,10 @@ malformed JSON or a half whose `typeName` is another type is a layout error like
   for one class, `.Unplaced(UnplacedMembers.AppendToGroup("Other"))` puts everything the layout does
   not mention into a group with that id at the end of the form. The strict default is deliberate:
   it is what stops a new property from disappearing unnoticed.
-- Member lambdas are simple member access: `x => x.Customer`. `x => x.Customer.Name` throws.
+- Member lambdas are simple member access: `x => x.Customer`. A column may follow references:
+  `Column(x => x.Customer.City)` and `Hide(x => x.Customer.City)` store `Customer.City`, the path XAF's
+  own generator uses for such a column, and every segment must exist on its type. Detail items stay
+  simple: `Item(x => x.Customer.Name)` throws, and so does a raw detail spec naming a nested path.
 - Derived classes keep XAF's default layout unless they declare their own. A base class's spec is
   not inherited.
 
@@ -187,8 +190,10 @@ buttons are not in the popup itself.
 - Lists every unplaced visible member as `.Hide(...)`, and every unshown column except the key.
   The model cannot tell a hidden column from an unmentioned one, so the export is more explicit
   than hand-written code. A hidden column's sort order is not carried over.
-- Skips what the builder cannot express, such as a column bound to a nested path, and names it in
-  the leading comment instead of printing code that would not compile or would throw.
+- Skips what the builder cannot express, such as a layout item bound to a nested path or a column
+  path that casts to a descendant class, and names it in the leading comment instead of printing
+  code that would not compile or would throw. A column over a reference's member is printed as
+  `.Column(x => x.Customer.City)`.
 - Prints `.Unplaced(...)` again for a class that opted in, instead of the members its catch-all
   group happens to hold at that moment, so the exported file keeps behaving the same way.
 - Sort priority follows column order, so a spec whose sort order differs from its column order

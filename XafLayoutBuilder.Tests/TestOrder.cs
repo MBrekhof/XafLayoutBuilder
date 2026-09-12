@@ -13,4 +13,5 @@ public class TestOrder {
 
 public class TestCustomer {
     public string Name { get; set; } = "";
+    public string? City { get; set; }
 }

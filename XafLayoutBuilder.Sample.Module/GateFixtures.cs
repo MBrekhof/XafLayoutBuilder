@@ -16,4 +16,15 @@ public static class GateFixtures {
             columns: () => Order.BuildListViewColumns() is { } columns
                 ? columns with { Columns = [.. columns.Columns, new ColumnSpec(nameof(Order.Notes))] }
                 : null);
+
+    /// <summary>
+    /// --nested-column: Order's own columns plus the customer's city, a column over a reference's member (NEST-001), named
+    /// with the dotted path XAF's own generator gives such a column. The DetailView layout stays the one in Order.Layout.cs.
+    /// </summary>
+    public static void RegisterNestedOrderColumn() =>
+        LayoutRegistry.Register<Order>(
+            detail: Order.BuildDetailViewLayout,
+            columns: () => Order.BuildListViewColumns() is { } columns
+                ? columns with { Columns = [.. columns.Columns, new ColumnSpec($"{nameof(Order.Customer)}.{nameof(Customer.City)}")] }
+                : null);
 }

@@ -13,15 +13,16 @@ public sealed class ListViewColumnsBuilder<T> {
 
     public static ListViewColumnsBuilder<T> Create() => new(isLookup: false);
 
+    /// <summary><paramref name="member"/> may follow references: <c>x => x.Customer.City</c> is the column "Customer.City".</summary>
     public ListViewColumnsBuilder<T> Column(Expression<Func<T, object?>> member, int? width = null,
         ColumnSortOrder sort = ColumnSortOrder.None, string? caption = null) {
-        columns.Add(new ColumnSpec(MemberPath.Of(member), width, sort, caption));
+        columns.Add(new ColumnSpec(MemberPath.ChainOf(member), width, sort, caption));
         return this;
     }
 
-    /// <summary>Not shown by default, but still offered in the column chooser (applier sets Index = -1).</summary>
+    /// <summary>Not shown by default, but still offered in the column chooser (applier sets Index = -1). May follow references too.</summary>
     public ListViewColumnsBuilder<T> Hide(Expression<Func<T, object?>> member) {
-        hidden.Add(MemberPath.Of(member));
+        hidden.Add(MemberPath.ChainOf(member));
         return this;
     }
 
