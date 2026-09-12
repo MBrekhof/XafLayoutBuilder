@@ -49,60 +49,11 @@ public sealed class LayoutBuilder<T> {
         return this;
     }
 
-    /// <summary>
-    /// Validates and freezes. Throws <see cref="LayoutSpecException"/> on: a member placed twice, a member both placed
-    /// and hidden, a group id used twice in the view, and a group and an item with the same id under the same parent
-    /// (XAF requires unique ids among siblings; an item's id is its member name). Parent/child reuse is fine, which is
-    /// exactly what <see cref="TabsBuilder{T}.TabFor"/> produces: group "Lines" holding item "Lines".
-    /// </summary>
+    /// <summary>Freezes and validates with <see cref="LayoutSpecChecks.Validate(DetailLayoutSpec)"/>, which lists the rules.</summary>
     public DetailLayoutSpec Build() {
-        var groupIds = new HashSet<string>(StringComparer.Ordinal);
-        var members = new HashSet<string>(StringComparer.Ordinal);
-        Walk(nodes);
-
-        // The catch-all group is created next to the layout's own top-level nodes, so its id has to be free there:
-        // an item at the root counts too, because XAF only requires ids to be unique among siblings.
-        if (unplaced.GroupId is { } catchAll) {
-            var rootIds = nodes.Select(IdOf).ToHashSet(StringComparer.Ordinal);
-            if (!groupIds.Add(catchAll) || rootIds.Contains(catchAll))
-                throw new LayoutSpecException(
-                    $"{typeof(T).Name}: id '{catchAll}' is already used in this layout; the catch-all group from Unplaced needs an id of its own.");
-        }
-
-        return new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray(), unplaced.GroupId);
-
-        static string IdOf(LayoutNodeSpec node) => node switch {
-            LayoutItemSpec i => i.Member,
-            LayoutGroupSpec g => g.Id,
-            TabbedGroupSpec t => t.Id,
-            _ => "",
-        };
-
-        void Walk(IEnumerable<LayoutNodeSpec> siblings) {
-            var siblingIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var node in siblings) {
-                var id = IdOf(node);
-                switch (node) {
-                    case LayoutItemSpec:
-                        if (!members.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is placed twice.");
-                        if (hidden.Contains(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is both placed and hidden.");
-                        break;
-                    case LayoutGroupSpec g:
-                        if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
-                        Walk(g.Children);
-                        break;
-                    case TabbedGroupSpec t:
-                        if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
-                        Walk(t.Tabs);
-                        break;
-                    default:
-                        continue;
-                }
-                // Same-kind duplicates were caught above, so a repeat here is a group next to an item with the same id.
-                if (!siblingIds.Add(id))
-                    throw new LayoutSpecException($"{typeof(T).Name}: '{id}' names both a group and an item under the same parent; ids must be unique among siblings.");
-            }
-        }
+        var spec = new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray(), unplaced.GroupId);
+        LayoutSpecChecks.Validate(spec);
+        return spec;
     }
 }
 

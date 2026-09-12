@@ -103,6 +103,10 @@ A member placed twice, a member both placed and hidden, a group id used twice in
 and an item with the same id under one parent, a column listed twice, a column both listed and
 hidden, `Lookup` inside `Lookup`, a non-simple member lambda.
 
+The same rules, plus a blank id or member name, hold for a spec that never went through a builder
+(a record constructed by hand, reshaped with `with`, or loaded from JSON): `LayoutRegistry.Register`
+and the module check it before applying it, and `LayoutSpecChecks.Validate(spec)` runs them on demand.
+
 ## Startup diagnostics
 
 The module generates every view that has a spec when the application model is built, so these

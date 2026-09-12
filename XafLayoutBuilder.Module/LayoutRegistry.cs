@@ -15,11 +15,19 @@ public static class LayoutRegistry {
     /// </summary>
     internal static int Version => Volatile.Read(ref version);
 
-    /// <summary>Throws <see cref="LayoutSpecException"/> when a spec names a member <typeparamref name="T"/> does not have,
-    /// so a spec built for one type cannot be registered for an unrelated one by accident.</summary>
+    /// <summary>Throws <see cref="LayoutSpecException"/> when a spec breaks the structural rules
+    /// (<see cref="LayoutSpecChecks.Validate(DetailLayoutSpec)"/>; a hand-built spec never went through Build()) or names a
+    /// member <typeparamref name="T"/> does not have, so a spec built for one type cannot be registered for an unrelated
+    /// one by accident.</summary>
     public static void Register<T>(DetailLayoutSpec? detail, ListColumnsSpec? columns) {
-        if (detail is not null) LayoutSpecChecks.EnsureMembersExist(typeof(T), detail.Members());
-        if (columns is not null) LayoutSpecChecks.EnsureMembersExist(typeof(T), columns.Members());
+        if (detail is not null) {
+            LayoutSpecChecks.Validate(detail);
+            LayoutSpecChecks.EnsureMembersExist(typeof(T), detail.Members());
+        }
+        if (columns is not null) {
+            LayoutSpecChecks.Validate(columns);
+            LayoutSpecChecks.EnsureMembersExist(typeof(T), columns.Members());
+        }
         Entries[typeof(T)] = (detail, columns);
         Interlocked.Increment(ref version);
     }
@@ -47,7 +55,12 @@ internal static class LayoutSpecResolver {
             var columns = (ListColumnsSpec?)Invoke(map, nameof(ISupportViewLayoutCustomization.BuildListViewColumns));
             // A derived class inherits the base class's implementation; only apply a spec to the type it was
             // built for. Hierarchy composition is phase 2 (start document section 2).
-            return (detail?.TypeName == t.FullName ? detail : null, columns?.TypeName == t.FullName ? columns : null);
+            if (detail?.TypeName != t.FullName) detail = null;
+            if (columns?.TypeName != t.FullName) columns = null;
+            // A factory can return a hand-built spec that no Build() has checked.
+            if (detail is not null) LayoutSpecChecks.Validate(detail);
+            if (columns is not null) LayoutSpecChecks.Validate(columns);
+            return (detail, columns);
         });
     }
 

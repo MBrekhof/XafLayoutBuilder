@@ -34,12 +34,10 @@ public sealed class ListViewColumnsBuilder<T> {
         return this;
     }
 
+    /// <summary>Freezes and validates with <see cref="LayoutSpecChecks.Validate(ListColumnsSpec)"/>, which lists the rules.</summary>
     public ListColumnsSpec Build() {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var c in columns) {
-            if (!seen.Add(c.Member)) throw new LayoutSpecException($"{typeof(T).Name}: column '{c.Member}' is listed twice.");
-            if (hidden.Contains(c.Member)) throw new LayoutSpecException($"{typeof(T).Name}: column '{c.Member}' is both listed and hidden.");
-        }
-        return new ListColumnsSpec(typeof(T).FullName!, columns.ToArray(), hidden.ToArray(), lookup);
+        var spec = new ListColumnsSpec(typeof(T).FullName!, columns.ToArray(), hidden.ToArray(), lookup);
+        LayoutSpecChecks.Validate(spec);
+        return spec;
     }
 }
