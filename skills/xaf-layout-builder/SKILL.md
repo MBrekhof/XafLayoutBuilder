@@ -114,6 +114,7 @@ so a rejected spec leaves XAF's generated layout untouched.
 
 The module generates every view that has a spec when the application model is built, so these
 stop the application at startup. In XAF Blazor the host exits before it listens; read the console.
+Every view with a spec is checked, and all broken views are reported together in one exception.
 
 - XLB001: a placed member has no view item, for example `[Browsable(false)]`.
 - XLB002: a visible member is neither placed nor hidden.

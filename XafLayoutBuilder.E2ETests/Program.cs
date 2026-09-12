@@ -16,7 +16,7 @@ using Microsoft.Playwright;
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
 //   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
-//   Session 5: the host started with --break-layout exits at startup with XLB001
+//   Session 5: the host started with --break-layout exits at startup reporting both XLB001 and XLB003
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
@@ -390,18 +390,22 @@ try
     KillApp(ref app);
     lock (appOutput) appOutput.Clear();
     // The XAF Blazor host builds the application (and so the model) while the host starts, so the diagnostic
-    // kills the process before it ever listens. Expect: no HTTP, non-zero exit, XLB001 in the output.
+    // kills the process before it ever listens. The fixture breaks two views independently, and the check must report
+    // both in one run rather than stop at the first. Expect: no HTTP, non-zero exit, XLB001 and XLB003 in the output.
     app = StartApp(blazorProj, appOutput, "--break-layout");
     var exited = app.WaitForExit(90_000);
     if (exited) app.WaitForExit(); // flushes the async stdout/stderr readers
     string log; lock (appOutput) log = appOutput.ToString();
     var line = log.Split('\n').FirstOrDefault(l => l.Contains("XLB001"))?.Trim() ?? "(not in app output)";
+    var columnLine = log.Split('\n').FirstOrDefault(l => l.Contains("XLB003"))?.Trim() ?? "(not in app output)";
     Console.WriteLine("    app output: " + line);
+    Console.WriteLine("    app output: " + columnLine);
     Assert(exited, "host process exits instead of serving");
     Assert(app.ExitCode != 0, $"host exit code is non-zero (got {app.ExitCode})");
     Assert(!await IsServing(), "nothing is serving on :5100 after the failed start");
     Assert(line.Contains("XLB001"), "XLB001 is reported in the host output");
     Assert(line.Contains("Customer_DetailView") && line.Contains("InternalCode"), "the diagnostic names the view id and the member");
+    Assert(columnLine.Contains("Order_ListView") && columnLine.Contains("Lines"), "XLB003 for Order_ListView is reported in the same startup");
 
     Console.WriteLine("\n=== E2E PASSED ===");
 }

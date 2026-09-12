@@ -35,16 +35,37 @@ public static class LayoutStartupCheck {
         lock (Gate) Completed.Clear();
     }
 
+    // Every view is attempted and the failures are reported together, so one broken layout cannot hide the next one
+    // behind another application start. One attempt per view, not per class: a broken DetailView must not keep the
+    // same class's ListView and lookup from being checked.
     static void Check(XafApplication application) {
         var views = application.Model.Views;
+        var failures = new List<string>();
         foreach (var modelClass in application.Model.BOModel) {
             if (modelClass.TypeInfo?.Type is not { } type) continue;
-            if (LayoutSpecResolver.Detail(type) is not null)
-                Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout);
-            if (LayoutSpecResolver.Columns(type) is { } columns) {
-                Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns);
+            DetailLayoutSpec? detail = null;
+            ListColumnsSpec? columns = null;
+            if (!Attempt(() => { detail = LayoutSpecResolver.Detail(type); columns = LayoutSpecResolver.Columns(type); })) continue;
+            if (detail is not null)
+                Attempt(() => Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout));
+            if (columns is not null) {
+                Attempt(() => Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns));
                 if (columns.Lookup is not null)
-                    Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
+                    Attempt(() => Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns));
+            }
+        }
+        if (failures.Count == 1) throw new LayoutSpecException(failures[0]);
+        if (failures.Count > 1)
+            throw new LayoutSpecException($"{failures.Count} layout problems:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
+
+        bool Attempt(Action check) {
+            try {
+                check();
+                return true;
+            }
+            catch (LayoutSpecException ex) {
+                failures.Add(ex.Message);
+                return false;
             }
         }
     }
