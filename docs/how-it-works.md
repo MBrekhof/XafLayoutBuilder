@@ -239,12 +239,17 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 
 ## Testing
 
-- **Unit tests** cover Core: every builder rule, immutability through every construction path,
-  JSON round trips and the printer. The updaters and the exporter need a live Application Model, so
-  they are tested only through the E2E gate.
+- **Unit tests** cover Core (every builder rule, the same rules on hand-built specs,
+  `CheckAgainstView`, immutability through every construction path, JSON round trips and the
+  printer) and the Module's resolver and registry (unwrapped factory exceptions, independent detail
+  and columns resolution, deferred registration). The model changes themselves and the exporter need
+  a live Application Model, so they are tested only through the E2E gate.
 - **The E2E gate** is a console app with C# Playwright. It builds and starts the sample on port
   5100, refuses to run if something already serves there, and walks E2E 1 to 6 from the start
-  document plus the round-trip and startup checks. The file header lists every assertion.
+  document plus the round-trip and startup checks. The `--break-layout` fixture runs twice: with
+  fail-fast on, every failure must be reported in one startup; with it off, the host must serve
+  XAF's own layout, log every failure, and show none of the canary captions a partially applied
+  spec would leave behind. The file header lists every assertion.
 
 ## Decisions and where they came from
 
@@ -258,3 +263,13 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 - E2E 4 writes user XAFML instead of driving the drag-and-drop editor: session 6, for effort.
 - No copy button in the export popup: session 6, platform neutrality of the module.
 - No `ModelNodesGenerator` subclasses were needed, so `BACKBURNER.md` does not exist.
+- Check before changing the model: findings from putting the POC into WLNCentral (2026-09-12),
+  because XAF marks a node generated even when an updater throws.
+- `FailFastOnLayoutErrors` defaults to off, any exception degrades: the owner, 2026-09-12, after the
+  same findings showed a startup failure takes a whole production host down.
+- Registration defers every check to resolution, with a factory overload: the owner's choice after
+  the final Codex adversarial review (2026-09-12) found that `Register` threw outside the fail-fast
+  policy.
+- Canary captions in the broken-layout fixture: the same review showed the gate accepted a partially
+  applied layout; proven by running the gate against the old order.
+- BPG references the packages rather than re-implementing the technique: the owner, 2026-09-13.

@@ -8,6 +8,28 @@ pass, and the E2E gate exits 0 with every assertion from section 8 plus the roun
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
 
+## BPG references XafLayoutBuilder (decided 2026-09-13)
+
+XafLayoutBuilder stays the proof of concept for the fluent technique. BPG (the XAF app generator,
+C:\Projects\BPG, skeleton C:\Projects\BPGDemo, generated app e.g. C:\Projects\driver) will
+**reference** it rather than re-implement it: one copy of the technique, because WLNCentral's vendored
+copy drifted and its fixes had to come back by hand. BPG also becomes a source of realistic layout
+cases for this repo.
+
+Cards, with board dependencies in this order:
+
+- This board: **PKG-001** (#1655) publish Core, Module and Blazor as NuGet packages with DevExpress
+  pinned to 26.1.4 (the repo uses `26.1.*`; BPGDemo pins 26.1.4). The feed is an open owner decision:
+  private GitHub Packages recommended, nuget.org only after the "Xaf" naming ticket (SEC-001).
+  **CASE-001** (#1656) the intake route for cases found in BPG-generated apps.
+- bpg board: **LAYOUT-001** (#1657) skeleton references the packages → **LAYOUT-002** (#1658)
+  generator emits `{Entity}.Layout.cs` through Core, replacing `{Entity}Views.cs` (which sets
+  `IModelColumn.Index` directly) → **LAYOUT-003** (#1659) structured layout in the spec replacing
+  `detailViewLayoutHint` and **LAYOUT-004** (#1660) pipeline gate with fail-fast on →
+  **LAYOUT-005** (#1661, Backlog) running-app layout back into the spec.
+- BPG still file-syncs TODO.md: a session in the BPG repo must cite the LAYOUT cards there. Nothing
+  in BPG, BPGDemo or Driver was changed from this repo.
+
 ## Final Codex review follow-up (2026-09-12)
 
 A final Codex adversarial review of the whole findings round (cc42981..ed6637a) returned

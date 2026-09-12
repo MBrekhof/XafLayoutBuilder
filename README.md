@@ -119,7 +119,9 @@ catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
    `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
    In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard and download actions.
 3. Add a partial `{Type}.Layout.cs` implementing `ISupportViewLayoutCustomization`, or call
-   `LayoutRegistry.Register<T>(detail, columns)` for types you do not own.
+   `LayoutRegistry.Register<T>(detail, columns)` for types you do not own. Registration checks
+   nothing: every rule is applied when the view is built, under `FailFastOnLayoutErrors`. Pass
+   factories (`Register<T>(() => ..., () => ...)`) when building the spec could throw.
 4. Optionally set `XafLayoutBuilderModule.EnableExport` from your configuration, so administrators
    see the export action without a debugger attached. Never from an environment variable.
 5. Set `XafLayoutBuilderModule.FailFastOnLayoutErrors` from your configuration: on in development
@@ -203,9 +205,10 @@ specs, and a printer turns specs into the builder C#.
 - The column updater writes XAF's internal `GeneratedIndex` value by name, so that administrators'
   frozen column sets keep working. A rename in a future DevExpress release would show up as a wrong
   column order in E2E 2. The frozen-columns behaviour itself is reasoned from source, not tested.
-- The updaters and the exporter need a live Application Model and are tested only through the E2E
-  gate. The start document asked for an exporter unit test; the round trip is asserted in the gate
-  instead (E2E 5a).
+- The updaters' checks (XLB001, XLB002, the structural rules) and the spec resolver are unit tested;
+  the model changes themselves and the exporter need a live Application Model and are tested only
+  through the E2E gate. The start document asked for an exporter unit test; the round trip is
+  asserted in the gate instead (E2E 5a).
 - E2E 4 writes the user-layer XAFML that XAF's layout editor would persist, rather than driving the
   editor's drag and drop, and restarts the host around the write because XAF Blazor saves the user
   model through a deferred dispatcher.
@@ -222,7 +225,7 @@ XafLayoutBuilder.Module/                generator updaters, registry, startup ch
 XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template
-XafLayoutBuilder.Tests/                 xUnit tests for Core
+XafLayoutBuilder.Tests/                 xUnit tests for Core and the Module's resolver and registry
 XafLayoutBuilder.E2ETests/              C# Playwright console app, the gate
 skills/xaf-layout-builder/SKILL.md      the Claude Code skill
 docs/                                   how-it-works, api-notes, screenshots
