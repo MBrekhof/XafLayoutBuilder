@@ -14,6 +14,10 @@ nothing else. Changes appear after an application restart.
 
 - The app's module references `XafLayoutBuilder.Module` and requires it:
   `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
+- Keep `XafLayoutBuilderModule` in its own assembly: reference the projects, never copy their files
+  into an existing module project. `ModuleBase` scans its own assembly for `ModuleUpdater` types and
+  model difference resources, so a copied module re-runs that project's database updaters and reads
+  its model resources a second time.
 - Do not create `Model.xafml` or `Model.DesignedDiffs.xafml` entries for views a builder owns.
 - Before converting a view that already exists in use, check `ModelDifference` rows and module XAFML
   for it. Differences target the stock node paths (`Main/SimpleEditors/...`), which the builder

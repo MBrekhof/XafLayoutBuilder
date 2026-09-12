@@ -110,7 +110,11 @@ catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
 
 ## Use it in your own solution
 
-1. Reference `XafLayoutBuilder.Module`, which brings `XafLayoutBuilder.Core`.
+1. Reference `XafLayoutBuilder.Module`, which brings `XafLayoutBuilder.Core`. Reference the projects,
+   or vendor them as projects of their own, never as a folder inside one of your existing module
+   projects. `ModuleBase` scans its own assembly for database updaters and model difference
+   resources, so a module copied into yours would run your updaters a second time (XAF does not
+   remove duplicates, so seeders run twice) and read your model resources as its own.
 2. Require the module from yours:
    `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
    In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard and download actions.

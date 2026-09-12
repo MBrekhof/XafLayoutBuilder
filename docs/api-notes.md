@@ -49,6 +49,13 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   path or renders it was not established (DOCS-001). [source `Model/Core/ModelApplication.cs` lines
   865-869; `Model/Core/ModelNode.cs` lines 793-812, 1126-1133, 1405-1429;
   `Model/DomainLogics/ModelViewLogic.cs` lines 121-135]
+- **A module scans its own assembly, so it must not share one.** `ModuleBase.GetModuleUpdaters`
+  instantiates every `ModuleUpdater` in `GetType().Assembly` that has an `(IObjectSpace, Version)`
+  constructor, and `DatabaseUpdater.GetModuleUpdaters` concatenates every module's list without
+  removing duplicates. `ModuleBase.DiffsStore` defaults to a `ResourcesModelStore` over the same
+  assembly. Copying `XafLayoutBuilderModule` into an existing module project would therefore run that
+  project's updaters twice and read its model difference resource a second time (DOCS-002). [source
+  `ModuleBase.cs` lines 207-213 and 240-248; `Updating/DatabaseUpdater.cs` lines 100-108]
 
 ## Layout model interfaces (`Model/IModelDetailView.cs`)
 
