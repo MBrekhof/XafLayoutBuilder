@@ -210,9 +210,11 @@ and invariant number formatting.
   here: an in-process XAF Application Model in the unit tests, so the updaters and the exporter can
   be tested without the E2E; driving the Blazor layout editor's drag and drop in E2E 4; exercising
   `FreezeColumnIndices`, which is currently reasoned from source only.
-- **Known gaps kept as limitations** (all in the README): no copy button and no write-to-file in
-  the export popup, exported hidden columns are more verbose than hand-written code, only the
-  default views are handled, and only XAF 26.1.4 Blazor with EF Core and LocalDB was tested.
+- **Known gaps kept as limitations** (all in the README): copying and downloading are separate
+  actions in the optional `XafLayoutBuilder.Blazor` add-on rather than buttons inside the export
+  popup (XAF Blazor renders only OK and Cancel there), exported hidden columns are more verbose than
+  hand-written code, only the default views are handled, and only XAF 26.1.4 Blazor with EF Core and
+  LocalDB was tested.
 - **XAFLogicExplainer reported nothing of the builder layouts**, and two upstream defects
   turned up while checking why; see the 2026-09-12 section above for the cause, the file and
   line of each, and what a pull request would have to respect. Nothing in that repository was
