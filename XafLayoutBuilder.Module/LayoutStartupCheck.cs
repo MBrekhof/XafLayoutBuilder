@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Model;
 using XafLayoutBuilder.Core;
@@ -15,11 +14,28 @@ namespace XafLayoutBuilder.Module;
 /// </summary>
 public static class LayoutStartupCheck {
     // XAF Blazor builds one XafApplication per circuit, so without this the whole forced generation would run again
-    // for every user session. Only a completed run counts: an application that fails the check keeps failing loudly.
-    static readonly ConcurrentDictionary<Type, bool> Checked = new();
+    // for every user session. The memory is keyed by application type *and* registry version, so a spec registered
+    // after one application has started is still validated for the next one, and only a completed run is recorded:
+    // an application that fails the check keeps failing loudly instead of passing quietly the second time.
+    static readonly object Gate = new();
+    static readonly HashSet<(Type Application, int RegistryVersion)> Completed = [];
 
     public static void Run(XafApplication application) {
-        if (Checked.ContainsKey(application.GetType())) return;
+        var key = (application.GetType(), LayoutRegistry.Version);
+        // The lock is held across the run so two circuits starting together cannot both do the work.
+        lock (Gate) {
+            if (Completed.Contains(key)) return;
+            Check(application);
+            Completed.Add(key);
+        }
+    }
+
+    /// <summary>Test hook: forget what has already been validated.</summary>
+    public static void Reset() {
+        lock (Gate) Completed.Clear();
+    }
+
+    static void Check(XafApplication application) {
         var views = application.Model.Views;
         foreach (var modelClass in application.Model.BOModel) {
             if (modelClass.TypeInfo?.Type is not { } type) continue;
@@ -31,7 +47,6 @@ public static class LayoutStartupCheck {
                     Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
             }
         }
-        Checked[application.GetType()] = true;
     }
 
     static TView Required<TView>(IModelViews views, string id, Type type, string what) where TView : class, IModelView =>

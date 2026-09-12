@@ -18,6 +18,32 @@ startup-failure check. The repository is public on GitHub, MIT licensed.
 | 6. Exporter, printer, popup + E2E 4–6 | **done 2026-09-11** |
 | 7. SKILL.md, README, docs, screenshots | **done 2026-09-11** |
 
+## Codex review of the review points (2026-09-12)
+
+Codex found five issues in that batch; all five are fixed and the gate is green through E2E 9.
+
+- **`async void` action handlers.** XAF runs an Execute handler synchronously and considers the
+  action done when it returns, so a denied clipboard, a failed module import or a dead circuit
+  escaped XAF's error handling. Both add-on actions now share
+  `LayoutCodeActionController`: one task that never throws, a busy flag so a second click cannot
+  start a second run, `JSDisconnectedException` and cancellation swallowed deliberately, anything
+  else reported through `ShowMessage` (itself guarded, since reporting needs the circuit too).
+- **Catch-all id collisions.** `Build()` only compared the `Unplaced` group id with other group
+  ids, so a root-level *item* with the same name passed validation and then failed inside XAF with
+  a duplicate sibling id. It now checks every root node id. Two tests cover it, including the case
+  that stays legal (a member of the same name nested inside a group).
+- **The startup memory was too coarse.** Keyed only by application type, it suppressed the check
+  for a later application whose registered specs had changed. The key now includes a registry
+  version that `LayoutRegistry` bumps on every change, the run happens under a lock so "once" holds
+  under concurrent starts, and `LayoutStartupCheck.Reset()` exists for tests.
+- **The export dropped `.Unplaced(...)`.** Exporting a class that opted in printed its catch-all
+  group as ordinary items, so adopting that file silently restored the strict rule. The applier now
+  stamps the group it generates and the exporter turns it back into the policy call, leaving its
+  members out of the hidden list. E2E 5a asserts Customer's export equals `Customer.Layout.cs`.
+- **The pre-run cleanup broke a fresh machine.** It queried the sample database before the app had
+  ever created it. It now treats "no catalog" and "no such table" as first run and carries on,
+  while still surfacing real connection and permission faults.
+
 ## Review points (2026-09-12)
 
 Four points from the owner's read of the finished repository, all applied:

@@ -60,29 +60,38 @@ public sealed class LayoutBuilder<T> {
         var members = new HashSet<string>(StringComparer.Ordinal);
         Walk(nodes);
 
-        // The catch-all group is created next to the layout's own top-level nodes, so its id has to be free.
-        if (unplaced.GroupId is { } catchAll && !groupIds.Add(catchAll))
-            throw new LayoutSpecException($"{typeof(T).Name}: group id '{catchAll}' is used twice (once by Unplaced).");
+        // The catch-all group is created next to the layout's own top-level nodes, so its id has to be free there:
+        // an item at the root counts too, because XAF only requires ids to be unique among siblings.
+        if (unplaced.GroupId is { } catchAll) {
+            var rootIds = nodes.Select(IdOf).ToHashSet(StringComparer.Ordinal);
+            if (!groupIds.Add(catchAll) || rootIds.Contains(catchAll))
+                throw new LayoutSpecException(
+                    $"{typeof(T).Name}: id '{catchAll}' is already used in this layout; the catch-all group from Unplaced needs an id of its own.");
+        }
 
         return new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray(), unplaced.GroupId);
+
+        static string IdOf(LayoutNodeSpec node) => node switch {
+            LayoutItemSpec i => i.Member,
+            LayoutGroupSpec g => g.Id,
+            TabbedGroupSpec t => t.Id,
+            _ => "",
+        };
 
         void Walk(IEnumerable<LayoutNodeSpec> siblings) {
             var siblingIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var node in siblings) {
-                string id;
+                var id = IdOf(node);
                 switch (node) {
-                    case LayoutItemSpec item:
-                        id = item.Member;
+                    case LayoutItemSpec:
                         if (!members.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is placed twice.");
                         if (hidden.Contains(id)) throw new LayoutSpecException($"{typeof(T).Name}: member '{id}' is both placed and hidden.");
                         break;
                     case LayoutGroupSpec g:
-                        id = g.Id;
                         if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
                         Walk(g.Children);
                         break;
                     case TabbedGroupSpec t:
-                        id = t.Id;
                         if (!groupIds.Add(id)) throw new LayoutSpecException($"{typeof(T).Name}: group id '{id}' is used twice.");
                         Walk(t.Tabs);
                         break;

@@ -125,9 +125,13 @@ ends the process before Kestrel listens. The E2E gate proves it with the sample'
 switch.
 
 XAF Blazor builds one `XafApplication` per circuit, so the naive version of this would repeat the
-whole forced generation for every user session. A static set of application types that already
-passed makes it once per process. Only a completed run is recorded, so an application that fails
-the check keeps failing loudly rather than passing quietly on the second session.
+whole forced generation for every user session. A static set of what already passed makes it once
+per process. Two details keep that memory honest: the key is the application type *and* the
+registry version, which `LayoutRegistry` bumps on every `Register` or `Clear`, so a layout
+registered after one application started is still validated for the next one; and only a completed
+run is recorded, so an application that fails the check keeps failing loudly rather than passing
+quietly on the second session. The run happens under a lock, so two circuits starting together do
+the work once rather than twice. `LayoutStartupCheck.Reset()` clears the memory for tests.
 
 ## Exporter and printer
 
@@ -158,6 +162,12 @@ the printed comment.
 - **Hidden is inferred.** A visible member that is not placed is exported as `.Hide(...)`. A column
   without an index is exported as hidden, except the key; the model does not record whether the
   original builder hid a column or never mentioned it.
+- **The catch-all group exports as the policy, not as its contents.** The applier stamps the group
+  it creates for `.Unplaced(...)` with a model value, so the exporter can tell it from a group
+  somebody wrote by hand. It emits `.Unplaced(UnplacedMembers.AppendToGroup(id))`, drops the group
+  from the printed nodes and leaves its members out of the hidden list, because the policy collects
+  them again. Freezing them into explicit items instead would silently restore strict XLB002 for
+  the next property somebody adds.
 - **The printer is a fixed point.** For the start document's example, builder to spec to printed
   C# reproduces the source byte for byte (unit test). For the running sample, exporting the
   untouched layout reproduces `Order.Layout.cs` modulo whitespace and explicit hides (E2E 5a).

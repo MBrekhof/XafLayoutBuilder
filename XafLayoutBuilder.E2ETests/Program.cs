@@ -50,9 +50,18 @@ try
     if (await IsServing()) throw new Exception($"{BaseUrl} is already serving before the harness started its host; stop that process first.");
     // An earlier run that aborted between E2E 4 and E2E 6 leaves Admin's user differences in the database, and
     // E2E 5a would then export that layout instead of the builder's. Always start from an empty user model.
-    var leftOver = SqlScalar("SELECT COUNT(*) FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'");
-    if (leftOver != "0") Console.WriteLine($"    clearing {leftOver} left-over user model row(s) for Admin");
-    Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'; DELETE d FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin';");
+    try
+    {
+        var leftOver = SqlScalar("SELECT COUNT(*) FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'");
+        if (leftOver != "0") Console.WriteLine($"    clearing {leftOver} left-over user model row(s) for Admin");
+        Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'; DELETE d FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin';");
+    }
+    // 4060: the catalog does not exist yet. 208: it exists but the schema does not. Either way this is the first run
+    // on this machine and the sample is about to create both; anything else is a real connection or permission fault.
+    catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number is 4060 or 208)
+    {
+        Console.WriteLine("    no sample database yet; the app will create it on startup");
+    }
     app = StartApp(blazorProj, appOutput);
     await WaitForHttpOk(app, appOutput);
 
@@ -235,6 +244,13 @@ try
     await ClosePopup(page);
     Assert(customerExport.Contains(".Column(x => x.Name, caption: \"Customer name\")"), "the column caption round-trips through the export");
     Assert(customerExport.Contains("public static DetailLayoutSpec? BuildDetailViewLayout() =>"), "export prints the Customer class");
+    await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-09c-exported-Customer.Layout.cs"), customerExport);
+    var customerSource = await File.ReadAllTextAsync(Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Module", "BusinessObjects", "Customer.Layout.cs"));
+    Assert(customerExport.Contains(".Unplaced(UnplacedMembers.AppendToGroup(\"Other\"))"),
+        "the export keeps the opt-in instead of freezing the catch-all group into explicit items");
+    Assert(!customerExport.Contains(".Hide(x => x.City)"), "a member the catch-all collected is not exported as hidden");
+    Assert(NormalizeCode(BuilderExpression(customerExport, "LayoutBuilder<Customer>.Create()")) == NormalizeCode(BuilderExpression(customerSource, "LayoutBuilder<Customer>.Create()")),
+        "exported Customer DetailView builder equals the one in Customer.Layout.cs");
 
     Step("E2E 4: the user layer wins: Admin moves OrderDate into Details");
     // XAF Blazor's layout editor persists its result through Application.SaveModelChanges into the user

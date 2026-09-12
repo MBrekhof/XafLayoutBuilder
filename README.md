@@ -173,6 +173,9 @@ specs, and a printer turns specs into the builder C#.
   order loses it, because the applier clears the sort of every column the spec does not list.
 - Columns and layout items bound to a nested path, such as `Customer.Name`, cannot be expressed by
   the builder. They are skipped and named in the leading comment instead of printed.
+- A class that opted into `.Unplaced(...)` exports that call again rather than the members the
+  catch-all happened to hold, so adopting the exported file does not quietly restore the strict
+  rule. A catch-all group holding anything other than plain editors is reported in the comment.
 - Sort priority follows column order in the export.
 - A group caption XAF derived earlier can survive a user's change and is then exported as an
   explicit caption. In the sample, Details keeps the caption "Notes" after Order Date moves in.
@@ -192,7 +195,8 @@ specs, and a printer turns specs into the builder C#.
 - E2E 4 writes the user-layer XAFML that XAF's layout editor would persist, rather than driving the
   editor's drag and drop, and restarts the host around the write because XAF Blazor saves the user
   model through a deferred dispatcher.
-- The startup check runs once per `XafApplication`, which in XAF Blazor means once per circuit.
+- The startup check runs once per process for a given application type and set of registered layouts, not once per
+  Blazor circuit. Registering a layout at runtime makes the next application validate again.
 - Only the combination above was tested. The sample seeds `Admin` and `User` with empty passwords
   in Debug builds; it is a demonstration, not a production template.
 

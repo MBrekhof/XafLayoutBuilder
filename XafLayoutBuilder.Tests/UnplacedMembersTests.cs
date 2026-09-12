@@ -26,7 +26,27 @@ public class UnplacedMembersTests {
             .Group("Other", g => g.Item(x => x.Number))
             .Unplaced(UnplacedMembers.AppendToGroup("Other"))
             .Build());
-        Assert.Contains("'Other' is used twice (once by Unplaced)", ex.Message);
+        Assert.Contains("'Other' is already used in this layout", ex.Message);
+    }
+
+    [Fact]
+    public void AppendToGroup_ReusingARootItemName_Throws() {
+        // The catch-all becomes a sibling of the root items, and XAF requires unique ids among siblings.
+        var ex = Assert.Throws<LayoutSpecException>(() => LayoutBuilder<TestOrder>.Create()
+            .Item(x => x.Number)
+            .Unplaced(UnplacedMembers.AppendToGroup("Number"))
+            .Build());
+        Assert.Contains("'Number' is already used in this layout", ex.Message);
+    }
+
+    [Fact]
+    public void AppendToGroup_ReusingAMemberNameInsideAGroup_IsFine() {
+        // Only the root level shares a parent with the catch-all group.
+        var spec = LayoutBuilder<TestOrder>.Create()
+            .Group("Header", g => g.Item(x => x.Number))
+            .Unplaced(UnplacedMembers.AppendToGroup("Number"))
+            .Build();
+        Assert.Equal("Number", spec.UnplacedGroupId);
     }
 
     [Fact]

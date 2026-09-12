@@ -1,11 +1,6 @@
-using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
-using DevExpress.ExpressApp.Blazor;
 using DevExpress.ExpressApp.Blazor.Internal;
-using DevExpress.Persistent.Base;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
-using XafLayoutBuilder.Module;
 
 namespace XafLayoutBuilder.Blazor;
 
@@ -13,32 +8,19 @@ namespace XafLayoutBuilder.Blazor;
 /// Hands the exported code to the browser as {Type}.Layout.cs, so the file lands in the downloads folder ready to
 /// drop into the project. Sits next to Export Layout To Code and Copy Layout To Clipboard in the Tools tab.
 /// </summary>
-public sealed class DownloadLayoutCodeController : ViewController<ObjectView> {
+public sealed class DownloadLayoutCodeController : LayoutCodeActionController {
     const string ModulePath = "./_content/XafLayoutBuilder.Blazor/xaflayoutbuilder.js";
 
     public SimpleAction DownloadAction { get; }
 
-    public DownloadLayoutCodeController() {
-        DownloadAction = new SimpleAction(this, "DownloadLayoutCode", PredefinedCategory.Tools) {
-            Caption = "Download Layout File",
-            ImageName = "Action_Download",
-            ToolTip = "Download this view's layout as a {Type}.Layout.cs file",
-        };
-        DownloadAction.Execute += async (_, _) => await DownloadAsync();
-    }
+    public DownloadLayoutCodeController() =>
+        DownloadAction = CreateAction("DownloadLayoutCode", "Download Layout File", "Action_Download",
+            "Download this view's layout as a {Type}.Layout.cs file");
 
-    protected override void OnActivated() {
-        base.OnActivated();
-        // Same gate as the export itself: administrators, and only when the host enabled it.
-        DownloadAction.Active[ExportLayoutController.EnabledKey] = ExportLayoutController.IsEnabled;
-        DownloadAction.Active[ExportLayoutController.AdminKey] = ExportLayoutController.IsAdministrator();
-    }
-
-    async Task DownloadAsync() {
-        var (fileName, code) = LayoutCodePrinter.ForView(Application, View);
-        var js = ((BlazorApplication)Application).ServiceProvider.GetRequiredService<IXafJSRuntime>();
+    protected override async Task ExecuteAsync(IXafJSRuntime js, string fileName, string code) {
         // A server-side action cannot start a download by itself, so the add-on ships one JS module that creates the
         // anchor and clicks it. This is the only JavaScript in the repository; everything else is C#.
+        // Disposal can throw when the circuit dies mid-call, which is why the base class wraps the whole thing.
         await using var module = await js.InvokeAsync<IJSObjectReference>("import", ModulePath);
         await module.InvokeVoidAsync("downloadText", fileName, code);
     }

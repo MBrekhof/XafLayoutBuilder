@@ -146,5 +146,7 @@ buttons are not in the popup itself.
   than hand-written code. A hidden column's sort order is not carried over.
 - Skips what the builder cannot express, such as a column bound to a nested path, and names it in
   the leading comment instead of printing code that would not compile or would throw.
+- Prints `.Unplaced(...)` again for a class that opted in, instead of the members its catch-all
+  group happens to hold at that moment, so the exported file keeps behaving the same way.
 - Sort priority follows column order, so a spec whose sort order differs from its column order
   does not round-trip exactly.

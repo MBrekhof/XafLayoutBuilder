@@ -12,6 +12,9 @@ namespace XafLayoutBuilder.Module;
 /// Verified API: docs/api-notes.md.
 /// </summary>
 public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDetailViewLayoutNodesGenerator> {
+    /// <summary>Model value marking the group this updater created for <see cref="UnplacedMembers.AppendToGroup"/>.</summary>
+    internal const string CatchAllMarker = "XafLayoutBuilder.UnplacedGroup";
+
     public override void UpdateNode(ModelNode node) {
         if (node.Parent is not IModelDetailView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
         if (view.Id != type.Name + "_DetailView") return; // ponytail: default DetailView only; variants/nested ids are phase 2
@@ -46,6 +49,9 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
             catchAllGroup.Index = spec.Nodes.Count;
             catchAllGroup.Direction = XafFlow.Vertical;
             catchAllGroup.ShowCaption = true;
+            // Stamp it so the exporter can tell this group apart from one the layout author wrote, and print
+            // .Unplaced(...) again instead of freezing today's leftovers into explicit items.
+            ((ModelNode)catchAllGroup).SetValue(CatchAllMarker, true);
             // Set the caption rather than leaving XAF to compute it: a group holding one item takes that item's
             // caption, so a catch-all called "Other" with a single leftover member would be headed "City".
             catchAllGroup.Caption = catchAll;
