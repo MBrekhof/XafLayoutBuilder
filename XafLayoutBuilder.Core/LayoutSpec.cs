@@ -37,11 +37,35 @@ public sealed record TabbedGroupSpec(string Id, IReadOnlyList<LayoutGroupSpec> T
     public IReadOnlyList<LayoutGroupSpec> Tabs { get => tabs; init => tabs = value.Frozen(); }
 }
 
-/// <summary>DetailView layout for one type. Members in <see cref="HiddenMembers"/> are simply not placed.</summary>
+/// <summary>
+/// What the applier does with a visible member the layout neither places nor hides. The default is to fail at
+/// startup (XLB002), so a property added to the class cannot silently disappear from the form. A team that would
+/// rather keep moving can relax it per class with <see cref="AppendToGroup"/>.
+/// </summary>
+public sealed class UnplacedMembers {
+    UnplacedMembers(string? groupId) => GroupId = groupId;
+
+    /// <summary>The default: a member that is neither placed nor hidden fails the application at startup.</summary>
+    public static UnplacedMembers Fail { get; } = new(null);
+
+    /// <summary>Put whatever the layout did not mention into a group with this id, at the end of the form.</summary>
+    public static UnplacedMembers AppendToGroup(string groupId) =>
+        string.IsNullOrWhiteSpace(groupId)
+            ? throw new LayoutSpecException("UnplacedMembers.AppendToGroup needs a group id.")
+            : new UnplacedMembers(groupId);
+
+    internal string? GroupId { get; }
+}
+
+/// <summary>
+/// DetailView layout for one type. Members in <see cref="HiddenMembers"/> are simply not placed.
+/// <see cref="UnplacedGroupId"/> is null for the strict default and otherwise names the catch-all group.
+/// </summary>
 public sealed record DetailLayoutSpec(
     string TypeName,
     IReadOnlyList<LayoutNodeSpec> Nodes,
-    IReadOnlyList<string> HiddenMembers) {
+    IReadOnlyList<string> HiddenMembers,
+    string? UnplacedGroupId = null) {
     readonly IReadOnlyList<LayoutNodeSpec> nodes = Nodes.Frozen();
     readonly IReadOnlyList<string> hiddenMembers = HiddenMembers.Frozen();
     public IReadOnlyList<LayoutNodeSpec> Nodes { get => nodes; init => nodes = value.Frozen(); }

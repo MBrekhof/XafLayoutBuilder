@@ -77,7 +77,10 @@ Registration throws if a spec names a member the type does not have.
 - `Collapsible()` always shows the group caption, because XAF Blazor puts the toggle in the caption
   header. A group without an explicit caption and with one item shows that item's caption.
 - `Hide` removes the editor from the DetailView entirely.
-- Every visible member must be placed or hidden, or startup fails with XLB002 naming it.
+- Every visible member must be placed or hidden, or startup fails with XLB002 naming it. To opt out
+  for one class, `.Unplaced(UnplacedMembers.AppendToGroup("Other"))` puts everything the layout does
+  not mention into a group with that id at the end of the form. The strict default is deliberate:
+  it is what stops a new property from disappearing unnoticed.
 - Member lambdas are simple member access: `x => x.Customer`. `x => x.Customer.Name` throws.
 - Derived classes keep XAF's default layout unless they declare their own. A base class's spec is
   not inherited.
@@ -113,7 +116,8 @@ stop the application at startup. In XAF Blazor the host exits before it listens;
 ## When you change a business class
 
 - **Added a property?** Place it with `.Item(...)` or `.Hide(...)` in `BuildDetailViewLayout`, or
-  the app will not start. Add a `.Column(...)` only if the list should show it.
+  the app will not start, unless that class opted into `.Unplaced(...)`. Add a `.Column(...)` only
+  if the list should show it.
 - **Renamed or removed one?** The lambda stops compiling; fix it where the compiler points.
 - **Layout looks unchanged after a restart?** An administrator or user customised that view and
   their differences win. The layout editor's context menu has Reset Layout; resetting their
@@ -127,7 +131,12 @@ The running app is the visual designer. On any DetailView or ListView the Tools 
 appsettings.Development.json; a host without a security system shows it to everyone). It prints the
 type's DetailView, ListView and lookup with every layer applied, as the `{Type}.Layout.cs` class
 above, namespace included. The view you run it from is the one exported, and the comment at the top
-names the view ids it read. It writes nothing: copy it from the popup over the file.
+names the view ids it read. It writes nothing to disk.
+
+In a Blazor host that also references `XafLayoutBuilder.Blazor`, the same Tools tab has **Copy
+Layout To Clipboard**, which skips the popup and puts the identical text on the clipboard. XAF
+Blazor renders only OK and Cancel inside a popup for a non-persistent object, which is why the
+button is not in the popup itself.
 
 - Prints groups, tabs, items, captions that differ from XAF's default, flow, collapsible, explicit
   relative sizes and images. Layout items that are not property editors are listed in a comment.

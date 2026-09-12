@@ -17,7 +17,11 @@ view's current layout back to the same fluent C#.
   `ListViewColumnsUpdater`, `LayoutRegistry` + resolver, `LayoutStartupCheck`, `LayoutExporter`,
   `ExportLayoutController`. References `DevExpress.ExpressApp` and `DevExpress.Persistent.Base`
   only (platform neutral).
-- `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, columns only), `Order`
+- `XafLayoutBuilder.Blazor`: optional add-on, `XafLayoutBuilderBlazorModule` +
+  `CopyLayoutCodeController` (clipboard through `IXafJSRuntime`). Everything browser-specific goes
+  here so the Module stays platform neutral.
+- `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
+  into the catch-all group, and columns), `Order`
   (+ `Order.Layout.cs`, the start document's section 4 example verbatim), `OrderLine`,
   `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test),
   `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
@@ -39,7 +43,9 @@ dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://lo
 LocalDB catalog `XafLayoutBuilder.Sample` on `(localdb)\mssqllocaldb`. Debug builds auto-update the
 schema on startup, no debugger needed. The gate writes and deletes Admin's `ModelDifferences`
 rows and restarts the host around those writes (XAF Blazor's deferred user-model save would
-overwrite them otherwise); it refuses to start if :5100 is already serving.
+overwrite them otherwise); it clears any left-over user model before it starts, because a run that
+aborts midway would otherwise make the next run's round trip compare against a user layout; and it
+refuses to start if :5100 is already serving.
 
 Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
 `pwsh XafLayoutBuilder.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium`.

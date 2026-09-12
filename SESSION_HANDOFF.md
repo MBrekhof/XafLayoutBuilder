@@ -18,6 +18,28 @@ startup-failure check. The repository is public on GitHub, MIT licensed.
 | 6. Exporter, printer, popup + E2E 4–6 | **done 2026-09-11** |
 | 7. SKILL.md, README, docs, screenshots | **done 2026-09-11** |
 
+## Review points (2026-09-12)
+
+Four points from the owner's read of the finished repository, all applied:
+
+- **The copy button.** `XafLayoutBuilder.Blazor` is a new optional add-on: one module, one
+  controller, `navigator.clipboard.writeText` through XAF's `IXafJSRuntime`, no JavaScript file.
+  The Module stays platform neutral. The button could not go inside the export popup after all:
+  XAF Blazor's popup for a non-persistent object renders only its own OK and Cancel, so the action
+  sits next to the export in the Tools tab. Both paths share `LayoutCodePrinter.ForView`, and the
+  gate asserts the clipboard holds exactly what the popup shows.
+- **Startup check once per process.** A static set of application types that already passed, so
+  the forced generation no longer repeats for every Blazor circuit. Only a completed run counts.
+- **XLB002 opt-in.** `.Unplaced(UnplacedMembers.AppendToGroup("Other"))` collects whatever a layout
+  does not mention into one captioned group at the end of the form. Strict stays the default and
+  the docs say why. The sample's `Customer` uses it, and the gate asserts City lands there.
+- **GeneratedIndex comment.** The updater now names the E2E assertion that catches a DevExpress
+  rename, so whoever hits it knows where to look.
+
+Two harness fixes fell out of this: the gate clears Admin's left-over user model before starting
+(an aborted run used to poison the next round trip), and the clipboard comparison ignores line
+endings and the timestamped comment.
+
 ## Session 7b result (Codex final review follow-up, 2026-09-12)
 
 Codex confirmed all four earlier findings closed, and raised eleven new ones. Seven were real

@@ -38,6 +38,8 @@ public static class CSharpLayoutPrinter {
         sb.Append("LayoutBuilder<").Append(Ident(typeName)).Append(">.Create()");
         foreach (var node in spec.Nodes) PrintNode(sb, node, 1);
         foreach (var hidden in spec.HiddenMembers) sb.AppendLine().Append(Pad(1)).Append(".Hide(x => x.").Append(Ident(hidden)).Append(')');
+        if (spec.UnplacedGroupId is { } catchAll)
+            sb.AppendLine().Append(Pad(1)).Append(".Unplaced(UnplacedMembers.AppendToGroup(").Append(Quote(catchAll)).Append("))");
         sb.AppendLine().Append(Pad(1)).Append(".Build()");
         return sb.ToString();
     }

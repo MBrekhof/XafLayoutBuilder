@@ -13,6 +13,8 @@ using Microsoft.Playwright;
 //   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder
 //   E2E 5   Export Layout To Code prints OrderDate under Details
 //   E2E 6   deleting the user differences brings the builder layout back
+//   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
+//   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   Session 5: the host started with --break-layout exits at startup with XLB001
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
@@ -45,6 +47,11 @@ try
     // Codex review (session 1): a foreign process already serving :5100 would let the gate pass
     // without ever starting this checkout's host. Refuse to run against an occupied port.
     if (await IsServing()) throw new Exception($"{BaseUrl} is already serving before the harness started its host; stop that process first.");
+    // An earlier run that aborted between E2E 4 and E2E 6 leaves Admin's user differences in the database, and
+    // E2E 5a would then export that layout instead of the builder's. Always start from an empty user model.
+    var leftOver = SqlScalar("SELECT COUNT(*) FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'");
+    if (leftOver != "0") Console.WriteLine($"    clearing {leftOver} left-over user model row(s) for Admin");
+    Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'; DELETE d FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin';");
     app = StartApp(blazorProj, appOutput);
     await WaitForHttpOk(app, appOutput);
 
@@ -60,6 +67,7 @@ try
         throw new Exception("Chromium not installed. Run: pwsh XafLayoutBuilder.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium", ex);
     }
     page = await NewPage(browser);
+    await page.Context.GrantPermissionsAsync(["clipboard-read", "clipboard-write"], new() { Origin = BaseUrl });
 
     Step("Log in as Admin");
     await Login(page);
@@ -283,7 +291,43 @@ try
     Assert(!exported.Contains(".Hide(x => x.ID)"), "export does not list the key as a hidden column");
     Assert(exported.Contains(".Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)") && exported.Contains(".Lookup(l => l"),
         "export includes the ListView columns and the lookup");
+
+    Step("E2E 7: Copy Layout To Clipboard puts the code on the clipboard");
     await ClosePopup(page);
+    await page.EvaluateAsync("() => navigator.clipboard.writeText('')");
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var copyAction = page.GetByText("Copy Layout To Clipboard", new() { Exact = true }).First;
+    await copyAction.WaitForAsync(new() { Timeout = 10_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-14-copy-action.png") });
+    await copyAction.ClickAsync();
+    await WaitForNoLoading(page);
+    var clipboard = "";
+    for (var attempt = 0; attempt < 10 && clipboard.Length == 0; attempt++)
+    {
+        clipboard = await page.EvaluateAsync<string>("() => navigator.clipboard.readText()");
+        if (clipboard.Length == 0) await page.WaitForTimeoutAsync(500);
+    }
+    Console.WriteLine($"    clipboard: {clipboard.Length} chars, first line: {clipboard.Split('\n').FirstOrDefault()?.Trim()}");
+    Assert(clipboard.Contains("public partial class Order : ISupportViewLayoutCustomization"), "the clipboard holds the printed class");
+    // Everything except the leading comments, which carry a timestamp to the minute: the popup and the copy can
+    // straddle a minute boundary, and that difference says nothing about the printed layout.
+    static string WithoutComments(string code) =>
+        string.Join("\n", code.Replace("\r", "").Split('\n').Where(l => !l.TrimStart().StartsWith("//")));
+    await File.WriteAllTextAsync(Path.Combine(screenshotDir, "e2e-14-clipboard.txt"), clipboard);
+    if (WithoutComments(clipboard) != WithoutComments(exported))
+    {
+        var fromClipboard = WithoutComments(clipboard).Split('\n');
+        var fromPopup = WithoutComments(exported).Split('\n');
+        for (var i = 0; i < Math.Max(fromClipboard.Length, fromPopup.Length); i++)
+            if (i >= fromClipboard.Length || i >= fromPopup.Length || fromClipboard[i] != fromPopup[i])
+            {
+                Console.WriteLine($"    first difference at line {i + 1}:");
+                Console.WriteLine($"      popup    : {(i < fromPopup.Length ? fromPopup[i] : "(end)")}");
+                Console.WriteLine($"      clipboard: {(i < fromClipboard.Length ? fromClipboard[i] : "(end)")}");
+                break;
+            }
+    }
+    Assert(WithoutComments(clipboard) == WithoutComments(exported), "the clipboard holds the same class the popup showed");
 
     Step("E2E 6: resetting the user model brings the builder layout back");
     KillApp(ref app);
@@ -293,6 +337,23 @@ try
     await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-12-user-layer-reset.png") });
     Assert(await OrderDateGroup(page) == "Header", "after reset OrderDate renders inside the Header group again");
+
+    Step("E2E 8: unplaced members land in the catch-all group instead of failing startup");
+    await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.GetByText("Acme Corp", new() { Exact = true }).First.ClickAsync();
+    await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'Acme Corp')", null, new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-13-unplaced-group.png") });
+    var customerForm = page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First;
+    var customerGroups = await customerForm.EvaluateAsync<string[]>(
+        @"f => [...f.querySelectorAll('[role=group].dxbl-fl-group')].map(g => g.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? '(no header)')");
+    Console.WriteLine("    Customer groups: " + string.Join(" | ", customerGroups));
+    Assert(customerGroups.Contains("Other"), $"the catch-all group is rendered (got {string.Join(",", customerGroups)})");
+    var cityInOther = await customerForm.EvaluateAsync<bool>(@"f => {
+        const group = f.querySelector('label.xaf-item-city')?.closest('[role=group]');
+        return group?.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() === 'Other';
+    }");
+    Assert(cityInOther, "City, which the layout never mentions, sits in the Other group");
 
     Step("Session 5: a broken layout is reported at startup (host started with --break-layout)");
     KillApp(ref app);

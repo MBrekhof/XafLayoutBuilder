@@ -64,6 +64,12 @@ Two checks run while applying:
 - **XLB002**: a visible member is neither placed nor hidden. Strict on purpose, confirmed by the
   owner: a property added to the class must not silently vanish from the form.
 
+That strictness is right for generated code and irritating for people, so a class can opt out with
+`.Unplaced(UnplacedMembers.AppendToGroup("Other"))`. The applier then creates that group at the end
+of the root and drops everything unmentioned into it, captioned with the group id. The caption is
+set explicitly because XAF names a single-item group after its item, which would title an "Other"
+group holding one leftover member after that member instead.
+
 ## ListView: `ListViewColumnsUpdater`
 
 It is a `ModelNodesGeneratorUpdater<ModelListViewColumnsNodesGenerator>` and handles
@@ -116,8 +122,12 @@ leaving the real one unchecked. A missing view is **XLB004**.
 
 In the Blazor template the application is built while the ASP.NET host starts, so the exception
 ends the process before Kestrel listens. The E2E gate proves it with the sample's `--break-layout`
-switch. The check runs once per `XafApplication`, which in Blazor means once per circuit; it only
-touches views that have specs, and those would be generated on first use anyway.
+switch.
+
+XAF Blazor builds one `XafApplication` per circuit, so the naive version of this would repeat the
+whole forced generation for every user session. A static set of application types that already
+passed makes it once per process. Only a completed run is recorded, so an application that fails
+the check keeps failing loudly rather than passing quietly on the second session.
 
 ## Exporter and printer
 
@@ -152,8 +162,16 @@ the printed comment.
   C# reproduces the source byte for byte (unit test). For the running sample, exporting the
   untouched layout reproduces `Order.Layout.cs` modulo whitespace and explicit hides (E2E 5a).
 
-The popup is a DetailView of the non-persistent `LayoutCode` with one unlimited string. There is
-no copy button: that needs Blazor JS interop, which the platform-neutral module cannot host.
+The popup is a DetailView of the non-persistent `LayoutCode` with one unlimited string.
+
+Copying to the clipboard needs a browser, so it lives in `XafLayoutBuilder.Blazor`, an optional
+add-on module with one controller. It calls `navigator.clipboard.writeText` through XAF's own
+`IXafJSRuntime`, which needs no JavaScript file of its own but is marked `EditorBrowsable(Never)`:
+the single DevExpress internal this repository leans on besides the column index. The action sits
+in the Tools tab next to the export rather than inside the popup, because XAF Blazor's popup
+template for a non-persistent object renders only its own OK and Cancel buttons
+(`PopupDialogTemplateBase` builds exactly one action container, "Confirmation"). Both paths print
+through the same `LayoutCodePrinter.ForView`, so the clipboard and the popup always agree.
 
 ## The user layer in XAF Blazor
 

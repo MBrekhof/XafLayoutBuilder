@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Model;
 using XafLayoutBuilder.Core;
@@ -13,7 +14,12 @@ namespace XafLayoutBuilder.Module;
 /// to and leave the real one unchecked.
 /// </summary>
 public static class LayoutStartupCheck {
+    // XAF Blazor builds one XafApplication per circuit, so without this the whole forced generation would run again
+    // for every user session. Only a completed run counts: an application that fails the check keeps failing loudly.
+    static readonly ConcurrentDictionary<Type, bool> Checked = new();
+
     public static void Run(XafApplication application) {
+        if (Checked.ContainsKey(application.GetType())) return;
         var views = application.Model.Views;
         foreach (var modelClass in application.Model.BOModel) {
             if (modelClass.TypeInfo?.Type is not { } type) continue;
@@ -25,6 +31,7 @@ public static class LayoutStartupCheck {
                     Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
             }
         }
+        Checked[application.GetType()] = true;
     }
 
     static TView Required<TView>(IModelViews views, string id, Type type, string what) where TView : class, IModelView =>

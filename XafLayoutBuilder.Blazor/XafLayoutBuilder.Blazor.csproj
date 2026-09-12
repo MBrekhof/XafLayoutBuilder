@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Blazor add-on for XafLayoutBuilder: the Copy button on the export popup. The Module stays platform neutral.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DevExpress.ExpressApp.Blazor" Version="26.1.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XafLayoutBuilder.Module\XafLayoutBuilder.Module.csproj" />
+  </ItemGroup>
+</Project>

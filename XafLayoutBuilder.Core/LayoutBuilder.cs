@@ -6,6 +6,7 @@ namespace XafLayoutBuilder.Core;
 public sealed class LayoutBuilder<T> {
     readonly List<LayoutNodeSpec> nodes = [];
     readonly HashSet<string> hidden = [];
+    UnplacedMembers unplaced = UnplacedMembers.Fail;
 
     LayoutBuilder() { }
 
@@ -38,6 +39,17 @@ public sealed class LayoutBuilder<T> {
     }
 
     /// <summary>
+    /// What happens to a visible member this layout neither places nor hides. The default is
+    /// <see cref="UnplacedMembers.Fail"/>: startup stops with XLB002 naming the member, so a property added to the
+    /// class cannot quietly vanish from the form. <see cref="UnplacedMembers.AppendToGroup"/> relaxes that for this
+    /// class by collecting whatever is left in one group at the end of the form.
+    /// </summary>
+    public LayoutBuilder<T> Unplaced(UnplacedMembers policy) {
+        unplaced = policy ?? UnplacedMembers.Fail;
+        return this;
+    }
+
+    /// <summary>
     /// Validates and freezes. Throws <see cref="LayoutSpecException"/> on: a member placed twice, a member both placed
     /// and hidden, a group id used twice in the view, and a group and an item with the same id under the same parent
     /// (XAF requires unique ids among siblings; an item's id is its member name). Parent/child reuse is fine, which is
@@ -48,7 +60,11 @@ public sealed class LayoutBuilder<T> {
         var members = new HashSet<string>(StringComparer.Ordinal);
         Walk(nodes);
 
-        return new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray());
+        // The catch-all group is created next to the layout's own top-level nodes, so its id has to be free.
+        if (unplaced.GroupId is { } catchAll && !groupIds.Add(catchAll))
+            throw new LayoutSpecException($"{typeof(T).Name}: group id '{catchAll}' is used twice (once by Unplaced).");
+
+        return new DetailLayoutSpec(typeof(T).FullName!, nodes.ToArray(), hidden.ToArray(), unplaced.GroupId);
 
         void Walk(IEnumerable<LayoutNodeSpec> siblings) {
             var siblingIds = new HashSet<string>(StringComparer.Ordinal);

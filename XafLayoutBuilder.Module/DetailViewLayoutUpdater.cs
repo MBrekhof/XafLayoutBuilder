@@ -29,16 +29,32 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
         main.ShowCaption = false;
         for (var i = 0; i < spec.Nodes.Count; i++) Add(main, spec.Nodes[i], i, inTab: false);
 
-        // XLB002: every visible member must be placed or hidden, so a new property cannot silently vanish.
+        // Every visible member must be placed or hidden. The default is to fail (XLB002) so a property added to the
+        // class cannot silently vanish from the form; .Unplaced(UnplacedMembers.AppendToGroup(id)) relaxes it.
         var unplaced = viewItems.OfType<IModelPropertyEditor>()
             .Where(pe => pe.ModelMember?.IsVisibleInDetailView != false)
             .Select(pe => ((IModelViewItem)pe).Id)
             .Where(id => !placed.Contains(id) && !spec.HiddenMembers.Contains(id))
             .ToList();
-        if (unplaced.Count > 0)
-            throw new LayoutSpecException(
-                $"XLB002 {view.Id}: members not placed and not hidden: {string.Join(", ", unplaced)}. " +
-                $"Add .Item(x => x.{unplaced[0]}) or .Hide(x => x.{unplaced[0]}) to {type.Name}'s layout.");
+        if (unplaced.Count > 0) {
+            if (spec.UnplacedGroupId is not { } catchAll)
+                throw new LayoutSpecException(
+                    $"XLB002 {view.Id}: members not placed and not hidden: {string.Join(", ", unplaced)}. " +
+                    $"Add .Item(x => x.{unplaced[0]}) or .Hide(x => x.{unplaced[0]}) to {type.Name}'s layout, " +
+                    $"or relax it for this class with .Unplaced(UnplacedMembers.AppendToGroup(\"Other\")).");
+            var catchAllGroup = main.AddNode<IModelLayoutGroup>(catchAll);
+            catchAllGroup.Index = spec.Nodes.Count;
+            catchAllGroup.Direction = XafFlow.Vertical;
+            catchAllGroup.ShowCaption = true;
+            // Set the caption rather than leaving XAF to compute it: a group holding one item takes that item's
+            // caption, so a catch-all called "Other" with a single leftover member would be headed "City".
+            catchAllGroup.Caption = catchAll;
+            for (var i = 0; i < unplaced.Count; i++) {
+                var item = catchAllGroup.AddNode<IModelLayoutViewItem>(unplaced[i]);
+                item.ViewItem = viewItems[unplaced[i]];
+                item.Index = i;
+            }
+        }
 
         void Add(IModelNode parent, LayoutNodeSpec n, int index, bool inTab) {
             switch (n) {

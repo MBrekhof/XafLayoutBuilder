@@ -27,5 +27,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XafLayoutBuilder.Sample.Module\XafLayoutBuilder.Sample.Module.csproj" />
+    <ProjectReference Include="../XafLayoutBuilder.Blazor/XafLayoutBuilder.Blazor.csproj" />
   </ItemGroup>
 </Project>

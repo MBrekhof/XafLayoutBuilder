@@ -33,6 +33,7 @@ public class Startup {
             builder.UseApplication<SampleBlazorApplication>();
             builder.Modules
                 .Add<XafLayoutBuilder.Sample.Module.SampleModule>()
+                .Add<XafLayoutBuilder.Blazor.XafLayoutBuilderBlazorModule>()
                 .Add<SampleBlazorModule>();
             builder.ObjectSpaceProviders
                 .AddSecuredEFCore(options => {

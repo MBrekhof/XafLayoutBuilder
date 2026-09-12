@@ -17,6 +17,9 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
     // generated column's order here and clears Index; ModelColumnDomainLogic.Get_Index reads it while Index is null
     // and returns -1 instead when IModelListView.FreezeColumnIndices is set. Going through the same value keeps
     // that freeze, and every explicit Index in a diff layer, working exactly as for stock columns.
+    // This literal is the one thing here that a DevExpress release can rename. If it ever happens, hidden columns
+    // reappear and the order goes natural, which fails the E2E gate's "columns are Number, Customer, Order Date in
+    // that order" assertion in E2E 2 (XafLayoutBuilder.E2ETests/Program.cs). Start there.
     const string GeneratedIndex = "GeneratedIndex";
 
     public override void UpdateNode(ModelNode node) {
