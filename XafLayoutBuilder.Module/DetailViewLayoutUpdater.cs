@@ -23,7 +23,17 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
 
         var layout = (IModelViewLayout)node;
         var viewItems = view.Items;
-        var placed = new HashSet<string>(StringComparer.Ordinal);
+
+        // Check first, change second. XAF marks the layout as generated even when an updater throws
+        // (ModelNode._RunNodesGenerator1, docs/api-notes.md), so a failure halfway through the rebuild would leave a
+        // half-applied layout behind for good. A rejected spec leaves XAF's own generated layout as it was.
+        // Every visible member must be placed or hidden. The default is to fail (XLB002) so a property added to the
+        // class cannot silently vanish from the form; .Unplaced(UnplacedMembers.AppendToGroup(id)) relaxes it.
+        var unplaced = LayoutSpecChecks.CheckAgainstView(spec, view.Id,
+            viewItems.Select(item => item.Id),
+            viewItems.OfType<IModelPropertyEditor>()
+                .Where(pe => pe.ModelMember?.IsVisibleInDetailView != false)
+                .Select(pe => ((IModelViewItem)pe).Id));
 
         foreach (var element in layout.ToList()) element.Remove();
         var main = node.AddNode<IModelLayoutGroup>(ModelDetailViewLayoutNodesGenerator.MainLayoutGroupName);
@@ -32,19 +42,7 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
         main.ShowCaption = false;
         for (var i = 0; i < spec.Nodes.Count; i++) Add(main, spec.Nodes[i], i, inTab: false);
 
-        // Every visible member must be placed or hidden. The default is to fail (XLB002) so a property added to the
-        // class cannot silently vanish from the form; .Unplaced(UnplacedMembers.AppendToGroup(id)) relaxes it.
-        var unplaced = viewItems.OfType<IModelPropertyEditor>()
-            .Where(pe => pe.ModelMember?.IsVisibleInDetailView != false)
-            .Select(pe => ((IModelViewItem)pe).Id)
-            .Where(id => !placed.Contains(id) && !spec.HiddenMembers.Contains(id))
-            .ToList();
-        if (unplaced.Count > 0) {
-            if (spec.UnplacedGroupId is not { } catchAll)
-                throw new LayoutSpecException(
-                    $"XLB002 {view.Id}: members not placed and not hidden: {string.Join(", ", unplaced)}. " +
-                    $"Add .Item(x => x.{unplaced[0]}) or .Hide(x => x.{unplaced[0]}) to {type.Name}'s layout, " +
-                    $"or relax it for this class with .Unplaced(UnplacedMembers.AppendToGroup(\"Other\")).");
+        if (unplaced.Count > 0 && spec.UnplacedGroupId is { } catchAll) {
             var catchAllGroup = main.AddNode<IModelLayoutGroup>(catchAll);
             catchAllGroup.Index = spec.Nodes.Count;
             catchAllGroup.Direction = XafFlow.Vertical;
@@ -65,15 +63,11 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
         void Add(IModelNode parent, LayoutNodeSpec n, int index, bool inTab) {
             switch (n) {
                 case LayoutItemSpec item: {
-                    var editor = viewItems[item.Member]
-                        ?? throw new LayoutSpecException(
-                            $"XLB001 {view.Id}: member '{item.Member}' has no Items entry. Is it [Browsable(false)] or [VisibleInDetailView(false)]?");
                     var li = parent.AddNode<IModelLayoutViewItem>(item.Member);
-                    li.ViewItem = editor;
+                    li.ViewItem = viewItems[item.Member]; // present: CheckAgainstView threw XLB001 otherwise
                     li.Index = index;
                     if (inTab) li.ShowCaption = false; // same as the stock generator for a collection on its own tab
                     if (item.RelativeSize is { } size) li.RelativeSize = size;
-                    placed.Add(item.Member);
                     break;
                 }
                 case LayoutGroupSpec g: {

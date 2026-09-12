@@ -35,6 +35,11 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         else if (view.Id != type.Name + "_ListView") return; // ponytail: default ListView only; nested/variants are phase 2
 
         var columns = (IModelColumns)node;
+        // Check first, change second (see DetailViewLayoutUpdater): every member that will need a new column has to be
+        // able to have one before any existing column is reindexed.
+        foreach (var member in spec.Columns.Select(c => c.Member).Concat(spec.HiddenMembers))
+            if (columns[member] is null) RequireColumnMember(member);
+
         var listed = new HashSet<string>(StringComparer.Ordinal);
         var sortIndex = 0;
         for (var i = 0; i < spec.Columns.Count; i++) {
@@ -74,11 +79,14 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         // hidden by attribute. A listed or hidden member gets its column the way the generator makes one:
         // AddNode<IModelColumn>(name) + PropertyName (ModelListViewNodesGenerator.cs 437-442; View_ID only matters
         // for list-property editors, which cannot be columns).
-        IModelColumn AddColumn(string member) {
+        void RequireColumnMember(string member) {
             var modelMember = view.ModelClass.FindMember(member)
                 ?? throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is not a member of {type.Name}.");
             if (modelMember.MemberInfo.MemberTypeInfo.IsListType)
                 throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is a collection and cannot be a column.");
+        }
+
+        IModelColumn AddColumn(string member) {
             var column = columns.AddNode<IModelColumn>(member);
             column.PropertyName = member;
             return column;

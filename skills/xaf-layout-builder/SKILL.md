@@ -106,6 +106,9 @@ hidden, `Lookup` inside `Lookup`, a non-simple member lambda.
 The same rules, plus a blank id or member name, hold for a spec that never went through a builder
 (a record constructed by hand, reshaped with `with`, or loaded from JSON): `LayoutRegistry.Register`
 and the module check it before applying it, and `LayoutSpecChecks.Validate(spec)` runs them on demand.
+`LayoutSpecChecks.CheckAgainstView(spec, viewId, itemIds, visibleEditorIds)` runs XLB001 and XLB002
+against a view's item ids without an XAF application; the module runs it before it changes a layout,
+so a rejected spec leaves XAF's generated layout untouched.
 
 ## Startup diagnostics
 

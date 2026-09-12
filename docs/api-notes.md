@@ -24,6 +24,12 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `Model/ModelNodeGenerator.cs` lines 50-64, 113-122]
 - `ModelNodesGeneratorUpdater<T>` also implements `ISupportCachedNodesGeneratorUpdater`; `T` must
   derive from `ModelNodesGeneratorBase`. [source `Model/ModelNodesGeneratorUpdater.cs`]
+- **An updater that throws leaves its partial work behind.** `GenerateNodes` runs the stock generator
+  and then every updater, inside `ModelNode._RunNodesGenerator1`, whose `finally` sets
+  `IsNodesGeneratorInProgress = false`, which marks the node `Done`. Generation is not retried, so
+  code that catches the exception sees whatever the updater had written by then. Both updaters
+  therefore check everything before they change anything (APPLY-001). [source
+  `Model/ModelNodeGenerator.cs` lines 50-65; `Model/Core/ModelNode.cs` lines 2219-2229 and 445-458]
 
 ## Layout model interfaces (`Model/IModelDetailView.cs`)
 

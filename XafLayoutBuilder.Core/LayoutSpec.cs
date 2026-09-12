@@ -71,8 +71,11 @@ public sealed record DetailLayoutSpec(
     public IReadOnlyList<LayoutNodeSpec> Nodes { get => nodes; init => nodes = value.Frozen(); }
     public IReadOnlyList<string> HiddenMembers { get => hiddenMembers; init => hiddenMembers = value.Frozen(); }
 
+    /// <summary>Every member the layout places, depth first. A tree walk, never <see cref="Members"/> minus the hidden ones.</summary>
+    public IEnumerable<string> PlacedMembers() => Nodes.SelectMany(Walk);
+
     /// <summary>Every member the layout references, placed then hidden, depth first.</summary>
-    public IEnumerable<string> Members() => Nodes.SelectMany(Walk).Concat(HiddenMembers);
+    public IEnumerable<string> Members() => PlacedMembers().Concat(HiddenMembers);
 
     static IEnumerable<string> Walk(LayoutNodeSpec n) => n switch {
         LayoutItemSpec i => [i.Member],
@@ -192,6 +195,30 @@ public static class LayoutSpecChecks {
                 if (hidden.Contains(c.Member)) throw new LayoutSpecException($"{type}: column '{c.Member}' is both listed and hidden.");
             }
         }
+    }
+
+    /// <summary>
+    /// Checks a detail spec against the view it is about to be applied to, changing nothing, and returns the visible
+    /// editors the layout neither places nor hides, in view-item order: what a catch-all group collects.
+    /// <paramref name="viewItems"/> are the ids of the view's items, <paramref name="visibleEditors"/> the ids of its
+    /// property editors whose member is visible in the DetailView. Throws XLB001 when a placed member has no view item,
+    /// and XLB002 when something is left over and the spec has no catch-all group.
+    /// </summary>
+    public static IReadOnlyList<string> CheckAgainstView(DetailLayoutSpec spec, string viewId, IEnumerable<string> viewItems, IEnumerable<string> visibleEditors) {
+        var items = viewItems.ToHashSet(StringComparer.Ordinal);
+        if (spec.PlacedMembers().FirstOrDefault(m => !items.Contains(m)) is { } missing)
+            throw new LayoutSpecException(
+                $"XLB001 {viewId}: member '{missing}' has no Items entry. Is it [Browsable(false)] or [VisibleInDetailView(false)]?");
+
+        var placed = spec.PlacedMembers().ToHashSet(StringComparer.Ordinal);
+        var hidden = spec.HiddenMembers.ToHashSet(StringComparer.Ordinal);
+        var unplaced = visibleEditors.Where(id => !placed.Contains(id) && !hidden.Contains(id)).Distinct().ToList();
+        if (unplaced.Count > 0 && spec.UnplacedGroupId is null)
+            throw new LayoutSpecException(
+                $"XLB002 {viewId}: members not placed and not hidden: {string.Join(", ", unplaced)}. " +
+                $"Add .Item(x => x.{unplaced[0]}) or .Hide(x => x.{unplaced[0]}) to {ShortName(spec.TypeName)}'s layout, " +
+                $"or relax it for this class with .Unplaced(UnplacedMembers.AppendToGroup(\"Other\")).");
+        return unplaced;
     }
 
     // Messages name the type the way typeof(T).Name does: "Order" for "Sample.Order", "Inner" for "Sample.Outer+Inner".
