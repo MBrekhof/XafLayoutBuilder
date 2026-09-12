@@ -39,6 +39,38 @@ public static class LayoutRegistry {
         Interlocked.Increment(ref version);
     }
 
+    /// <summary>
+    /// Registers a <see cref="LayoutSpecs"/> JSON document, the form the JSON export writes, for <typeparamref name="T"/>.
+    /// <paramref name="json"/> is read inside the factories, when a view is resolved, so malformed JSON or a half written
+    /// for another type is a layout error governed by <see cref="XafLayoutBuilderModule.FailFastOnLayoutErrors"/>. Each half
+    /// is read and checked on its own, like the two factories of <see cref="Register{T}(Func{DetailLayoutSpec?}?, Func{ListColumnsSpec?}?)"/>.
+    /// </summary>
+    public static void RegisterJson<T>(Func<string> json) => Register<T>(
+        () => ForType<T, DetailLayoutSpec>(ReadHalf<T, DetailLayoutSpec>(json(), "detail"), s => s.TypeName),
+        () => ForType<T, ListColumnsSpec>(ReadHalf<T, ListColumnsSpec>(json(), "columns"), s => s.TypeName));
+
+    // Parses the document, then deserialises only the requested half, so a broken detail cannot cost the columns their
+    // spec or the other way round. Malformed JSON still fails both halves: neither can be read from it.
+    static TSpec? ReadHalf<T, TSpec>(string json, string half) where TSpec : class {
+        try {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                throw new LayoutSpecException($"Layout JSON registered for {typeof(T).FullName} is not an object with detail and columns.");
+            foreach (var property in document.RootElement.EnumerateObject())
+                if (string.Equals(property.Name, half, StringComparison.OrdinalIgnoreCase))
+                    return System.Text.Json.JsonSerializer.Deserialize<TSpec>(property.Value, LayoutSpecJson.Options);
+            return null;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or NotSupportedException) {
+            throw new LayoutSpecException($"Invalid layout JSON for the {half} of {typeof(T).FullName}: {ex.Message}");
+        }
+    }
+
+    static TSpec? ForType<T, TSpec>(TSpec? spec, Func<TSpec, string> typeName) where TSpec : class =>
+        spec is null || typeName(spec) == typeof(T).FullName
+            ? spec
+            : throw new LayoutSpecException($"Layout JSON registered for {typeof(T).FullName} describes {typeName(spec)}.");
+
     /// <summary>Test hook. Not needed by applications.</summary>
     public static void Clear() {
         Entries.Clear();

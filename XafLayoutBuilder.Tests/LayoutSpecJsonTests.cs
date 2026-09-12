@@ -17,6 +17,27 @@ public class LayoutSpecJsonTests {
         Assert.Contains("\"$type\": \"tabs\"", json);
     }
 
+    // One document per type, the form the export writes and RegisterJson reads (JSON-001).
+    [Fact]
+    public void TypeDocument_RoundTrips_AndOmitsAMissingHalf() {
+        var both = new LayoutSpecs(LayoutBuilderTests.Section4Detail(), ListViewColumnsBuilderTests.Section4Columns());
+        var json = LayoutSpecJson.Serialize(both);
+
+        Assert.Equal(json, LayoutSpecJson.Serialize(LayoutSpecJson.Deserialize<LayoutSpecs>(json)));
+        Assert.Contains("\"detail\": {", json);
+        Assert.Contains("\"columns\": {", json);
+
+        var detailOnly = LayoutSpecJson.Serialize(both with { Columns = null });
+        Assert.DoesNotContain("\"columns\"", detailOnly);
+        Assert.Null(LayoutSpecJson.Deserialize<LayoutSpecs>(detailOnly).Columns);
+    }
+
+    [Fact]
+    public void MalformedJson_ThrowsLayoutSpecException() {
+        var ex = Assert.Throws<LayoutSpecException>(() => LayoutSpecJson.Deserialize<LayoutSpecs>("{ not json"));
+        Assert.Contains("layout JSON", ex.Message);
+    }
+
     [Fact]
     public void ListColumns_RoundTrips_IncludingLookup() {
         var spec = ListViewColumnsBuilderTests.Section4Columns();

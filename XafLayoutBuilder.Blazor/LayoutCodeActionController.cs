@@ -19,13 +19,14 @@ namespace XafLayoutBuilder.Blazor;
 public abstract class LayoutCodeActionController : ViewController<ObjectView> {
     int running;
 
-    protected SimpleAction CreateAction(string id, string caption, string imageName, string toolTip) {
+    /// <param name="json">Hand <see cref="ExecuteAsync"/> the <c>{Type}.layout.json</c> document instead of the printed C#.</param>
+    protected SimpleAction CreateAction(string id, string caption, string imageName, string toolTip, bool json = false) {
         var action = new SimpleAction(this, id, PredefinedCategory.Tools) {
             Caption = caption,
             ImageName = imageName,
             ToolTip = toolTip,
         };
-        action.Execute += (_, _) => _ = RunAsync(action);
+        action.Execute += (_, _) => _ = RunAsync(action, json);
         return action;
     }
 
@@ -38,13 +39,13 @@ public abstract class LayoutCodeActionController : ViewController<ObjectView> {
         }
     }
 
-    /// <summary>Does the work. Called with the printed code for the current view and XAF's JS runtime.</summary>
+    /// <summary>Does the work. Called with the printed code (or JSON) for the current view and XAF's JS runtime.</summary>
     protected abstract Task ExecuteAsync(IXafJSRuntime js, string fileName, string code);
 
-    async Task RunAsync(ActionBase action) {
+    async Task RunAsync(ActionBase action, bool json) {
         if (Interlocked.Exchange(ref running, 1) == 1) return; // still busy with the previous click
         try {
-            var (fileName, code) = LayoutCodePrinter.ForView(Application, View);
+            var (fileName, code) = json ? LayoutCodePrinter.JsonForView(Application, View) : LayoutCodePrinter.ForView(Application, View);
             var js = ((BlazorApplication)Application).ServiceProvider.GetRequiredService<IXafJSRuntime>();
             await ExecuteAsync(js, fileName, code);
         }

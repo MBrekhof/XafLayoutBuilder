@@ -14,6 +14,8 @@ using Microsoft.Playwright;
 //   E2E 5   Export Layout To Code prints OrderDate under Details
 //   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
+//   JSON-001 Export Layout To JSON, read back and printed as C#, gives the popup's builder expressions; Download Layout
+//            JSON hands over Order.layout.json with that same document
 //   E2E 6   deleting the user differences brings the builder layout back
 //   DIFF-001 a user difference aimed at the stock path Main/SimpleEditors is not rendered and is gone from the stored
 //            user model after the next save, while the same difference's caption on a builder group applies and is kept
@@ -366,6 +368,38 @@ try
     Console.WriteLine($"    downloaded {download.SuggestedFilename}, {downloaded.Length} chars");
     Assert(download.SuggestedFilename == "Order.Layout.cs", $"the file is named after the type (got {download.SuggestedFilename})");
     Assert(WithoutComments(downloaded) == WithoutComments(exported), "the downloaded file holds the same class the popup showed");
+
+    Step("JSON-001: Export Layout To JSON and Download Layout JSON describe the layout the C# export printed");
+    // Both forms come from one export. Read back through LayoutSpecJson and printed as C#, the JSON document has to give
+    // the builder expressions the C# popup showed in E2E 5 (the same merged layout, user layer included).
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var exportJsonAction = page.GetByText("Export Layout To JSON", new() { Exact = true }).First;
+    await exportJsonAction.WaitForAsync(new() { Timeout = 10_000 });
+    await exportJsonAction.ClickAsync();
+    const string isJsonExport = "t => t.value.trimStart().startsWith('{')";
+    await page.WaitForFunctionAsync($"() => [...document.querySelectorAll('textarea')].some({isJsonExport})", null, new() { Timeout = 15_000 });
+    var exportedJson = (await page.EvaluateAsync<string>($"() => [...document.querySelectorAll('textarea')].find({isJsonExport}).value")).Replace("\r", "");
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-19-export-json-popup.png") });
+    await ClosePopup(page);
+    var jsonSpecs = XafLayoutBuilder.Core.LayoutSpecJson.Deserialize<XafLayoutBuilder.Core.LayoutSpecs>(exportedJson);
+    Assert(jsonSpecs.Detail?.TypeName == "XafLayoutBuilder.Sample.Module.BusinessObjects.Order" && jsonSpecs.Columns?.TypeName == jsonSpecs.Detail?.TypeName,
+        "the JSON document holds Order's detail layout and its columns");
+    var jsonAsCode = XafLayoutBuilder.Core.CSharpLayoutPrinter.PrintClass("XafLayoutBuilder.Sample.Module.BusinessObjects", "Order", jsonSpecs.Detail, jsonSpecs.Columns);
+    foreach (var expressionStart in new[] { "LayoutBuilder<Order>.Create()", "ListViewColumnsBuilder<Order>.Create()" })
+        Assert(NormalizeCode(BuilderExpression(jsonAsCode, expressionStart)) == NormalizeCode(BuilderExpression(exported, expressionStart)),
+            $"the JSON, printed as C#, gives the C# popup's {expressionStart} expression");
+
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var downloadJsonAction = page.GetByText("Download Layout JSON", new() { Exact = true }).First;
+    await downloadJsonAction.WaitForAsync(new() { Timeout = 10_000 });
+    var jsonDownload = await page.RunAndWaitForDownloadAsync(async () => await downloadJsonAction.ClickAsync(), new() { Timeout = 30_000 });
+    var jsonDownloadedPath = Path.Combine(screenshotDir, "e2e-19-downloaded-Order.layout.json");
+    await jsonDownload.SaveAsAsync(jsonDownloadedPath);
+    var downloadedJson = (await File.ReadAllTextAsync(jsonDownloadedPath)).Replace("\r", "");
+    Console.WriteLine($"    downloaded {jsonDownload.SuggestedFilename}, {downloadedJson.Length} chars");
+    Assert(jsonDownload.SuggestedFilename == "Order.layout.json", $"the JSON file is named after the type (got {jsonDownload.SuggestedFilename})");
+    Assert(downloadedJson == exportedJson, "the downloaded JSON is the document the popup showed");
 
     Step("E2E 6: resetting the user model brings the builder layout back");
     KillApp(ref app);

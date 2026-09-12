@@ -9,4 +9,8 @@
     <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.6" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- JSON-001: the gate reads the exported JSON back and prints it as C#. Core has no DevExpress dependency. -->
+    <ProjectReference Include="..\XafLayoutBuilder.Core\XafLayoutBuilder.Core.csproj" />
+  </ItemGroup>
 </Project>

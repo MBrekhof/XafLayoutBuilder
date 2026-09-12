@@ -31,19 +31,30 @@ public sealed class ExportLayoutController : ViewController<ObjectView> {
 
     public SimpleAction ExportLayoutAction { get; }
 
+    /// <summary>The same export as a <c>LayoutSpecs</c> JSON document, the form <c>LayoutRegistry.RegisterJson</c> reads.</summary>
+    public SimpleAction ExportLayoutJsonAction { get; }
+
     public ExportLayoutController() {
         ExportLayoutAction = new SimpleAction(this, "ExportLayoutToCode", PredefinedCategory.Tools) {
             Caption = "Export Layout To Code",
             ImageName = "Action_Export",
             ToolTip = "Print this type's DetailView layout and ListView columns as XafLayoutBuilder C#",
         };
-        ExportLayoutAction.Execute += (_, e) => Export();
+        ExportLayoutAction.Execute += (_, e) => Show(LayoutCodePrinter.ForView(Application, View));
+        ExportLayoutJsonAction = new SimpleAction(this, "ExportLayoutToJson", PredefinedCategory.Tools) {
+            Caption = "Export Layout To JSON",
+            ImageName = "Action_Export",
+            ToolTip = "Print this type's DetailView layout and ListView columns as a LayoutSpecs JSON document",
+        };
+        ExportLayoutJsonAction.Execute += (_, e) => Show(LayoutCodePrinter.JsonForView(Application, View));
     }
 
     protected override void OnActivated() {
         base.OnActivated();
-        ExportLayoutAction.Active[EnabledKey] = IsEnabled;
-        ExportLayoutAction.Active[AdminKey] = IsAdministrator();
+        foreach (var action in new[] { ExportLayoutAction, ExportLayoutJsonAction }) {
+            action.Active[EnabledKey] = IsEnabled;
+            action.Active[AdminKey] = IsAdministrator();
+        }
     }
 
     /// <summary>The same gate the Blazor add-on's clipboard action uses.</summary>
@@ -60,8 +71,8 @@ public sealed class ExportLayoutController : ViewController<ObjectView> {
             && u.Roles.Any(r => r is IPermissionPolicyRole { IsAdministrative: true });
     }
 
-    void Export() {
-        var (fileName, code) = LayoutCodePrinter.ForView(Application, View);
+    void Show((string FileName, string Text) printed) {
+        var (fileName, code) = printed;
         var os = Application.CreateObjectSpace(typeof(LayoutCode));
         var layoutCode = os.CreateObject<LayoutCode>();
         layoutCode.Code = code;

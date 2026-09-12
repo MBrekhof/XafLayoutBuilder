@@ -67,7 +67,9 @@ That file is the sample's only layout source for `Order`; the sample module has 
 - **The app is the designer.** "Export Layout To Code" prints any type's current layout, every
   layer applied, back as the same C#. Arrange it in the running app, paste the code, commit. With
   the Blazor add-on referenced, "Copy Layout To Clipboard" puts it on the clipboard and "Download
-  Layout File" saves it as `{Type}.Layout.cs`, both in one click.
+  Layout File" saves it as `{Type}.Layout.cs`, both in one click. "Export Layout To JSON" and
+  "Download Layout JSON" give the same export as a JSON document that `LayoutRegistry.RegisterJson`
+  loads, for layouts kept as data.
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
@@ -140,7 +142,8 @@ file.
 3. Add a partial `{Type}.Layout.cs` implementing `ISupportViewLayoutCustomization`, or call
    `LayoutRegistry.Register<T>(detail, columns)` for types you do not own. Registration checks
    nothing: every rule is applied when the view is built, under `FailFastOnLayoutErrors`. Pass
-   factories (`Register<T>(() => ..., () => ...)`) when building the spec could throw.
+   factories (`Register<T>(() => ..., () => ...)`) when building the spec could throw, or
+   `RegisterJson<T>(() => json)` for a layout kept as a `LayoutSpecs` JSON document.
 4. Optionally set `XafLayoutBuilderModule.EnableExport` from your configuration, so administrators
    see the export action without a debugger attached. Never from an environment variable.
 5. Set `XafLayoutBuilderModule.FailFastOnLayoutErrors` from your configuration: on in development
@@ -257,7 +260,8 @@ docs/                                   how-it-works, api-notes, cases (from gen
 - **XafMergerTool** stays the answer for stock XAF, where XAFML is the only source form. It can gain
   an "export as builder C#" option by referencing `XafLayoutBuilder.Core`.
 - A code generator can emit `LayoutSpec` for generated applications, as C# through the printer or
-  later as JSON (`LayoutSpecJson` already round-trips).
+  as a `LayoutSpecs` JSON document registered with `LayoutRegistry.RegisterJson<T>`, the same form
+  "Export Layout To JSON" writes from the running app.
 - **xafskills** receives a copy of the skill on release.
 
 ## License

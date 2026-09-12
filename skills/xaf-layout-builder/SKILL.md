@@ -77,6 +77,11 @@ layout error. When building the spec can throw, register factories instead
 (`LayoutRegistry.Register<T>(() => ..., () => ...)`), so that exception is governed the same way; a
 `Build()` written directly in the arguments throws in your own startup code.
 
+A layout kept as data registers with `LayoutRegistry.RegisterJson<T>(() => File.ReadAllText(path))`:
+one `LayoutSpecs` document (`LayoutSpecJson.Serialize(new LayoutSpecs(detail, columns))`, or the
+file Download Layout JSON saves). The JSON is read when a view is built, each half on its own, so
+malformed JSON or a half whose `typeName` is another type is a layout error like the others.
+
 ## DetailView surface
 
 - `LayoutBuilder<T>.Create()`, then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Hide(x => x.M)`,
@@ -168,7 +173,12 @@ names the view ids it read. It writes nothing to disk.
 
 In a Blazor host that also references `XafLayoutBuilder.Blazor`, the same Tools tab has two more
 actions that skip the popup: **Copy Layout To Clipboard**, and **Download Layout File**, which
-saves `{Type}.Layout.cs` straight to the downloads folder. All three print the identical text. XAF
+saves `{Type}.Layout.cs` straight to the downloads folder. All three print the identical text.
+
+**Export Layout To JSON** shows the same export as one `LayoutSpecs` JSON document (`detail` and
+`columns`), and **Download Layout JSON** saves it as `{Type}.layout.json`. That is the form
+`LayoutRegistry.RegisterJson<T>(() => File.ReadAllText(path))` reads and a generator can emit. JSON
+has no comments, so the view ids and skipped items the C# export lists are not in it. XAF
 Blazor renders only OK and Cancel inside a popup for a non-persistent object, which is why the
 buttons are not in the popup itself.
 
