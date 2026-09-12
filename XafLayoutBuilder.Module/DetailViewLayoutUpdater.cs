@@ -16,6 +16,19 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
     internal const string CatchAllMarker = "XafLayoutBuilder.UnplacedGroup";
 
     public override void UpdateNode(ModelNode node) {
+        // With XafLayoutBuilderModule.FailFastOnLayoutErrors off (the default) a spec that cannot be applied is logged and
+        // the view keeps XAF's generated layout, which is intact because Apply checks everything before it changes anything.
+        // ponytail: an exception from the rebuild itself, after the checks passed, would still leave a partial layout;
+        // the checks cover every failure known to occur.
+        try {
+            Apply(node);
+        }
+        catch (Exception ex) when (!XafLayoutBuilderModule.FailFastOnLayoutErrors) {
+            DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
+        }
+    }
+
+    static void Apply(ModelNode node) {
         if (node.Parent is not IModelDetailView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
         if (view.Id != type.Name + "_DetailView") return; // ponytail: default DetailView only; variants/nested ids are phase 2
         var spec = LayoutSpecResolver.Detail(type);

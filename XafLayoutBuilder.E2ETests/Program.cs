@@ -17,6 +17,7 @@ using Microsoft.Playwright;
 //   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   Session 5: the host started with --break-layout exits at startup reporting both XLB001 and XLB003
+//   CHECK-002: the same fixture with FailFastOnLayoutErrors off serves XAF's own layout and logs both diagnostics
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
@@ -406,6 +407,47 @@ try
     Assert(line.Contains("XLB001"), "XLB001 is reported in the host output");
     Assert(line.Contains("Customer_DetailView") && line.Contains("InternalCode"), "the diagnostic names the view id and the member");
     Assert(columnLine.Contains("Order_ListView") && columnLine.Contains("Lines"), "XLB003 for Order_ListView is reported in the same startup");
+
+    Step("CHECK-002: with FailFastOnLayoutErrors off, the broken layouts are logged and the host serves XAF's own layout");
+    // The switch defaults to off; the sample turns it on in appsettings.Development.json and the command line turns it
+    // off again here. XAF traces to eXpressAppFramework.log next to the executable, a file that grows across runs, so
+    // only what this start appends is searched.
+    KillApp(ref app);
+    lock (appOutput) appOutput.Clear();
+    var xafLog = Path.Combine(blazorProj, "bin", "Debug", "net10.0", "eXpressAppFramework.log");
+    var logStart = File.Exists(xafLog) ? new FileInfo(xafLog).Length : 0;
+    // The override has to come first: .NET's command-line configuration reads "--key value", so a bare --break-layout
+    // would swallow the next argument as its own value and leave the appsettings value in charge.
+    app = StartApp(blazorProj, appOutput, "--XafLayoutBuilder:FailFastOnLayoutErrors=false --break-layout");
+    await WaitForHttpOk(app, appOutput);
+    Assert(await IsServing(), "the host serves despite two broken layouts");
+    for (var attempt = 0; attempt < 3; attempt++) {
+        try { await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle }); }
+        catch (PlaywrightException ex) when (ex.Message.Contains("interrupted")) { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); continue; }
+        if (page.Url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase)) { await Login(page); continue; }
+        if (page.Url.Contains("Customer_ListView", StringComparison.OrdinalIgnoreCase)) break;
+    }
+    await page.GetByText("Acme Corp", new() { Exact = true }).First.ClickAsync();
+    await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'Acme Corp')", null, new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-16-degraded-customer.png") });
+    var degradedForm = page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First;
+    var degradedGroups = await degradedForm.EvaluateAsync<string[]>(
+        @"f => [...f.querySelectorAll('[role=group].dxbl-fl-group')].map(g => g.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? '(no header)')");
+    Console.WriteLine("    Customer groups: " + string.Join(" | ", degradedGroups));
+    Assert(await degradedForm.Locator("label.xaf-item-city").CountAsync() > 0, "Customer's DetailView still shows City");
+    Assert(!degradedGroups.Contains("Identification") && !degradedGroups.Contains("Other"),
+        $"no builder layout was applied to Customer: XAF's own layout renders (got {string.Join(",", degradedGroups)})");
+    await page.GotoAsync($"{BaseUrl}/Order_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.GetByText("ORD-001", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+    Assert(await page.GetByText("ORD-001", new() { Exact = true }).CountAsync() > 0, "Order_ListView, whose columns spec was rejected, still lists its orders");
+    string appendedLog;
+    using (var stream = new FileStream(xafLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+        stream.Seek(logStart, SeekOrigin.Begin);
+        appendedLog = new StreamReader(stream).ReadToEnd();
+    }
+    Assert(appendedLog.Contains("XLB001 Customer_DetailView"), "XLB001 is written to eXpressAppFramework.log");
+    Assert(appendedLog.Contains("XLB003 Order_ListView"), "XLB003 is written to eXpressAppFramework.log");
 
     Console.WriteLine("\n=== E2E PASSED ===");
 }

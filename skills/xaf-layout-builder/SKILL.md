@@ -77,7 +77,7 @@ Registration throws if a spec names a member the type does not have.
 - `Collapsible()` always shows the group caption, because XAF Blazor puts the toggle in the caption
   header. A group without an explicit caption and with one item shows that item's caption.
 - `Hide` removes the editor from the DetailView entirely.
-- Every visible member must be placed or hidden, or startup fails with XLB002 naming it. To opt out
+- Every visible member must be placed or hidden, or the layout is rejected with XLB002 naming it. To opt out
   for one class, `.Unplaced(UnplacedMembers.AppendToGroup("Other"))` puts everything the layout does
   not mention into a group with that id at the end of the form. The strict default is deliberate:
   it is what stops a new property from disappearing unnoticed.
@@ -113,8 +113,17 @@ so a rejected spec leaves XAF's generated layout untouched.
 ## Startup diagnostics
 
 The module generates every view that has a spec when the application model is built, so these
-stop the application at startup. In XAF Blazor the host exits before it listens; read the console.
-Every view with a spec is checked, and all broken views are reported together in one exception.
+surface at startup. What they do is the host's choice, through
+`XafLayoutBuilderModule.FailFastOnLayoutErrors`, set from configuration:
+
+- **Off, the default:** each broken view is written to XAF's `eXpressAppFramework.log` and keeps
+  XAF's own layout or columns; the application starts.
+- **On:** the application stops at startup. In XAF Blazor the host exits before it listens; read the
+  console. Every view with a spec is checked, and all broken views are reported together in one
+  exception.
+
+Turn it on in development and CI so a broken layout cannot slip through unnoticed. Off, a broken
+layout looks like a view that silently ignores its `.Layout.cs`: check the log.
 
 - XLB001: a placed member has no view item: it is `[Browsable(false)]`, hidden with `[HideInUI]`, or
   the reference back to its owner. `[VisibleInDetailView(false)]` does not remove the view item; such
@@ -126,7 +135,8 @@ Every view with a spec is checked, and all broken views are reported together in
 ## When you change a business class
 
 - **Added a property?** Place it with `.Item(...)` or `.Hide(...)` in `BuildDetailViewLayout`, or
-  the app will not start, unless that class opted into `.Unplaced(...)`. Add a `.Column(...)` only
+  the layout is rejected (the app will not start with fail-fast on), unless that class opted into
+  `.Unplaced(...)`. Add a `.Column(...)` only
   if the list should show it.
 - **Renamed or removed one?** The lambda stops compiling; fix it where the compiler points.
 - **Layout looks unchanged after a restart?** An administrator or user customised that view and

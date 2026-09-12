@@ -23,6 +23,16 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
     const string GeneratedIndex = "GeneratedIndex";
 
     public override void UpdateNode(ModelNode node) {
+        // Degrades like DetailViewLayoutUpdater: logged, and the view keeps XAF's generated columns.
+        try {
+            Apply(node);
+        }
+        catch (Exception ex) when (!XafLayoutBuilderModule.FailFastOnLayoutErrors) {
+            DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
+        }
+    }
+
+    static void Apply(ModelNode node) {
         if (node.Parent is not IModelListView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
         var spec = LayoutSpecResolver.Columns(type);
         if (spec is null) return;

@@ -120,17 +120,24 @@ throw. Following `IModelClass.DefaultDetailView` instead would be wrong: a model
 repoint it at another view, and the check would then validate a view no spec applies to while
 leaving the real one unchecked. A missing view is **XLB004**.
 
-In the Blazor template the application is built while the ASP.NET host starts, so the exception
-ends the process before Kestrel listens. The E2E gate proves it with the sample's `--break-layout`
-switch.
+What happens next is the host's choice. With `XafLayoutBuilderModule.FailFastOnLayoutErrors` on,
+the exception propagates: in the Blazor template the application is built while the ASP.NET host
+starts, so it ends the process before Kestrel listens. With it off, the default, the updaters and
+the check log the exception through XAF's `Tracing` and the view keeps XAF's own layout. That is
+safe only because the updaters check a spec completely before they change anything; XAF marks a
+node as generated even when an updater throws, so a failure halfway through would otherwise leave
+a half-applied layout for good. The default is off because in a production host a startup failure
+is not a screen-level failure: a Blazor host with model warm-up never starts, and a WinForms client
+never opens. The E2E gate runs the sample's `--break-layout` fixture both ways.
 
 XAF Blazor builds one `XafApplication` per circuit, so the naive version of this would repeat the
 whole forced generation for every user session. A static set of what already passed makes it once
 per process. Two details keep that memory honest: the key is the application type *and* the
 registry version, which `LayoutRegistry` bumps on every `Register` or `Clear`, so a layout
-registered after one application started is still validated for the next one; and only a completed
-run is recorded, so an application that fails the check keeps failing loudly rather than passing
-quietly on the second session. The run happens under a lock, so two circuits starting together do
+registered after one application started is still validated for the next one; and with fail-fast
+on only a completed run is recorded, so an application that fails the check keeps failing loudly
+rather than passing quietly on the second session. With it off, a degraded run is recorded too:
+ASP.NET Core shares one Application Model per process, so another circuit has nothing new to log. The run happens under a lock, so two circuits starting together do
 the work once rather than twice. `LayoutStartupCheck.Reset()` clears the memory for tests.
 
 ## Exporter and printer

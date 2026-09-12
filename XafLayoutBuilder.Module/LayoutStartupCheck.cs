@@ -15,8 +15,10 @@ namespace XafLayoutBuilder.Module;
 public static class LayoutStartupCheck {
     // XAF Blazor builds one XafApplication per circuit, so without this the whole forced generation would run again
     // for every user session. The memory is keyed by application type *and* registry version, so a spec registered
-    // after one application has started is still validated for the next one, and only a completed run is recorded:
-    // an application that fails the check keeps failing loudly instead of passing quietly the second time.
+    // after one application has started is still validated for the next one. With FailFastOnLayoutErrors on, only a
+    // completed run is recorded: an application that fails the check keeps failing loudly instead of passing quietly
+    // the second time. With it off, a degraded run is recorded too; ASP.NET Core shares one Application Model per
+    // process, so a second circuit would have nothing new to log.
     static readonly object Gate = new();
     static readonly HashSet<(Type Application, int RegistryVersion)> Completed = [];
 
@@ -25,7 +27,14 @@ public static class LayoutStartupCheck {
         // The lock is held across the run so two circuits starting together cannot both do the work.
         lock (Gate) {
             if (Completed.Contains(key)) return;
-            Check(application);
+            try {
+                Check(application);
+            }
+            catch (Exception ex) when (!XafLayoutBuilderModule.FailFastOnLayoutErrors) {
+                // The updaters already logged and degraded what they could not apply; this catches the rest (XLB004,
+                // a spec factory that throws) so it cannot stop the host either.
+                DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
+            }
             Completed.Add(key);
         }
     }
@@ -58,13 +67,16 @@ public static class LayoutStartupCheck {
         if (failures.Count > 1)
             throw new LayoutSpecException($"{failures.Count} layout problems:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
 
+        // Layout errors are always collected. With fail-fast off anything else is collected too (a spec factory that throws,
+        // say), so one broken factory cannot end the check early and leave the remaining types undiagnosed while the run is
+        // recorded as done. With it on, anything else propagates at once, as before.
         bool Attempt(Action check) {
             try {
                 check();
                 return true;
             }
-            catch (LayoutSpecException ex) {
-                failures.Add(ex.Message);
+            catch (Exception ex) when (ex is LayoutSpecException || !XafLayoutBuilderModule.FailFastOnLayoutErrors) {
+                failures.Add(ex is LayoutSpecException ? ex.Message : ex.ToString());
                 return false;
             }
         }

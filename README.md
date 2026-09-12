@@ -53,8 +53,10 @@ That file is the sample's only layout source for `Order`; the sample module has 
 - **Compile-checked members.** Renaming a property breaks the build, not the running app.
 - **Ordinary XAF layering.** The builder output is the generated layer, so module XAFML,
   administrators and users can still customise on top, and their changes win.
-- **Fail-fast startup.** A broken layout stops the application at startup with a numbered
-  diagnostic that names the view and the member.
+- **Startup diagnostics.** A broken layout is reported at startup with a numbered diagnostic that
+  names the view and the member. The host decides what that does: with `FailFastOnLayoutErrors` on
+  (development, CI) the application stops; off, the default, it is logged and the view keeps XAF's
+  own layout, so one layout typo never takes a production host down.
 - **The app is the designer.** "Export Layout To Code" prints any type's current layout, every
   layer applied, back as the same C#. Arrange it in the running app, paste the code, commit. With
   the Blazor add-on referenced, "Copy Layout To Clipboard" puts it on the clipboard and "Download
@@ -111,6 +113,9 @@ catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
    `LayoutRegistry.Register<T>(detail, columns)` for types you do not own.
 4. Optionally set `XafLayoutBuilderModule.EnableExport` from your configuration, so administrators
    see the export action without a debugger attached. Never from an environment variable.
+5. Set `XafLayoutBuilderModule.FailFastOnLayoutErrors` from your configuration: on in development
+   and CI, so a broken layout stops the application at startup; off, the default, in production,
+   where it is written to XAF's `eXpressAppFramework.log` and the view keeps XAF's own layout.
 
 The full surface, the rules and the checklist for changing a class are in the skill.
 

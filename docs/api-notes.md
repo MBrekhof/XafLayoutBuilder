@@ -145,6 +145,16 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 - In the Blazor template the application is built while the ASP.NET host starts (the exception
   stack goes through `Microsoft.Extensions.Hosting.Internal.Host.ForeachService`), so an exception
   from `SetupComplete` is unhandled and terminates the process before Kestrel listens.
+- **One Application Model per process in ASP.NET Core.** `SharedApplicationModelManagerContainer`
+  creates the `ApplicationModelManager` once, under a lock, and hands the same one to every
+  application instance, so the generated layer, and with it the updaters, runs once per process
+  rather than once per circuit. [source `DevExpress.ExpressApp.AspNetCore/Services/Shared/SharedApplicationModelManagerContainer.cs`
+  lines 42-67]
+- **Where `Tracing` writes.** `Tracing.Tracer.LogError(Exception)` writes the exception's type,
+  message and stack trace to `eXpressAppFramework.log` in the executable's folder, through a
+  `TextWriterTraceListener`; not to the console or `ILogger`. The degraded path of
+  `FailFastOnLayoutErrors` logs there. [dxdocs 112575, 112576; source
+  `DevExpress.Persistent.Base/Tracing.cs` lines 469 and 762]
 
 ## Exporter and user layer (session 6)
 

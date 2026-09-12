@@ -29,6 +29,9 @@ public class Startup {
         services.AddScoped<CircuitHandler, CircuitHandlerProxy>();
         // Export action without a debugger: appsettings "XafLayoutBuilder:EnableExport" (Development only in the sample).
         XafLayoutBuilder.Module.XafLayoutBuilderModule.EnableExport = Configuration.GetValue<bool>("XafLayoutBuilder:EnableExport");
+        // Stop at startup on a broken layout: appsettings "XafLayoutBuilder:FailFastOnLayoutErrors" (on in Development in
+        // the sample). Off, a broken layout is logged and the view keeps XAF's own layout.
+        XafLayoutBuilder.Module.XafLayoutBuilderModule.FailFastOnLayoutErrors = Configuration.GetValue<bool>("XafLayoutBuilder:FailFastOnLayoutErrors");
         services.AddXaf(Configuration, builder => {
             builder.UseApplication<SampleBlazorApplication>();
             builder.Modules
