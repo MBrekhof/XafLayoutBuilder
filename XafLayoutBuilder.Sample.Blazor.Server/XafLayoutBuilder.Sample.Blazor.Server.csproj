@@ -17,6 +17,13 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <!-- E2E fixture model differences, loaded only when the gate passes the matching switch. -->
+    <None Remove="Fixtures\**" />
+    <Content Include="Fixtures\*.xafml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="DevExpress.Drawing.Skia" Version="$(DevExpressVersion)" />
     <PackageReference Include="DevExpress.ExpressApp.Blazor" Version="$(DevExpressVersion)" />
     <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="$(DevExpressVersion)" />

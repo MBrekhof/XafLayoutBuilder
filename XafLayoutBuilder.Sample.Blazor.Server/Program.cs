@@ -36,6 +36,14 @@ public class Program : IDesignTimeApplicationFactory {
             if(ContainsArgument(args, "break-factory")) {
                 XafLayoutBuilder.Sample.Module.BrokenLayouts.RegisterThrowingFactory();
             }
+            // E2E fixture: Order's columns plus Notes, for the frozen-column-set check (FREEZE-001).
+            if(ContainsArgument(args, "extra-column")) {
+                XafLayoutBuilder.Sample.Module.GateFixtures.RegisterExtraOrderColumn();
+            }
+            // E2E fixture: an administrator's frozen Order_ListView column set, as an application-level difference (FREEZE-001).
+            if(ContainsArgument(args, "freeze-order-columns")) {
+                SampleBlazorModule.FreezeOrderColumnsFixture = true;
+            }
             IHost host = CreateHostBuilder(args).Build();
             if(ContainsArgument(args, "updateDatabase")) {
                 using(var serviceScope = host.Services.CreateScope()) {

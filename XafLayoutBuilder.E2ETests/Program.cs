@@ -16,6 +16,7 @@ using Microsoft.Playwright;
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
 //   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
+//   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   Session 5: the host started with --break-layout exits at startup reporting XLB001, and for Order both a throwing
 //              detail factory and XLB003 (registered factories are checked at startup, each view on its own)
 //   TEST-001:  adding --break-factory (a registered columns factory throwing a non-layout exception), fail-fast
@@ -391,6 +392,48 @@ try
     }");
     Assert(cityInOther, "City, which the layout never mentions, sits in the Other group");
 
+    Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
+    // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property
+    // added to the class later. --extra-column lists Notes, which Order.Layout.cs leaves out; --freeze-order-columns
+    // adds the sample host's Fixtures/FrozenOrderColumns.xafml, whose freezing layer stores explicit indexes only for the
+    // three columns shown when it was frozen. XAF resolves every other column's index to -1 while the view is frozen
+    // (ModelViewLogic.Get_Index); that reaches Notes only because the updater orders columns through GeneratedIndex
+    // instead of writing Index. The freeze has to come from an application-level layer: stored in a user's own
+    // differences, XAF Blazor ignores it (all columns show), so this cannot be written into Admin's user model.
+    KillApp(ref app);
+    ResetUserModel(adminId);
+    lock (appOutput) appOutput.Clear();
+    app = StartApp(blazorProj, appOutput, "--extra-column");
+    await WaitForHttpOk(app, appOutput);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    await WaitForNoLoading(page);
+    var unfrozenHeaders = await GridHeaders(page);
+    Console.WriteLine("    headers, not frozen: " + string.Join(" | ", unfrozenHeaders));
+    Assert(string.Join(",", unfrozenHeaders) == "Number,Customer,Order Date,Notes",
+        $"control: with --extra-column and no freeze, Notes is the fourth column (got {string.Join(",", unfrozenHeaders)})");
+
+    KillApp(ref app);
+    lock (appOutput) appOutput.Clear();
+    app = StartApp(blazorProj, appOutput, "--extra-column --freeze-order-columns");
+    await WaitForHttpOk(app, appOutput);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-17-frozen-column-set.png") });
+    var frozenHeaders = await GridHeaders(page);
+    Console.WriteLine("    headers, frozen: " + string.Join(" | ", frozenHeaders));
+    Assert(string.Join(",", frozenHeaders) == "Number,Customer,Order Date",
+        $"the frozen column set is unchanged: Notes, added to the spec after the freeze, is not shown (got {string.Join(",", frozenHeaders)})");
+    var frozenGrid = page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First;
+    await frozenGrid.Locator("th.dxbl-grid-header").Filter(new() { HasText = "Number" }).First.ClickAsync(new() { Button = MouseButton.Right });
+    await page.WaitForTimeoutAsync(800);
+    await page.Locator("[role=menuitem], .dxbl-context-menu-item, .dxbl-menu-item").Filter(new() { HasText = "Column Chooser" }).First.ClickAsync();
+    var frozenChooser = page.Locator(".dxbl-popup, .dxbl-grid-column-chooser, .dxbl-column-chooser").Filter(new() { HasText = "Order Date" }).First;
+    await frozenChooser.WaitForAsync(new() { Timeout = 10_000 });
+    Assert((await frozenChooser.InnerTextAsync()).Contains("Notes"), "the column chooser still offers Notes");
+    await page.Keyboard.PressAsync("Escape");
+    KillApp(ref app);
+    ResetUserModel(adminId);
+
     Step("Session 5: a broken layout is reported at startup (host started with --break-layout)");
     KillApp(ref app);
     lock (appOutput) appOutput.Clear();
@@ -554,6 +597,23 @@ static async Task Login(IPage page)
 }
 
 // A fresh page load starts a new Blazor circuit, which reloads the user model differences.
+static async Task OpenListView(IPage page, string viewId, string seededText)
+{
+    // A fresh circuit may restore the last open view or land on the login page; retry the navigation like OpenOrd001Detail.
+    for (var attempt = 0; attempt < 3; attempt++) {
+        try { await page.GotoAsync($"{BaseUrl}/{viewId}", new() { WaitUntil = WaitUntilState.NetworkIdle }); }
+        catch (PlaywrightException ex) when (ex.Message.Contains("interrupted")) { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); continue; }
+        if (page.Url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase)) { await Login(page); continue; }
+        if (page.Url.Contains(viewId, StringComparison.OrdinalIgnoreCase)) break;
+    }
+    await page.GetByText(seededText, new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+}
+
+// Header captions of the grid on the active tab, without the filter button's accessibility text or the selection column.
+static Task<string[]> GridHeaders(IPage page) =>
+    page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<string[]>(
+        @"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+
 static async Task OpenOrd001Detail(IPage page)
 {
     // A fresh circuit may restore the last open view (DocumentManagerState) and interrupt the first navigation.

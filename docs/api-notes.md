@@ -149,6 +149,24 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   default sort cleared (the stock generator sorts the display member ascending, which would
   otherwise fight the spec's sort).
 
+- **`FreezeColumnIndices`, verified in the gate (FREEZE-001).** Turning it on in a layer
+  (`Set_FreezeColumnIndices`, not a new node) force-sets `Index` to the current value on every
+  column in that layer; turning it off clears those values again. `IModelColumn.Index`'s domain
+  logic (`Get_Index`), consulted only when no layer set `Index`, returns the generated index while
+  the view is not frozen and `-1` while it is. A column added to a spec after the freeze (it has no
+  explicit `Index` in the freezing layer) therefore stays hidden but offered by the column chooser.
+  That holds only because the updater orders columns through `GeneratedIndex` instead of writing
+  `Index`. [source `Model/DomainLogics/ModelViewLogic.cs` lines 85-101 and 417-433]
+  **Only from an application-level layer.** Measured in the sample host (2026-09-13): the same
+  freeze in module XAFML, or in an extra store added through `CreateCustomModelDifferenceStore`
+  (`e.AddExtraDiffStore(id, new FileModelStore(folder, name))`, which keeps the default `Model.xafml`
+  store because `Handled` stays false, `XafApplication.cs` lines 416-434), hides a later-added
+  column. Stored in a user's own differences (`ModelDifferenceDbStore`), it has no effect: a
+  freeze-only user difference still shows every column. XAFML values load through
+  `SetSerializedValue` with the layer detached, not through the domain-logic setter
+  (`Model/ModelXmlWriter.cs` lines 171-197); why the user-layer value does not reach `Get_Index` was
+  not traced.
+
 ## Startup forcing (session 5)
 
 - `XafApplication.SetupComplete` (`XafApplication.cs` line 2947) fires from `OnSetupComplete`

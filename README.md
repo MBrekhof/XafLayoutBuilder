@@ -221,7 +221,9 @@ specs, and a printer turns specs into the builder C#.
 
 - The column updater writes XAF's internal `GeneratedIndex` value by name, so that administrators'
   frozen column sets keep working. A rename in a future DevExpress release would show up as a wrong
-  column order in E2E 2. The frozen-columns behaviour itself is reasoned from source, not tested.
+  column order in E2E 2. The frozen-columns behaviour itself is tested in the gate: a column added to
+  the spec after an administrator froze the column set (in Model.xafml or module XAFML) stays hidden.
+  In XAF Blazor a freeze stored in a user's own differences has no effect at all, builder or not.
 - The updaters' checks (XLB001, XLB002, the structural rules) and the spec resolver are unit tested;
   the model changes themselves and the exporter need a live Application Model and are tested only
   through the E2E gate. The start document asked for an exporter unit test; the round trip is

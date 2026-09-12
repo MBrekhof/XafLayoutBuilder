@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- E2E fixture (FREEZE-001), loaded only with the host's freeze-order-columns switch as an extra application-level model
+     difference store: an administrator froze Order_ListView's column set when it showed Number, Customer and Order Date.
+     A user's own differences cannot carry this test: XAF Blazor ignores FreezeColumnIndices there.
+     XML forbids two consecutive hyphens inside a comment, so the switch is named without its leading dashes. -->
+<Application>
+  <Views>
+    <ListView Id="Order_ListView" FreezeColumnIndices="True">
+      <Columns>
+        <ColumnInfo Id="Number" Index="0" />
+        <ColumnInfo Id="Customer" Index="1" />
+        <ColumnInfo Id="OrderDate" Index="2" />
+      </Columns>
+    </ListView>
+  </Views>
+</Application>
