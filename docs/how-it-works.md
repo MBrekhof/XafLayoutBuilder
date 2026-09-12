@@ -100,7 +100,9 @@ Three details took the XAF sources to get right:
 ## Discovery
 
 `ISupportViewLayoutCustomization` has two static abstract members. The resolver reads them through
-`Type.GetInterfaceMap`, once per type, and caches the result. `LayoutRegistry.Register<T>` covers
+`Type.GetInterfaceMap` and caches each one separately per type, so a DetailView factory that throws
+never costs the ListView its columns, and the startup check resolves each view's spec inside that
+view's own attempt. A factory that throws is not cached. `LayoutRegistry.Register<T>` covers
 types you do not own; registry entries win, and registration checks that every member the spec
 names exists on `T`.
 

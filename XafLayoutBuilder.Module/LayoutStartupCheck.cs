@@ -45,39 +45,41 @@ public static class LayoutStartupCheck {
     }
 
     // Every view is attempted and the failures are reported together, so one broken layout cannot hide the next one
-    // behind another application start. One attempt per view, not per class: a broken DetailView must not keep the
-    // same class's ListView and lookup from being checked.
+    // behind another application start. One attempt per view, and the view's spec is resolved inside its own attempt:
+    // a broken DetailView factory must not keep the same class's ListView and lookup from being checked.
     static void Check(XafApplication application) {
         var views = application.Model.Views;
         var failures = new List<string>();
         foreach (var modelClass in application.Model.BOModel) {
             if (modelClass.TypeInfo?.Type is not { } type) continue;
-            DetailLayoutSpec? detail = null;
-            ListColumnsSpec? columns = null;
-            if (!Attempt(() => { detail = LayoutSpecResolver.Detail(type); columns = LayoutSpecResolver.Columns(type); })) continue;
-            if (detail is not null)
-                Attempt(() => Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout));
-            if (columns is not null) {
-                Attempt(() => Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns));
-                if (columns.Lookup is not null)
-                    Attempt(() => Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns));
-            }
+            Attempt(() => {
+                if (LayoutSpecResolver.Detail(type) is not null)
+                    Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout);
+            });
+            Attempt(() => {
+                if (LayoutSpecResolver.Columns(type) is not null)
+                    Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns);
+            });
+            Attempt(() => {
+                if (LayoutSpecResolver.Columns(type)?.Lookup is not null)
+                    Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
+            });
         }
-        if (failures.Count == 1) throw new LayoutSpecException(failures[0]);
-        if (failures.Count > 1)
-            throw new LayoutSpecException($"{failures.Count} layout problems:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
+        // A throwing columns factory fails the ListView and the lookup attempt alike; report it once.
+        var distinct = failures.Distinct().ToList();
+        if (distinct.Count == 1) throw new LayoutSpecException(distinct[0]);
+        if (distinct.Count > 1)
+            throw new LayoutSpecException($"{distinct.Count} layout problems:{Environment.NewLine}{string.Join(Environment.NewLine, distinct)}");
 
         // Layout errors are always collected. With fail-fast off anything else is collected too (a spec factory that throws,
         // say), so one broken factory cannot end the check early and leave the remaining types undiagnosed while the run is
         // recorded as done. With it on, anything else propagates at once, as before.
-        bool Attempt(Action check) {
+        void Attempt(Action check) {
             try {
                 check();
-                return true;
             }
             catch (Exception ex) when (ex is LayoutSpecException || !XafLayoutBuilderModule.FailFastOnLayoutErrors) {
                 failures.Add(ex is LayoutSpecException ? ex.Message : ex.ToString());
-                return false;
             }
         }
     }

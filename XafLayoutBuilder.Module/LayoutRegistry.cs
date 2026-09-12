@@ -39,34 +39,38 @@ public static class LayoutRegistry {
     }
 }
 
-/// <summary>Registry first, then the static abstract members of <see cref="ISupportViewLayoutCustomization"/>. Cached per type.</summary>
+/// <summary>
+/// Registry first, then the static abstract members of <see cref="ISupportViewLayoutCustomization"/>. The DetailView and
+/// ListView halves are resolved and cached on their own, so a broken factory for one never costs the other its spec.
+/// A factory that throws is not cached: every caller sees the same failure.
+/// </summary>
 internal static class LayoutSpecResolver {
-    static readonly ConcurrentDictionary<Type, (DetailLayoutSpec? Detail, ListColumnsSpec? Columns)> cache = new();
+    static readonly ConcurrentDictionary<Type, DetailLayoutSpec?> details = new();
+    static readonly ConcurrentDictionary<Type, ListColumnsSpec?> columnSpecs = new();
 
-    public static DetailLayoutSpec? Detail(Type type) => Resolve(type).Detail;
-    public static ListColumnsSpec? Columns(Type type) => Resolve(type).Columns;
+    public static DetailLayoutSpec? Detail(Type type) =>
+        LayoutRegistry.Entries.TryGetValue(type, out var registered)
+            ? registered.Detail
+            : details.GetOrAdd(type, static t => FromInterface<DetailLayoutSpec>(
+                t, nameof(ISupportViewLayoutCustomization.BuildDetailViewLayout), s => s.TypeName, LayoutSpecChecks.Validate));
 
-    static (DetailLayoutSpec? Detail, ListColumnsSpec? Columns) Resolve(Type type) {
-        if (LayoutRegistry.Entries.TryGetValue(type, out var registered)) return registered;
-        return cache.GetOrAdd(type, static t => {
-            if (!typeof(ISupportViewLayoutCustomization).IsAssignableFrom(t)) return (null, null);
-            var map = t.GetInterfaceMap(typeof(ISupportViewLayoutCustomization));
-            var detail = (DetailLayoutSpec?)Invoke(map, nameof(ISupportViewLayoutCustomization.BuildDetailViewLayout));
-            var columns = (ListColumnsSpec?)Invoke(map, nameof(ISupportViewLayoutCustomization.BuildListViewColumns));
-            // A derived class inherits the base class's implementation; only apply a spec to the type it was
-            // built for. Hierarchy composition is phase 2 (start document section 2).
-            if (detail?.TypeName != t.FullName) detail = null;
-            if (columns?.TypeName != t.FullName) columns = null;
-            // A factory can return a hand-built spec that no Build() has checked.
-            if (detail is not null) LayoutSpecChecks.Validate(detail);
-            if (columns is not null) LayoutSpecChecks.Validate(columns);
-            return (detail, columns);
-        });
-    }
+    public static ListColumnsSpec? Columns(Type type) =>
+        LayoutRegistry.Entries.TryGetValue(type, out var registered)
+            ? registered.Columns
+            : columnSpecs.GetOrAdd(type, static t => FromInterface<ListColumnsSpec>(
+                t, nameof(ISupportViewLayoutCustomization.BuildListViewColumns), s => s.TypeName, LayoutSpecChecks.Validate));
 
-    static object? Invoke(InterfaceMapping map, string name) {
-        var i = Array.FindIndex(map.InterfaceMethods, m => m.Name == name);
+    static TSpec? FromInterface<TSpec>(Type type, string factory, Func<TSpec, string> typeName, Action<TSpec> validate) where TSpec : class {
+        if (!typeof(ISupportViewLayoutCustomization).IsAssignableFrom(type)) return null;
+        var map = type.GetInterfaceMap(typeof(ISupportViewLayoutCustomization));
+        var i = Array.FindIndex(map.InterfaceMethods, m => m.Name == factory);
         // Unwrapped, so a factory's LayoutSpecException reaches every catch that expects one.
-        return map.TargetMethods[i].Invoke(null, BindingFlags.DoNotWrapExceptions, null, null, null);
+        var spec = (TSpec?)map.TargetMethods[i].Invoke(null, BindingFlags.DoNotWrapExceptions, null, null, null);
+        // A derived class inherits the base class's implementation; only apply a spec to the type it was
+        // built for. Hierarchy composition is phase 2 (start document section 2).
+        if (spec is null || typeName(spec) != type.FullName) return null;
+        // A factory can return a hand-built spec that no Build() has checked.
+        validate(spec);
+        return spec;
     }
 }
