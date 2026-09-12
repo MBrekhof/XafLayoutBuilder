@@ -17,9 +17,9 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DevExpress.Drawing.Skia" Version="26.1.*" />
-    <PackageReference Include="DevExpress.ExpressApp.Blazor" Version="26.1.*" />
-    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="26.1.*" />
+    <PackageReference Include="DevExpress.Drawing.Skia" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.ExpressApp.Blazor" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="$(DevExpressVersion)" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0">
       <ExcludeAssets>contentFiles</ExcludeAssets>
     </PackageReference>

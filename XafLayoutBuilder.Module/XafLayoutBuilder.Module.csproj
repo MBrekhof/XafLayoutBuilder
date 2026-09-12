@@ -3,11 +3,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>XAF module: generator updaters, layout registry, export controller.</Description>
+    <IsPackable>true</IsPackable>
+    <Description>XAF module: generator updaters, layout registry, startup check, export action.</Description>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DevExpress.ExpressApp" Version="26.1.*" />
-    <PackageReference Include="DevExpress.Persistent.Base" Version="26.1.*" />
+    <PackageReference Include="DevExpress.ExpressApp" Version="$(DevExpressPackageRange)" />
+    <PackageReference Include="DevExpress.Persistent.Base" Version="$(DevExpressPackageRange)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XafLayoutBuilder.Core\XafLayoutBuilder.Core.csproj" />

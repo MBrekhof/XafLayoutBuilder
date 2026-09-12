@@ -39,6 +39,8 @@ dotnet build XafLayoutBuilder.slnx
 dotnet test XafLayoutBuilder.Tests
 dotnet run --project XafLayoutBuilder.E2ETests     # builds + starts the sample on :5100, asserts, exits 0/1/2
 dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://localhost:5000, Admin / empty password
+dotnet pack XafLayoutBuilder.slnx -c Release -o artifacts/packages                       # Core, Module, Blazor
+dotnet nuget push "artifacts/packages/*.nupkg" --source C:\Projects\local-nuget         # local feed (backslashes)
 ```
 
 LocalDB catalog `XafLayoutBuilder.Sample` on `(localdb)\mssqllocaldb`. Debug builds auto-update the
@@ -53,7 +55,11 @@ Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
 
 ## Non-negotiables (start document section 10, plus what the sessions added)
 
-- **DevExpress 26.1.\* only.** Never mix in 25.2 packages.
+- **DevExpress 26.1 only**, at the version in `Directory.Build.props` (`DevExpressVersion`, 26.1.4;
+  the packages accept `[26.1.4,26.2)`). Never mix in 25.2 packages, never float the version again.
+- **Package versions:** `PackageVersion` in `Directory.Build.props`, never `Version` (XAF records the
+  module's assembly version in the database and refuses a lower one). Bump it before each push to
+  the local feed `C:\Projects\local-nuget`.
 - **EF Core only, never XPO.**
 - **Verify every DevExpress API claim** in dxdocs or the installed source at
   `C:\Program Files\DevExpress 26.1\Components\Sources\DevExpress.ExpressApp`. Findings go into

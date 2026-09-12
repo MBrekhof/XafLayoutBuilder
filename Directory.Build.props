@@ -1,0 +1,23 @@
+<Project>
+  <!-- Shared by every project in the repository. -->
+  <PropertyGroup>
+    <!-- The one DevExpress version for the repository (BPGDemo pins the same one). The samples use it exactly; the
+         packages accept any 26.1 patch at or above it and refuse 26.2, whose assemblies must never be mixed with 26.1.
+         Move both together. -->
+    <DevExpressVersion>26.1.4</DevExpressVersion>
+    <DevExpressPackageRange>[26.1.4,26.2)</DevExpressPackageRange>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Only Core, Module and Blazor are packages; they set IsPackable. PackageVersion rather than Version: XAF
+         records each module's assembly version in the application database, and an assembly version lower than the
+         recorded one makes XAF refuse to start. Bump PackageVersion for every push to the feed. -->
+    <IsPackable>false</IsPackable>
+    <PackageVersion>0.1.0</PackageVersion>
+    <Authors>Martin Brekhof</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MBrekhof/XafLayoutBuilder</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MBrekhof/XafLayoutBuilder</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>xaf;devexpress;layout;detailview;listview;fluent</PackageTags>
+  </PropertyGroup>
+</Project>

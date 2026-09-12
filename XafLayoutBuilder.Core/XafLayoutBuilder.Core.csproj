@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
     <Description>Fluent builder, LayoutSpec IR and C# printer for XAF view layouts. No XAF dependency.</Description>
   </PropertyGroup>
 </Project>

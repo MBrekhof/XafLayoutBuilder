@@ -108,11 +108,28 @@ To look around yourself, run `dotnet run --project XafLayoutBuilder.Sample.Blazo
 http://localhost:5000 and log in as `Admin` with an empty password. The sample creates the LocalDB
 catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
 
+## Packages
+
+`XafLayoutBuilder.Core`, `XafLayoutBuilder.Module` and `XafLayoutBuilder.Blazor` are published as
+NuGet packages to a local folder feed; nothing is on nuget.org.
+
+```bash
+dotnet pack XafLayoutBuilder.slnx -c Release -o artifacts/packages
+dotnet nuget push "artifacts/packages/*.nupkg" --source C:\Projects\local-nuget
+```
+
+Register the feed once per machine: `dotnet nuget add source C:\Projects\local-nuget --name local-nuget`
+(a Windows path with backslashes; NuGet rejects `C:/Projects/local-nuget` as an invalid source).
+A folder feed does not accept the same version twice, so bump `PackageVersion` in
+`Directory.Build.props` before every push. The packages need DevExpress 26.1.4 or a later 26.1
+patch and refuse 26.2; the version the repository builds against is `DevExpressVersion` in the same
+file.
+
 ## Use it in your own solution
 
-1. Reference `XafLayoutBuilder.Module`, which brings `XafLayoutBuilder.Core`. Reference the projects,
-   or vendor them as projects of their own, never as a folder inside one of your existing module
-   projects. `ModuleBase` scans its own assembly for database updaters and model difference
+1. Reference the `XafLayoutBuilder.Module` package, which brings `XafLayoutBuilder.Core`, from the
+   local feed (see [Packages](#packages)), or reference the projects. Never copy the sources in as a
+   folder inside one of your existing module projects. `ModuleBase` scans its own assembly for database updaters and model difference
    resources, so a module copied into yours would run your updaters a second time (XAF does not
    remove duplicates, so seeders run twice) and read your model resources as its own.
 2. Require the module from yours:

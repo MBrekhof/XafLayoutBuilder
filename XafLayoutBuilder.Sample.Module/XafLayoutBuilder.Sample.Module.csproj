@@ -17,12 +17,12 @@
     <EmbeddedResource Include="Model.DesignedDiffs.xafml" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DevExpress.ExpressApp" Version="26.1.*" />
-    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="26.1.*" />
-    <PackageReference Include="DevExpress.ExpressApp.EFCore" Version="26.1.*" />
-    <PackageReference Include="DevExpress.ExpressApp.Security" Version="26.1.*" />
-    <PackageReference Include="DevExpress.Persistent.Base" Version="26.1.*" />
-    <PackageReference Include="DevExpress.Persistent.BaseImpl.EFCore" Version="26.1.*" />
+    <PackageReference Include="DevExpress.ExpressApp" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.ExpressApp.EFCore" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.ExpressApp.Security" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.Persistent.Base" Version="$(DevExpressVersion)" />
+    <PackageReference Include="DevExpress.Persistent.BaseImpl.EFCore" Version="$(DevExpressVersion)" />
     <PackageReference Include="Azure.Identity" Version="1.17.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.6" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
