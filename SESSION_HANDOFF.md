@@ -1,10 +1,41 @@
 # Session handoff
 
-Updated 2026-09-11 (after session 7). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-12 (after the WLNCentral findings round). Session plan: `XafLayoutBuilder-START.md`
+section 9.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 36 unit tests
-pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip and the
-startup-failure check. The repository is public on GitHub, MIT licensed.
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 62 unit tests
+pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
+startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
+Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
+
+## Findings from the WLNCentral integration, fixed (2026-09-12)
+
+`docs/findings-from-wlncentral-integration.md` (cc42981) recorded eight defects found while vendoring the
+POC into WLNCentral. Each became a card on the board, was fixed test first, and passed build, unit tests,
+the E2E gate and a Codex working-tree review before its commit. All are in Review, waiting for the owner's
+Confirm Done. Nothing has been pushed.
+
+| Card | Commit | What changed |
+|---|---|---|
+| RESOLVE-001 | 7ec9aa3 | Spec factories invoked with `BindingFlags.DoNotWrapExceptions`, so their `LayoutSpecException` reaches callers unwrapped. Tests now reference the Module (`InternalsVisibleTo`). |
+| SPEC-001 | ddd1d5b | Structural rules moved into `LayoutSpecChecks.Validate` for detail and column specs, called by both `Build()`s, `LayoutRegistry.Register` and the resolver, so hand-built, `with`-reshaped and JSON specs are checked too. |
+| APPLY-001 | c1f921d | Both updaters check everything before they change the model. XLB001/XLB002 live in the pure `LayoutSpecChecks.CheckAgainstView`; XAF marks a node generated even when an updater throws, so the old order left half-applied layouts. |
+| CHECK-001 | 79211e9 | The startup check attempts every view and reports all failures in one exception. `--break-layout` now breaks two views (XLB001 + XLB003). |
+| DIAG-001 | f2c5047 | XLB001 names `[Browsable(false)]`, `[HideInUI]` and the owner reference; `[VisibleInDetailView(false)]` never removes the view item. |
+| CHECK-002 | b133c4b | `XafLayoutBuilderModule.FailFastOnLayoutErrors`, **default off (owner's decision)**: a broken layout is logged to `eXpressAppFramework.log` and the view keeps XAF's own layout; any exception degrades. The sample turns it on in appsettings.Development.json; a new gate step runs the broken fixture with it off. |
+| DOCS-001 | 9c9f785 | README and SKILL.md: converting a customised view does not carry its differences over (they target stock node paths); a `FreezeLayout` copy does. |
+| DOCS-002 | 90dcdcf | README and SKILL.md: keep the module in its own assembly; `ModuleBase` scans its own assembly for updaters and model resources. |
+| DOCS-003 | fece878 | This handoff no longer says the export has no copy button. |
+
+Left open from this round:
+
+- **No test covers a spec factory that throws a non-layout exception during the startup check**, the
+  CHECK-002 degraded path Codex flagged and that was fixed. It would need a sample fixture type whose
+  factory throws.
+- **Not established:** whether XAF ignores or renders a stored difference whose node path the builder no
+  longer generates. DOCS-001 claims only that it is not carried over.
+- **Backlog on the board, not autonomous work:** SEC-001 (public-repo second look, owner decision),
+  REL-001 (xafskills and XafMergerTool, other repositories), and the phase 2 candidates card (CARD-1640).
 
 ## Where the plan stands
 
@@ -219,7 +250,8 @@ and invariant number formatting.
   turned up while checking why; see the 2026-09-12 section above for the cause, the file and
   line of each, and what a pull request would have to respect. Nothing in that repository was
   changed.
-- **No ContextBoard project and no TODO.md** for this repo; open items live in this file.
+- **Task state is on ContextBoard** (project XafLayoutBuilder, id 32), board-only: no TODO.md. The
+  open points above are mirrored there as SEC-001, REL-001 and the phase 2 candidates card.
 
 ## Session 6 result
 
@@ -383,4 +415,9 @@ and invariant number formatting.
   the failure has not recurred since.
 - LocalDB can hand back a dead named pipe on the first query after the gate kills the host ("The
   pipe has been ended"). The harness turns connection pooling off and retries a failed query once.
+- .NET's command-line configuration reads `--key value`, so a bare switch such as `--break-layout`
+  swallows the next argument as its value. Put configuration overrides
+  (`--XafLayoutBuilder:FailFastOnLayoutErrors=false`) before it.
+- XAF traces to `eXpressAppFramework.log` beside the host executable, a file that grows across runs;
+  a check that reads it must search only what its own run appended.
 - Everything else XAF-specific is in `docs/api-notes.md` with file and line references.
