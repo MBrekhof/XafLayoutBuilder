@@ -68,5 +68,7 @@ Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
 
 ## Task state
 
-No `TODO.md` and no ContextBoard project yet; open items live in `SESSION_HANDOFF.md`.
-No git remote yet.
+Board-only: open work lives on ContextBoard, project **XafLayoutBuilder** (id 32). Never create a
+`TODO.md` or `DOCS/DONE.md`. `SESSION_HANDOFF.md` keeps the prose (where things stand, decisions).
+Remote: https://github.com/MBrekhof/XafLayoutBuilder, **public** — no assistant attribution in
+commits, pull requests or issues.

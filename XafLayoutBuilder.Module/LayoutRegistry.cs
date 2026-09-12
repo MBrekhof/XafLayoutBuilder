@@ -53,6 +53,7 @@ internal static class LayoutSpecResolver {
 
     static object? Invoke(InterfaceMapping map, string name) {
         var i = Array.FindIndex(map.InterfaceMethods, m => m.Name == name);
-        return map.TargetMethods[i].Invoke(null, null);
+        // Unwrapped, so a factory's LayoutSpecException reaches every catch that expects one.
+        return map.TargetMethods[i].Invoke(null, BindingFlags.DoNotWrapExceptions, null, null, null);
     }
 }
