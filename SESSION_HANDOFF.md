@@ -3,10 +3,30 @@
 Updated 2026-09-12 (after the WLNCentral findings round). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 62 unit tests
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 65 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
+
+## Final Codex review follow-up (2026-09-12)
+
+A final Codex adversarial review of the whole findings round (cc42981..ed6637a) returned
+"needs-attention" with three findings. Each became a card and went through the same loop: test
+first, build, unit tests, E2E gate, Codex working-tree review, commit. All three are in Review.
+
+| Card | Commit | What changed |
+|---|---|---|
+| RESOLVE-002 | 4f1353f | The resolver caches a type's detail and columns specs separately, and the startup check resolves each view's spec inside that view's own attempt, so a broken DetailView factory no longer hides or costs the same type's ListView and lookup. |
+| REG-001 | fe7d9db | **Owner's option (a).** `LayoutRegistry.Register` only stores; a new `Register<T>(Func, Func)` overload takes factories. Validation and the member check run at resolution, inside the updaters and the startup check, so `FailFastOnLayoutErrors` governs a broken registration. The `--break-layout` fixture registers Order with a detail factory whose `Build()` throws plus XLB003 columns, reported together with fail-fast on and logged with it off. |
+| GATE-001 | fc85459 | The degraded-mode gate step now carries canaries only a partially applied spec can produce: a "Broken layout" group caption on Customer and a "Broken number" column caption on Order. Proven by running the gate against a simulated APPLY-001 regression one updater at a time: red on each canary, while the older assertions passed. |
+
+Still open after this round:
+
+- **No test covers a spec factory that throws a non-layout exception** (an `InvalidOperationException`,
+  say) with fail-fast off. REG-001's fixture throws a `LayoutSpecException`, which takes the other branch
+  of the startup check's catch.
+- **Not established:** whether XAF ignores or renders a stored difference whose node path the builder no
+  longer generates.
 
 ## Findings from the WLNCentral integration, fixed (2026-09-12)
 
@@ -420,4 +440,8 @@ and invariant number formatting.
   (`--XafLayoutBuilder:FailFastOnLayoutErrors=false`) before it.
 - XAF traces to `eXpressAppFramework.log` beside the host executable, a file that grows across runs;
   a check that reads it must search only what its own run appended.
+- mcpRoslyn does not pick up a `.csproj` change made during a session. After the Tests project gained
+  a ProjectReference to the Module, `find_references` missed the test-project callers until
+  `reload_workspace` was run (Tests went from 1 to 2 project references and from 11 to 14 documents).
+  Reported to the mcpRoslyn maintainers. Run `reload_workspace` after any project-file change.
 - Everything else XAF-specific is in `docs/api-notes.md` with file and line references.
