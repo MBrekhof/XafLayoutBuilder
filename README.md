@@ -245,7 +245,7 @@ XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1
 XafLayoutBuilder.Tests/                 xUnit tests for Core and the Module's resolver and registry
 XafLayoutBuilder.E2ETests/              C# Playwright console app, the gate
 skills/xaf-layout-builder/SKILL.md      the Claude Code skill
-docs/                                   how-it-works, api-notes, screenshots
+docs/                                   how-it-works, api-notes, cases (from generated apps), screenshots
 ```
 
 ## Related repositories
