@@ -15,6 +15,9 @@ nothing else. Changes appear after an application restart.
 - The app's module references `XafLayoutBuilder.Module` and requires it:
   `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
 - Do not create `Model.xafml` or `Model.DesignedDiffs.xafml` entries for views a builder owns.
+- Before converting a view that already exists in use, check `ModelDifference` rows and module XAFML
+  for it. Differences target the stock node paths (`Main/SimpleEditors/...`), which the builder
+  replaces, so those customisations do not carry over. A `FreezeLayout` copy does.
 
 ## Declare a layout
 

@@ -39,6 +39,16 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `Model/NodeGenerators/ModelDetailViewNodesGenerator.cs` lines 115-135;
   `DC/Internal/XafMemberInfoInternal.cs` lines 75-80;
   `Model/NodeGenerators/ModelDetailViewLayoutNodesGenerator.cs` line 242]
+- **Differences target node paths, so converting a view does not carry them over.** Stored
+  differences are stacked as layers (`ModelApplicationHelper.AddLayer` -> `InsertLayerAtCoreInLock`)
+  and a node resolves by id through the layer chain, so a difference aimed at the stock
+  `Main/SimpleEditors/...` has no generated node to act on once the builder has replaced the tree.
+  (`ModelNode.Merge`/`ApplyDiff`, which creates missing nodes, is the explicit merge API, not the
+  runtime path.) `FreezeLayout` clones the whole layout into the difference layer and resets the
+  master, so a frozen layout does not depend on the generated tree. Whether XAF ignores an orphaned
+  path or renders it was not established (DOCS-001). [source `Model/Core/ModelApplication.cs` lines
+  865-869; `Model/Core/ModelNode.cs` lines 793-812, 1126-1133, 1405-1429;
+  `Model/DomainLogics/ModelViewLogic.cs` lines 121-135]
 
 ## Layout model interfaces (`Model/IModelDetailView.cs`)
 
