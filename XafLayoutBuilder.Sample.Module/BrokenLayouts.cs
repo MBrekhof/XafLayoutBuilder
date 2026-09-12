@@ -15,13 +15,15 @@ public static class BrokenLayouts {
     public static void Register() {
         LayoutRegistry.Register<Customer>(
             LayoutBuilder<Customer>.Create()
-                .Group("Main", g => g.Item(x => x.Name).Item(x => x.City).Item(x => x.InternalCode))
+                // The caption is a canary: it can only appear if the rejected spec was partly applied (GATE-001).
+                .Group("Main", g => g.Caption("Broken layout").Item(x => x.Name).Item(x => x.City).Item(x => x.InternalCode))
                 .Build(),
             columns: null);
         // Two independent failures on one type. The factories defer the throwing Build() into the fail-fast policy
         // (REG-001), and the startup check has to report the DetailView's failure and the ListView's alike (RESOLVE-002).
         LayoutRegistry.Register<Order>(
             detail: () => LayoutBuilder<Order>.Create().Group("Main", g => g.Item(x => x.Number).Item(x => x.Number)).Build(),
-            columns: () => ListViewColumnsBuilder<Order>.Create().Column(x => x.Number).Column(x => x.Lines).Build());
+            // "Broken number" is the same kind of canary, set on a column the updater reaches before the failing one.
+            columns: () => ListViewColumnsBuilder<Order>.Create().Column(x => x.Number, caption: "Broken number").Column(x => x.Lines).Build());
     }
 }

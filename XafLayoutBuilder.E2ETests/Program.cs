@@ -425,7 +425,7 @@ try
     // would swallow the next argument as its own value and leave the appsettings value in charge.
     app = StartApp(blazorProj, appOutput, "--XafLayoutBuilder:FailFastOnLayoutErrors=false --break-layout");
     await WaitForHttpOk(app, appOutput);
-    Assert(await IsServing(), "the host serves despite two broken layouts");
+    Assert(await IsServing(), "the host serves despite the broken layouts");
     for (var attempt = 0; attempt < 3; attempt++) {
         try { await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle }); }
         catch (PlaywrightException ex) when (ex.Message.Contains("interrupted")) { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); continue; }
@@ -443,9 +443,18 @@ try
     Assert(await degradedForm.Locator("label.xaf-item-city").CountAsync() > 0, "Customer's DetailView still shows City");
     Assert(!degradedGroups.Contains("Identification") && !degradedGroups.Contains("Other"),
         $"no builder layout was applied to Customer: XAF's own layout renders (got {string.Join(",", degradedGroups)})");
+    // The broken spec's own caption: present only if the rejected spec was partly applied, which is exactly what
+    // checking before mutating (APPLY-001) prevents. City alone cannot tell, because a partial layout shows it too.
+    Assert(!degradedGroups.Contains("Broken layout"),
+        $"the rejected Customer spec left nothing behind: no \"Broken layout\" group (got {string.Join(",", degradedGroups)})");
     await page.GotoAsync($"{BaseUrl}/Order_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
     await page.GetByText("ORD-001", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
     Assert(await page.GetByText("ORD-001", new() { Exact = true }).CountAsync() > 0, "Order_ListView, whose columns spec was rejected, still lists its orders");
+    var degradedHeaders = await page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<string[]>(
+        @"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+    Console.WriteLine("    Order headers: " + string.Join(" | ", degradedHeaders));
+    Assert(degradedHeaders.Contains("Number") && !degradedHeaders.Contains("Broken number"),
+        $"the rejected Order columns spec left nothing behind: stock \"Number\" header, no \"Broken number\" (got {string.Join(",", degradedHeaders)})");
     string appendedLog;
     using (var stream = new FileStream(xafLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
         stream.Seek(logStart, SeekOrigin.Begin);
