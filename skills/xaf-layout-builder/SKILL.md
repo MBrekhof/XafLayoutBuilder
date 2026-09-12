@@ -69,7 +69,11 @@ makes the names ambiguous.
 
 For a type you do not own, register in your module's constructor:
 `LayoutRegistry.Register<ReportDataV2>(detail, columns);` Registry entries win over the interface.
-Registration throws if a spec names a member the type does not have.
+Nothing is checked at registration: a spec that names a member the type does not have, or breaks a
+build-time rule, is reported when the view is built, under `FailFastOnLayoutErrors` like any other
+layout error. When building the spec can throw, register factories instead
+(`LayoutRegistry.Register<T>(() => ..., () => ...)`), so that exception is governed the same way; a
+`Build()` written directly in the arguments throws in your own startup code.
 
 ## DetailView surface
 

@@ -103,8 +103,10 @@ Three details took the XAF sources to get right:
 `Type.GetInterfaceMap` and caches each one separately per type, so a DetailView factory that throws
 never costs the ListView its columns, and the startup check resolves each view's spec inside that
 view's own attempt. A factory that throws is not cached. `LayoutRegistry.Register<T>` covers
-types you do not own; registry entries win, and registration checks that every member the spec
-names exists on `T`.
+types you do not own, with specs or with factories for them, and registry entries win. Registration
+only stores: the structural rules and the check that every member the spec names exists on `T` run
+when a view is resolved, inside the updaters and the startup check, so `FailFastOnLayoutErrors`
+governs a broken registration like any other layout error.
 
 Static abstract implementations are inherited: `ServiceOrder : Order` maps the interface to
 `Order`'s methods. The resolver only applies a spec whose `TypeName` is the exact type, so a

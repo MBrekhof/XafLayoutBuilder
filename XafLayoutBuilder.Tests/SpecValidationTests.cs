@@ -80,10 +80,34 @@ public class SpecValidationTests {
         LayoutSpecChecks.Validate(ListViewColumnsBuilderTests.Section4Columns());
     }
 
+    // Registration defers every check to resolution, which runs inside the updaters and the startup check, where
+    // FailFastOnLayoutErrors decides whether the host stops (REG-001).
+    sealed class RegisteredOnly {
+        public string? Name { get; set; }
+    }
+
     [Fact]
-    public void Register_RejectsAStructurallyBrokenRawSpec() {
-        Assert.Throws<LayoutSpecException>(() =>
-            LayoutRegistry.Register<TestOrder>(Detail([Group("A", Item("Number"))], hidden: ["Number"]), columns: null));
+    public void Register_AcceptsAStructurallyBrokenRawSpec_AndResolutionRejectsIt() {
+        LayoutRegistry.Register<RegisteredOnly>(
+            new DetailLayoutSpec(typeof(RegisteredOnly).FullName!, [Group("A", Item("Name"))], ["Name"]), columns: null);
+        var ex = Assert.Throws<LayoutSpecException>(() => LayoutSpecResolver.Detail(typeof(RegisteredOnly)));
+        Assert.Contains("'Name' is both placed and hidden", ex.Message);
+    }
+
+    sealed class LazyRegistered {
+        public string? Name { get; set; }
+    }
+
+    [Fact]
+    public void RegisteredFactories_RunOnlyWhenResolved_AndAMissingMemberFailsThere() {
+        var calls = 0;
+        LayoutRegistry.Register<LazyRegistered>(
+            detail: () => { calls++; return new DetailLayoutSpec(typeof(LazyRegistered).FullName!, [Item("Nope")], []); },
+            columns: null);
+        Assert.Equal(0, calls);
+        var ex = Assert.Throws<LayoutSpecException>(() => LayoutSpecResolver.Detail(typeof(LazyRegistered)));
+        Assert.Equal(1, calls);
+        Assert.Contains("has no member(s) Nope", ex.Message);
     }
 
     sealed class RawBrokenLayout : ISupportViewLayoutCustomization {

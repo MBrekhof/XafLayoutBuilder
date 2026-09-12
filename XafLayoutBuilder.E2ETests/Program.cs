@@ -16,8 +16,9 @@ using Microsoft.Playwright;
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
 //   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
-//   Session 5: the host started with --break-layout exits at startup reporting both XLB001 and XLB003
-//   CHECK-002: the same fixture with FailFastOnLayoutErrors off serves XAF's own layout and logs both diagnostics
+//   Session 5: the host started with --break-layout exits at startup reporting XLB001, and for Order both a throwing
+//              detail factory and XLB003 (registered factories are checked at startup, each view on its own)
+//   CHECK-002: the same fixture with FailFastOnLayoutErrors off serves XAF's own layout and logs all three
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
@@ -407,6 +408,10 @@ try
     Assert(line.Contains("XLB001"), "XLB001 is reported in the host output");
     Assert(line.Contains("Customer_DetailView") && line.Contains("InternalCode"), "the diagnostic names the view id and the member");
     Assert(columnLine.Contains("Order_ListView") && columnLine.Contains("Lines"), "XLB003 for Order_ListView is reported in the same startup");
+    var twiceLine = log.Split('\n').FirstOrDefault(l => l.Contains("placed twice"))?.Trim() ?? "(not in app output)";
+    Console.WriteLine("    app output: " + twiceLine);
+    Assert(twiceLine.Contains("Order: member 'Number' is placed twice"),
+        "Order's registered detail factory fails in the same startup as Order's XLB003: checked at startup, not at Register, and per view");
 
     Step("CHECK-002: with FailFastOnLayoutErrors off, the broken layouts are logged and the host serves XAF's own layout");
     // The switch defaults to off; the sample turns it on in appsettings.Development.json and the command line turns it
@@ -448,6 +453,7 @@ try
     }
     Assert(appendedLog.Contains("XLB001 Customer_DetailView"), "XLB001 is written to eXpressAppFramework.log");
     Assert(appendedLog.Contains("XLB003 Order_ListView"), "XLB003 is written to eXpressAppFramework.log");
+    Assert(appendedLog.Contains("Order: member 'Number' is placed twice"), "Order's throwing detail factory is logged instead of stopping the host");
 
     Console.WriteLine("\n=== E2E PASSED ===");
 }
