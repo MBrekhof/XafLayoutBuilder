@@ -39,16 +39,28 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `Model/NodeGenerators/ModelDetailViewNodesGenerator.cs` lines 115-135;
   `DC/Internal/XafMemberInfoInternal.cs` lines 75-80;
   `Model/NodeGenerators/ModelDetailViewLayoutNodesGenerator.cs` line 242]
-- **Differences target node paths, so converting a view does not carry them over.** Stored
-  differences are stacked as layers (`ModelApplicationHelper.AddLayer` -> `InsertLayerAtCoreInLock`)
-  and a node resolves by id through the layer chain, so a difference aimed at the stock
-  `Main/SimpleEditors/...` has no generated node to act on once the builder has replaced the tree.
-  (`ModelNode.Merge`/`ApplyDiff`, which creates missing nodes, is the explicit merge API, not the
-  runtime path.) `FreezeLayout` clones the whole layout into the difference layer and resets the
-  master, so a frozen layout does not depend on the generated tree. Whether XAF ignores an orphaned
-  path or renders it was not established (DOCS-001). [source `Model/Core/ModelApplication.cs` lines
-  865-869; `Model/Core/ModelNode.cs` lines 793-812, 1126-1133, 1405-1429;
-  `Model/DomainLogics/ModelViewLogic.cs` lines 121-135]
+- **Differences target node paths, so converting a view does not carry them over, and the next save
+  deletes them.** Stored differences are stacked as layers (`ModelApplicationHelper.AddLayer` ->
+  `InsertLayerAtCoreInLock`) and a node resolves by id through the layer chain. A difference node
+  that no earlier layer has and that is not marked `IsNewNode` is not merged:
+  `ModelNode.CreateMasterNode` sets it aside as unusable (`AddUnusableNodeAndRemoveFromList`). So
+  once the builder has replaced the tree, a difference aimed at the stock `Main/SimpleEditors/...`
+  is neither rendered nor part of the merged model (the export does not print it), while nodes in
+  the same difference that target builder paths still apply. `ModelDifferenceDbStore.SaveDifference`
+  writes each aspect of the usable layer only; `FileModelStore.SaveDifference` is the store that
+  also writes the unusable model, to `UnusableNodes*.xafml` (source only, not observed). With the
+  database user store, the first save after the conversion therefore removes the orphaned difference
+  for good. XAF Blazor saves a user's model when it is flushed: at Log Off, and when a new circuit
+  for the same user loads its differences (a reload, a second tab); disposing the application
+  discards the pending save, so killing the host saves nothing. Observed with a canary and gated in
+  DIFF-001. (`ModelNode.Merge`/`ApplyDiff`, which creates missing nodes, is the explicit merge API,
+  not the runtime path.) `FreezeLayout` clones the whole layout into the difference layer and resets
+  the master, so a frozen layout does not depend on the generated tree. [source
+  `Model/Core/ModelApplication.cs` lines 865-869; `Model/Core/ModelNode.cs` lines 793-812, 1126-1133,
+  1405-1429, 2080-2101, 2316-2319; `ModelDifferenceDbStore.cs` lines 173-215;
+  `ModelDifferenceStore.cs` lines 345 and 493-500; `DevExpress.ExpressApp.Blazor/BlazorApplication.cs`
+  lines 103-131 and 270-276; `DevExpress.ExpressApp.Blazor/Services/AppState/UserModelSaveDispatcher.cs`
+  lines 76-98 and 138-141; `Model/DomainLogics/ModelViewLogic.cs` lines 121-135]
 - **A module scans its own assembly, so it must not share one.** `ModuleBase.GetModuleUpdaters`
   instantiates every `ModuleUpdater` in `GetType().Assembly` that has an `(IObjectSpace, Version)`
   constructor, and `DatabaseUpdater.GetModuleUpdaters` concatenates every module's list without

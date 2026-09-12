@@ -15,6 +15,8 @@ using Microsoft.Playwright;
 //   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
 //   E2E 6   deleting the user differences brings the builder layout back
+//   DIFF-001 a user difference aimed at the stock path Main/SimpleEditors is not rendered and is gone from the stored
+//            user model after the next save, while the same difference's caption on a builder group applies and is kept
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   Session 5: the host started with --break-layout exits at startup reporting XLB001, and for Order both a throwing
@@ -374,6 +376,55 @@ try
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-12-user-layer-reset.png") });
     Assert(await OrderDateGroup(page) == "Header", "after reset OrderDate renders inside the Header group again");
 
+    Step("DIFF-001: a user difference aimed at a stock layout path the builder replaced is ignored, then dropped at the next save");
+    // A difference stored before a view was converted still names XAF's stock paths (Main/SimpleEditors/Order/...). The
+    // builder replaced that tree, so the node has no lower layer and is not marked IsNewNode: ModelNode.CreateMasterNode
+    // sets it aside as unusable instead of merging it, and ModelDifferenceDbStore.SaveDifference writes only the usable
+    // layer, so the next save of that user's model drops it. The Details caption is the control: same difference, a path
+    // the builder generates. Log Off flushes XAF Blazor's deferred save, so the stored XML is read after it.
+    const string OrphanedStockPathXml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <Application>
+          <Views>
+            <DetailView Id="Order_DetailView">
+              <Layout>
+                <LayoutGroup Id="Main">
+                  <LayoutGroup Id="Details" Caption="Live group caption" />
+                  <LayoutGroup Id="SimpleEditors" ShowCaption="True" Caption="Stock group caption">
+                    <LayoutGroup Id="Order">
+                      <LayoutItem Id="Number" RelativeSize="30" />
+                    </LayoutGroup>
+                  </LayoutGroup>
+                </LayoutGroup>
+              </Layout>
+            </DetailView>
+          </Views>
+        </Application>
+        """;
+    KillApp(ref app);
+    ResetUserModel(adminId);
+    Sql($"""
+        DECLARE @d UNIQUEIDENTIFIER = NEWID();
+        INSERT INTO ModelDifferences (ID, UserId, ContextId, Version, GCRecord) VALUES (@d, '{adminId}', 'Blazor', 0, 0);
+        INSERT INTO ModelDifferenceAspects (ID, Name, Xml, OwnerID, GCRecord) VALUES (NEWID(), '', @xml, @d, 0);
+        """, ("@xml", OrphanedStockPathXml));
+    app = await RestartApp(app, blazorProj, appOutput);
+    await OpenOrd001Detail(page);
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-18-orphaned-stock-path.png") });
+    var orphanForm = page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First;
+    var orphanFormText = await orphanForm.InnerTextAsync();
+    Assert(orphanFormText.Contains("Live group caption"), "control: the same difference's caption on the builder's Details group is applied");
+    Assert(!orphanFormText.Contains("Stock group caption"), "the group aimed at the stock path Main/SimpleEditors is not rendered");
+    Assert(await orphanForm.Locator("label.xaf-item-number").CountAsync() == 1, "Number is rendered once");
+    Assert(await OrderDateGroup(page) == "Header", "the builder's Header group is intact");
+    await page.GetByRole(AriaRole.Button, new() { Name = "Admin", Exact = true }).ClickAsync();
+    await page.GetByRole(AriaRole.Button, new() { Name = "Log Off", Exact = true }).ClickAsync();
+    await page.WaitForURLAsync(url => url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase), new() { Timeout = 20_000 });
+    var storedDiff = SqlScalar($"SELECT CAST(a.Xml AS NVARCHAR(MAX)) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}' AND a.Name = ''") ?? "";
+    Assert(storedDiff.Contains("Live group caption"), "control: the saved user model keeps the Details caption");
+    Assert(!storedDiff.Contains("SimpleEditors"), "the saved user model no longer holds the orphaned stock path");
+    await Login(page);
 
     Step("E2E 8: unplaced members land in the catch-all group instead of failing startup");
     await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });

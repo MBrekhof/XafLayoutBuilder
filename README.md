@@ -54,9 +54,11 @@ That file is the sample's only layout source for `Order`; the sample module has 
 - **Ordinary XAF layering.** The builder output is the generated layer, so module XAFML,
   administrators and users can still customise on top, and their changes win. That is precedence,
   not survival: a stored difference targets a node path such as `Main/SimpleEditors/Name`, and the
-  builder replaces the generated tree with its own group paths, so converting a view that already
-  carries customisations does not carry them over. A frozen layout (`FreezeLayout`) is a
-  self-contained copy and does. Check `ModelDifference` and module XAFML for a view before you
+  builder replaces the generated tree with its own group paths. XAF ignores a difference whose path
+  no longer exists, and the database user store drops it at that user's next model save (Log Off, a
+  reload), so converting a view that already carries customisations discards them, and turning the
+  builder off again does not bring them back once saved. A frozen layout (`FreezeLayout`) is a
+  self-contained copy and survives. Check `ModelDifference` and module XAFML for a view before you
   convert it.
 - **Startup diagnostics.** A broken layout is reported at startup with a numbered diagnostic that
   names the view and the member. The host decides what that does: with `FailFastOnLayoutErrors` on

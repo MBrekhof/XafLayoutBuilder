@@ -22,7 +22,8 @@ nothing else. Changes appear after an application restart.
 - Do not create `Model.xafml` or `Model.DesignedDiffs.xafml` entries for views a builder owns.
 - Before converting a view that already exists in use, check `ModelDifference` rows and module XAFML
   for it. Differences target the stock node paths (`Main/SimpleEditors/...`), which the builder
-  replaces, so those customisations do not carry over. A `FreezeLayout` copy does.
+  replaces, so those customisations do not carry over: XAF ignores them, and the database user store
+  deletes them at that user's next model save. A `FreezeLayout` copy does carry over.
 
 ## Declare a layout
 
