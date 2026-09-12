@@ -133,10 +133,11 @@ type's DetailView, ListView and lookup with every layer applied, as the `{Type}.
 above, namespace included. The view you run it from is the one exported, and the comment at the top
 names the view ids it read. It writes nothing to disk.
 
-In a Blazor host that also references `XafLayoutBuilder.Blazor`, the same Tools tab has **Copy
-Layout To Clipboard**, which skips the popup and puts the identical text on the clipboard. XAF
+In a Blazor host that also references `XafLayoutBuilder.Blazor`, the same Tools tab has two more
+actions that skip the popup: **Copy Layout To Clipboard**, and **Download Layout File**, which
+saves `{Type}.Layout.cs` straight to the downloads folder. All three print the identical text. XAF
 Blazor renders only OK and Cancel inside a popup for a non-persistent object, which is why the
-button is not in the popup itself.
+buttons are not in the popup itself.
 
 - Prints groups, tabs, items, captions that differ from XAF's default, flow, collapsible, explicit
   relative sizes and images. Layout items that are not property editors are listed in a comment.

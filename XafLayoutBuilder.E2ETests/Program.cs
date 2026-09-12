@@ -12,8 +12,9 @@ using Microsoft.Playwright;
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
 //   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder
 //   E2E 5   Export Layout To Code prints OrderDate under Details
-//   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
+//   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
+//   E2E 6   deleting the user differences brings the builder layout back
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   Session 5: the host started with --break-layout exits at startup with XLB001
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
@@ -329,6 +330,19 @@ try
     }
     Assert(WithoutComments(clipboard) == WithoutComments(exported), "the clipboard holds the same class the popup showed");
 
+    Step("E2E 9: Download Layout File hands over the .Layout.cs file");
+    // Running an action drops the toolbar back to the Home tab, so select Tools again.
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var downloadAction = page.GetByText("Download Layout File", new() { Exact = true }).First;
+    await downloadAction.WaitForAsync(new() { Timeout = 10_000 });
+    var download = await page.RunAndWaitForDownloadAsync(async () => await downloadAction.ClickAsync(), new() { Timeout = 30_000 });
+    var downloadedPath = Path.Combine(screenshotDir, "e2e-15-downloaded-Order.Layout.cs");
+    await download.SaveAsAsync(downloadedPath);
+    var downloaded = await File.ReadAllTextAsync(downloadedPath);
+    Console.WriteLine($"    downloaded {download.SuggestedFilename}, {downloaded.Length} chars");
+    Assert(download.SuggestedFilename == "Order.Layout.cs", $"the file is named after the type (got {download.SuggestedFilename})");
+    Assert(WithoutComments(downloaded) == WithoutComments(exported), "the downloaded file holds the same class the popup showed");
+
     Step("E2E 6: resetting the user model brings the builder layout back");
     KillApp(ref app);
     ResetUserModel(adminId);
@@ -337,6 +351,7 @@ try
     await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-12-user-layer-reset.png") });
     Assert(await OrderDateGroup(page) == "Header", "after reset OrderDate renders inside the Header group again");
+
 
     Step("E2E 8: unplaced members land in the catch-all group instead of failing startup");
     await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });

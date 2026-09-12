@@ -164,14 +164,23 @@ the printed comment.
 
 The popup is a DetailView of the non-persistent `LayoutCode` with one unlimited string.
 
-Copying to the clipboard needs a browser, so it lives in `XafLayoutBuilder.Blazor`, an optional
-add-on module with one controller. It calls `navigator.clipboard.writeText` through XAF's own
-`IXafJSRuntime`, which needs no JavaScript file of its own but is marked `EditorBrowsable(Never)`:
-the single DevExpress internal this repository leans on besides the column index. The action sits
-in the Tools tab next to the export rather than inside the popup, because XAF Blazor's popup
-template for a non-persistent object renders only its own OK and Cancel buttons
-(`PopupDialogTemplateBase` builds exactly one action container, "Confirmation"). Both paths print
-through the same `LayoutCodePrinter.ForView`, so the clipboard and the popup always agree.
+Getting the text out of the browser needs the browser, so that half lives in
+`XafLayoutBuilder.Blazor`, an optional add-on module with two controllers.
+
+- **Copy Layout To Clipboard** calls `navigator.clipboard.writeText` through XAF's own
+  `IXafJSRuntime`, with no JavaScript file of its own. `IXafJSRuntime` is marked
+  `EditorBrowsable(Never)`: one of the two DevExpress internals this repository leans on, the other
+  being the generated column index.
+- **Download Layout File** hands over `{Type}.Layout.cs`. A server-side action cannot start a
+  download by itself and Chrome blocks top-level `data:` navigation, so the add-on ships one JS
+  module in its `wwwroot` that creates an anchor, clicks it and revokes the blob URL. Served from
+  the Razor class library at `_content/XafLayoutBuilder.Blazor/`, it is the only JavaScript here.
+
+Both sit in the Tools tab next to the export rather than inside the popup, because XAF Blazor's
+popup template for a non-persistent object renders only its own OK and Cancel buttons
+(`PopupDialogTemplateBase` builds exactly one action container, "Confirmation"). All three paths
+print through the same `LayoutCodePrinter.ForView`, so the popup, the clipboard and the file always
+agree, and the gate asserts exactly that.
 
 ## The user layer in XAF Blazor
 

@@ -22,8 +22,11 @@ startup-failure check. The repository is public on GitHub, MIT licensed.
 
 Four points from the owner's read of the finished repository, all applied:
 
-- **The copy button.** `XafLayoutBuilder.Blazor` is a new optional add-on: one module, one
-  controller, `navigator.clipboard.writeText` through XAF's `IXafJSRuntime`, no JavaScript file.
+- **The copy button, and the download.** `XafLayoutBuilder.Blazor` is a new optional add-on: one
+  module and two controllers. Copy uses `navigator.clipboard.writeText` through XAF's
+  `IXafJSRuntime` with no JavaScript file; Download ships one small JS module in the add-on's
+  `wwwroot`, because a server-side action cannot start a browser download and Chrome blocks
+  top-level `data:` navigation. The gate downloads the file and compares it with the popup text.
   The Module stays platform neutral. The button could not go inside the export popup after all:
   XAF Blazor's popup for a non-persistent object renders only its own OK and Cancel, so the action
   sits next to the export in the Tools tab. Both paths share `LayoutCodePrinter.ForView`, and the

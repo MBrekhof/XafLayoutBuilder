@@ -57,7 +57,8 @@ That file is the sample's only layout source for `Order`; the sample module has 
   diagnostic that names the view and the member.
 - **The app is the designer.** "Export Layout To Code" prints any type's current layout, every
   layer applied, back as the same C#. Arrange it in the running app, paste the code, commit. With
-  the Blazor add-on referenced, "Copy Layout To Clipboard" puts it on the clipboard in one click.
+  the Blazor add-on referenced, "Copy Layout To Clipboard" puts it on the clipboard and "Download
+  Layout File" saves it as `{Type}.Layout.cs`, both in one click.
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
@@ -74,7 +75,7 @@ From the E2E gate's run on the sample.
 | ![User layer wins](docs/screenshots/05-user-layer-wins.png) | ![Export Layout To Code](docs/screenshots/06-export-layout-to-code.png) |
 | A user difference moved Order Date into Details and wins over the builder. | The export prints that merged layout as builder C#. |
 | ![After reset](docs/screenshots/07-after-user-reset.png) | ![Copy to clipboard](docs/screenshots/08-copy-to-clipboard.png) |
-| With the user's differences deleted, the builder layout is back. | The Blazor add-on adds a one-click copy next to the export. |
+| With the user's differences deleted, the builder layout is back. | The Blazor add-on adds copy and download next to the export. |
 | ![Catch-all group](docs/screenshots/09-unplaced-catch-all-group.png) | |
 | Opting out of the strict rule: whatever the layout does not mention lands in one group. | |
 
@@ -105,7 +106,7 @@ catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
 1. Reference `XafLayoutBuilder.Module`, which brings `XafLayoutBuilder.Core`.
 2. Require the module from yours:
    `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
-   In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard action.
+   In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard and download actions.
 3. Add a partial `{Type}.Layout.cs` implementing `ISupportViewLayoutCustomization`, or call
    `LayoutRegistry.Register<T>(detail, columns)` for types you do not own.
 4. Optionally set `XafLayoutBuilderModule.EnableExport` from your configuration, so administrators
@@ -159,10 +160,13 @@ specs, and a printer turns specs into the builder C#.
 
 **The export:**
 
-- Copying is a separate action, not a button inside the popup. XAF Blazor renders only its own OK
-  and Cancel in a popup for a non-persistent object, so the clipboard action sits next to the export
+- Copying and downloading are separate actions, not buttons inside the popup. XAF Blazor renders
+  only its own OK and Cancel in a popup for a non-persistent object, so both sit next to the export
   in the Tools tab, in the optional `XafLayoutBuilder.Blazor` project. Without that project
-  referenced, the popup is still select-all and copy. Writing the file to disk is not implemented.
+  referenced, the popup is still select-all and copy.
+- The download needs one small JavaScript module, shipped inside the add-on. A server-side action
+  cannot start a browser download on its own, and Chrome blocks top-level `data:` navigation, so an
+  anchor has to be created and clicked. That file is the only JavaScript in the repository.
 - Exported ListViews list every unshown column as `.Hide(...)`, except the key. The model does not
   record whether a column was hidden or never mentioned, so the export is more verbose than
   hand-written code. One difference is not cosmetic: a hidden column that still carried a sort
@@ -197,7 +201,7 @@ specs, and a printer turns specs into the builder C#.
 ```
 XafLayoutBuilder.Core/                  builder, LayoutSpec records, JSON, C# printer (no DevExpress reference)
 XafLayoutBuilder.Module/                generator updaters, registry, startup check, exporter, export action
-XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard
+XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template
 XafLayoutBuilder.Tests/                 xUnit tests for Core
