@@ -26,4 +26,17 @@ public static class BrokenLayouts {
             // "Broken number" is the same kind of canary, set on a column the updater reaches before the failing one.
             columns: () => ListViewColumnsBuilder<Order>.Create().Column(x => x.Number, caption: "Broken number").Column(x => x.Lines).Build());
     }
+
+    /// <summary>
+    /// A second fixture, wired to --break-factory and registered after <see cref="Register"/>: Customer keeps its broken
+    /// DetailView layout, and its columns factory throws a non-layout exception. The startup check reaches Customer before
+    /// Order, so with fail-fast off it must collect this exception and still report Order's failures; with it on, the
+    /// exception ends startup (TEST-001).
+    /// </summary>
+    public static void RegisterThrowingFactory() =>
+        LayoutRegistry.Register<Customer>(
+            detail: () => LayoutBuilder<Customer>.Create()
+                .Group("Main", g => g.Caption("Broken layout").Item(x => x.Name).Item(x => x.City).Item(x => x.InternalCode))
+                .Build(),
+            columns: () => throw new InvalidOperationException("Customer columns factory broke"));
 }

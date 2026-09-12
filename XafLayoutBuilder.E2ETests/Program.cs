@@ -18,7 +18,10 @@ using Microsoft.Playwright;
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   Session 5: the host started with --break-layout exits at startup reporting XLB001, and for Order both a throwing
 //              detail factory and XLB003 (registered factories are checked at startup, each view on its own)
-//   CHECK-002: the same fixture with FailFastOnLayoutErrors off serves XAF's own layout and logs all three
+//   TEST-001:  adding --break-factory (a registered columns factory throwing a non-layout exception), fail-fast
+//              startup stops on that exception
+//   CHECK-002: both fixtures with FailFastOnLayoutErrors off serve XAF's own layout and log every failure, including
+//              the factory's exception and Order's failures that the check only reaches after it
 // Writes Admin's ModelDifferences rows in the LocalDB catalog XafLayoutBuilder.Sample, restarting the host around
 // those writes, and leaves Admin's user model empty. Screenshots: bin/Debug/net10.0/screenshots.
 
@@ -413,6 +416,21 @@ try
     Assert(twiceLine.Contains("Order: member 'Number' is placed twice"),
         "Order's registered detail factory fails in the same startup as Order's XLB003: checked at startup, not at Register, and per view");
 
+    Step("TEST-001: a registered factory throwing a non-layout exception stops a fail-fast startup");
+    KillApp(ref app);
+    lock (appOutput) appOutput.Clear();
+    app = StartApp(blazorProj, appOutput, "--break-layout --break-factory");
+    var factoryExited = app.WaitForExit(90_000);
+    if (factoryExited) app.WaitForExit(); // flushes the async stdout/stderr readers
+    string factoryLog; lock (appOutput) factoryLog = appOutput.ToString();
+    var factoryLine = factoryLog.Split('\n').FirstOrDefault(l => l.Contains("Customer columns factory broke"))?.Trim() ?? "(not in app output)";
+    Console.WriteLine("    app output: " + factoryLine);
+    Assert(factoryExited, "host process exits instead of serving");
+    Assert(app.ExitCode != 0, $"host exit code is non-zero (got {app.ExitCode})");
+    Assert(!await IsServing(), "nothing is serving on :5100 after the failed start");
+    Assert(factoryLine.Contains("InvalidOperationException"),
+        "the factory's own exception ends a fail-fast startup (only layout errors are collected with fail-fast on)");
+
     Step("CHECK-002: with FailFastOnLayoutErrors off, the broken layouts are logged and the host serves XAF's own layout");
     // The switch defaults to off; the sample turns it on in appsettings.Development.json and the command line turns it
     // off again here. XAF traces to eXpressAppFramework.log next to the executable, a file that grows across runs, so
@@ -423,7 +441,7 @@ try
     var logStart = File.Exists(xafLog) ? new FileInfo(xafLog).Length : 0;
     // The override has to come first: .NET's command-line configuration reads "--key value", so a bare --break-layout
     // would swallow the next argument as its own value and leave the appsettings value in charge.
-    app = StartApp(blazorProj, appOutput, "--XafLayoutBuilder:FailFastOnLayoutErrors=false --break-layout");
+    app = StartApp(blazorProj, appOutput, "--XafLayoutBuilder:FailFastOnLayoutErrors=false --break-layout --break-factory");
     await WaitForHttpOk(app, appOutput);
     Assert(await IsServing(), "the host serves despite the broken layouts");
     for (var attempt = 0; attempt < 3; attempt++) {
@@ -462,7 +480,18 @@ try
     }
     Assert(appendedLog.Contains("XLB001 Customer_DetailView"), "XLB001 is written to eXpressAppFramework.log");
     Assert(appendedLog.Contains("XLB003 Order_ListView"), "XLB003 is written to eXpressAppFramework.log");
+    Assert(appendedLog.Contains("Customer columns factory broke"), "Customer's columns factory exception is logged instead of stopping the host (TEST-001)");
     Assert(appendedLog.Contains("Order: member 'Number' is placed twice"), "Order's throwing detail factory is logged instead of stopping the host");
+    // The updaters log their own failures whenever a view is generated (opening Order_ListView also generates
+    // Order_DetailView's layout), so a logged message alone does not show that the startup check went on. The check's
+    // own report is one "N layout problems" entry: it must hold Customer's factory exception and Order's failure, which
+    // the check only reaches after Customer. Narrowing the check's catch to layout errors makes this assertion fail.
+    var checkReportAt = appendedLog.IndexOf("layout problems:", StringComparison.Ordinal);
+    var checkReport = checkReportAt < 0 ? "" : appendedLog[checkReportAt..];
+    var nextEntry = System.Text.RegularExpressions.Regex.Match(checkReport, @"\n\d\d\.\d\d\.\d\d \d\d:\d\d:\d\d\.\d{3}\t");
+    if (nextEntry.Success) checkReport = checkReport[..nextEntry.Index];
+    Assert(checkReport.Contains("Customer columns factory broke") && checkReport.Contains("Order: member 'Number' is placed twice"),
+        "the startup check's one report holds Customer's factory exception and Order's later failure: a non-layout exception does not end the degraded check (TEST-001)");
 
     Console.WriteLine("\n=== E2E PASSED ===");
 }

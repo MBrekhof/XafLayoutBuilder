@@ -172,6 +172,12 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `TextWriterTraceListener`; not to the console or `ILogger`. The degraded path of
   `FailFastOnLayoutErrors` logs there. [dxdocs 112575, 112576; source
   `DevExpress.Persistent.Base/Tracing.cs` lines 469 and 762]
+- **Opening a ListView also generates its class's DetailView layout.** Observed in the E2E gate
+  (TEST-001, 2026-09-13), not traced to a source line: with fail-fast off, opening `Order_ListView`
+  made `DetailViewLayoutUpdater` log `Order_DetailView`'s broken spec although no DetailView was
+  opened. A broken DetailView spec therefore surfaces as soon as its ListView is used, and a logged
+  message alone does not say which path reported it; the startup check's own report is its single
+  `N layout problems` entry.
 
 ## Exporter and user layer (session 6)
 

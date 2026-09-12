@@ -32,6 +32,10 @@ public class Program : IDesignTimeApplicationFactory {
             if(ContainsArgument(args, "break-layout")) {
                 XafLayoutBuilder.Sample.Module.BrokenLayouts.Register();
             }
+            // E2E fixture: a registered columns factory that throws a non-layout exception (TEST-001).
+            if(ContainsArgument(args, "break-factory")) {
+                XafLayoutBuilder.Sample.Module.BrokenLayouts.RegisterThrowingFactory();
+            }
             IHost host = CreateHostBuilder(args).Build();
             if(ContainsArgument(args, "updateDatabase")) {
                 using(var serviceScope = host.Services.CreateScope()) {
