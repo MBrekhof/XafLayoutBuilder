@@ -19,6 +19,11 @@ public class ViewCheckTests {
         var ex = Assert.Throws<LayoutSpecException>(() =>
             LayoutSpecChecks.CheckAgainstView(LayoutBuilderTests.Section4Detail(), View, items, items));
         Assert.StartsWith("XLB001 TestOrder_DetailView: member 'Notes'", ex.Message);
+        // [VisibleInDetailView(false)] keeps the view item (only the layout generator reads it), so naming it would send
+        // people after the wrong attribute.
+        Assert.Contains("[Browsable(false)]", ex.Message);
+        Assert.Contains("[HideInUI", ex.Message);
+        Assert.DoesNotContain("VisibleInDetailView", ex.Message);
     }
 
     [Fact]

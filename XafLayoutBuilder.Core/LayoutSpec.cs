@@ -208,7 +208,8 @@ public static class LayoutSpecChecks {
         var items = viewItems.ToHashSet(StringComparer.Ordinal);
         if (spec.PlacedMembers().FirstOrDefault(m => !items.Contains(m)) is { } missing)
             throw new LayoutSpecException(
-                $"XLB001 {viewId}: member '{missing}' has no Items entry. Is it [Browsable(false)] or [VisibleInDetailView(false)]?");
+                $"XLB001 {viewId}: member '{missing}' has no Items entry, so XAF generated no editor to place. " +
+                "Is it [Browsable(false)], hidden with [HideInUI], or the reference back to its owner?");
 
         var placed = spec.PlacedMembers().ToHashSet(StringComparer.Ordinal);
         var hidden = spec.HiddenMembers.ToHashSet(StringComparer.Ordinal);

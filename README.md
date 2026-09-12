@@ -118,7 +118,7 @@ The full surface, the rules and the checklist for changing a class are in the sk
 
 | Code | Meaning |
 |---|---|
-| XLB001 | A placed member has no view item, for example because it is `[Browsable(false)]`. |
+| XLB001 | A placed member has no view item, because it is `[Browsable(false)]` or hidden with `[HideInUI]`. `[VisibleInDetailView(false)]` keeps the view item, so such a member can still be placed. |
 | XLB002 | A visible member is neither placed nor hidden in the DetailView layout. |
 | XLB003 | A column names a collection, or something that is not a member of the type. |
 | XLB004 | A type has a spec but no default view to apply it to. |

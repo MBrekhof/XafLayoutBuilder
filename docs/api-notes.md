@@ -30,6 +30,15 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   code that catches the exception sees whatever the updater had written by then. Both updaters
   therefore check everything before they change anything (APPLY-001). [source
   `Model/ModelNodeGenerator.cs` lines 50-65; `Model/Core/ModelNode.cs` lines 2219-2229 and 445-458]
+- **Which members get a DetailView editor.** The items generator creates one only when
+  `GetShouldGenerateMember` passes: `IMemberInfo.IsVisible` (that is `[Browsable]` plus
+  `HideInUI.ModelMember`), not the reference to the owner, no `HideInUI.DetailViewEditor`, and a
+  simple, class or interface member type. It never reads `IsVisibleInDetailView`; only the layout
+  generator does. A `[VisibleInDetailView(false)]` member therefore keeps its `Items` entry and can
+  be placed, so XLB001 names `[Browsable(false)]` and `[HideInUI]` instead (DIAG-001). [source
+  `Model/NodeGenerators/ModelDetailViewNodesGenerator.cs` lines 115-135;
+  `DC/Internal/XafMemberInfoInternal.cs` lines 75-80;
+  `Model/NodeGenerators/ModelDetailViewLayoutNodesGenerator.cs` line 242]
 
 ## Layout model interfaces (`Model/IModelDetailView.cs`)
 

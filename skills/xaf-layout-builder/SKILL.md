@@ -116,7 +116,9 @@ The module generates every view that has a spec when the application model is bu
 stop the application at startup. In XAF Blazor the host exits before it listens; read the console.
 Every view with a spec is checked, and all broken views are reported together in one exception.
 
-- XLB001: a placed member has no view item, for example `[Browsable(false)]`.
+- XLB001: a placed member has no view item: it is `[Browsable(false)]`, hidden with `[HideInUI]`, or
+  the reference back to its owner. `[VisibleInDetailView(false)]` does not remove the view item; such
+  a member needs no placing but can still be placed.
 - XLB002: a visible member is neither placed nor hidden.
 - XLB003: a column names a collection or something that is not a member.
 - XLB004: a type has a spec but no default view.
