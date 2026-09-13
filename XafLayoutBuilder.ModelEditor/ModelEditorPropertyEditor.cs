@@ -25,7 +25,11 @@ public sealed class ModelEditorPropertyEditor(Type objectType, IModelMemberViewI
 
     void IComplexViewItem.Setup(IObjectSpace objectSpace, XafApplication application) => this.application = application;
 
-    protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel { Application = application!, Session = Session };
+    protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel {
+        Application = application!,
+        Session = Session,
+        StartViewId = (CurrentObject as ModelEditorWindow)?.StartViewId,
+    };
 }
 
 public sealed class ModelEditorComponentModel : ComponentModelBase {
@@ -36,6 +40,11 @@ public sealed class ModelEditorComponentModel : ComponentModelBase {
 
     public ModelEditSession Session {
         get => GetPropertyValue<ModelEditSession>();
+        set => SetPropertyValue(value);
+    }
+
+    public string? StartViewId {
+        get => GetPropertyValue<string?>();
         set => SetPropertyValue(value);
     }
 

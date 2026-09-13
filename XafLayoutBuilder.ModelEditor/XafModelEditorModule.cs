@@ -21,9 +21,13 @@ public sealed class XafModelEditorModule : ModuleBase {
     }
 }
 
-/// <summary>What the popup shows. The one property exists to host <see cref="ModelEditorPropertyEditor"/>.</summary>
+/// <summary>What the popup shows. <see cref="Model"/> exists to host <see cref="ModelEditorPropertyEditor"/>.</summary>
 [DomainComponent]
 public class ModelEditorWindow : NonPersistentBaseObject {
     [EditorAlias(ModelEditorPropertyEditor.Alias)]
     public virtual string? Model { get; set; }
+
+    /// <summary>View in Model: the id of the view whose node the editor opens on (MODELEDITOR-005).</summary>
+    [System.ComponentModel.Browsable(false)]
+    public virtual string? StartViewId { get; set; }
 }

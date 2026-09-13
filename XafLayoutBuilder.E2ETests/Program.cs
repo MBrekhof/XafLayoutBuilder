@@ -30,7 +30,8 @@ using Microsoft.Playwright;
 //            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once;
 //            MODELEDITOR-003: the search finds the view and a value's description shows; MODELEDITOR-004: a column added
 //            in the editor shows after Save and is gone again after deleting it, and a model save from a second logon does
-//            not store a node added in the open editor but not saved
+//            not store a node added in the open editor but not saved; MODELEDITOR-005: the DetailView drop-down sets
+//            Order_ListView's form, View in Model selects the open view's node, Go to and Back navigate, a reset restores it
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -646,6 +647,50 @@ try
     await ClosePopup(page);
     await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
 
+    Step("MODELEDITOR-005: a lookup sets Order_ListView's DetailView; View in Model, Go to and Back navigate the editor");
+    // The DetailView drop-down lists the Order detail views ([DataSourceProperty] + [DataSourceCriteria]); after Save the list
+    // opens the compact form the builder declared (SampleViews, group "Compact order").
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator("tr[data-value='DetailView'] select").SelectOptionAsync(new SelectOptionValue { Label = "Views/Order_Compact_DetailView" });
+    await modelEditor.Locator("tr[data-value='DetailView'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    // A lookup edit is the only pending edit until Save, so another edit is refused; the refused text must not stay in the
+    // input, or it would look saved (Codex review 5).
+    var refusedCaptionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    var captionBefore = await refusedCaptionInput.InputValueAsync();
+    await refusedCaptionInput.FillAsync("Refused caption");
+    await refusedCaptionInput.PressAsync("Tab");
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "first" }).WaitForAsync(new() { Timeout = 10_000 });
+    var captionAfter = await modelEditor.Locator("tr[data-value='Caption'] input").InputValueAsync();
+    Assert(captionAfter == captionBefore,
+        $"an edit refused while a lookup edit is pending leaves the input showing the model's value (got '{captionAfter}', expected '{captionBefore}')");
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    // An order already open in a tab keeps the form it was opened with, and its tab header carries the number too, so the
+    // check opens an order no earlier step opened.
+    var lookupForm = await OpenOrderFromOrderList(page, "ORD-002");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-25-model-editor-lookup.png") });
+    Assert(lookupForm.Contains("Compact order"),
+        $"the DetailView chosen through the Model Editor's lookup opens from Order_ListView after Save (got {lookupForm.Replace('\n', ' ')})");
+    // View in Model in the open form selects its view's node.
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    await page.GetByText("View in Model", new() { Exact = true }).First.ClickAsync();
+    modelEditor = page.Locator(".xlb-model-editor");
+    await modelEditor.Locator("[data-selected='Views/Order_Compact_DetailView']").WaitForAsync(new() { Timeout = 15_000 });
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    // Go to follows the DetailView reference, Back returns; then the DetailView is reset and saved for the steps after this one.
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator("tr[data-value='DetailView'] .xlb-goto").ClickAsync();
+    await modelEditor.Locator("[data-selected='Views/Order_Compact_DetailView']").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-back").ClickAsync();
+    await modelEditor.Locator("[data-selected='Views/Order_ListView']").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator("tr[data-value='DetailView'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='DetailView'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var resetForm = await OpenOrderFromOrderList(page, "ORD-003");
+    Assert(!resetForm.Contains("Compact order") && resetForm.Contains("Notes"),
+        $"after resetting the DetailView in the Model Editor, Order_ListView opens its own form again (got {resetForm.Replace('\n', ' ')})");
+
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property
     // added to the class later. --extra-column lists Notes, which Order.Layout.cs leaves out; --freeze-order-columns
@@ -910,6 +955,17 @@ static async Task OpenListView(IPage page, string viewId, string seededText)
 static Task<string[]> GridHeaders(IPage page) =>
     page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<string[]>(
         @"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+
+// Opens an order from Order_ListView, as a user clicks it, and returns the text of the form in the active tab (inactive
+// tabs stay in the DOM).
+static async Task<string> OpenOrderFromOrderList(IPage page, string number)
+{
+    await OpenListView(page, "Order_ListView", number);
+    await page.GetByText(number, new() { Exact = true }).First.ClickAsync();
+    await page.WaitForFunctionAsync($"() => [...document.querySelectorAll('input')].some(i => i.value === '{number}')", null, new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
+    return await page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First.InnerTextAsync();
+}
 
 static async Task OpenOrd001Detail(IPage page)
 {

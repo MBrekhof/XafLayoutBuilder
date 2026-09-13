@@ -149,6 +149,45 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
         Assert.Contains("PropertyName", ex.Message);
     });
 
+    // MODELEDITOR-005: a reference value is stored under its persistent name (DetailViewID, IModelListView.cs 63); a saved
+    // reset in the warmed-up model takes that attribute out of the user layer.
+    [Fact]
+    public void Session_ResetOfAReference_TakesItsPersistentValueOutOfTheLayer() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var view = ContactListView(model);
+        // A value equal to the calculated default leaves no difference, so a second Contact detail view is chosen.
+        var other = (IModelDetailView)ModelEditing.AddChild(((IModelApplication)model).Views, typeof(IModelDetailView), "ModelTestContact_Other_DetailView");
+        other.ModelClass = view.ModelClass;
+        ModelEditing.SetText(view, "DetailView", "Views/ModelTestContact_Other_DetailView");
+        Assert.True(model.LastLayer.Xml.Contains("DetailViewID"), "after set: " + model.LastLayer.Xml);
+        // As at runtime: the next circuit loads the saved differences, and the reset is made in that model.
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        var session = new ModelEditSession();
+        session.Reset(ContactListView(loaded), "DetailView");
+        session.Apply(loaded.LastLayer);
+        Assert.False(loaded.LastLayer.Xml.Contains("DetailViewID"), "after reset: " + loaded.LastLayer.Xml);
+    });
+
+    // Codex review: the empty choice of an optional reference is "none", stored as an empty helper value (ModelNode.cs
+    // 3115-3126), not a reset, which would bring the calculated DetailView back. Reset takes the "none" out again.
+    [Fact]
+    public void Session_EmptyChoiceOfAnOptionalReference_StoresNone_AndResetRestoresTheCalculatedValue() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var calculated = ModelEditing.Path(ContactListView(model).DetailView);
+        Assert.False(ModelEditing.Values(ContactListView(model)).Single(r => r.Name == "DetailView").IsRequired);
+        var none = new ModelEditSession();
+        none.SetText(ContactListView(model), "DetailView", "");
+        none.Apply(model.LastLayer);
+
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        Assert.Null(ContactListView(loaded).DetailView);
+
+        var reset = new ModelEditSession();
+        reset.Reset(ContactListView(loaded), "DetailView");
+        reset.Apply(loaded.LastLayer);
+        Assert.Equal(calculated, ModelEditing.Path(ContactListView(build(new StringModelStore(loaded.LastLayer.Xml))).DetailView));
+    });
+
     static IModelListView ContactListView(ModelApplicationBase model) =>
         ((IModelApplication)model).BOModel.GetClass(typeof(ModelTestContact))!.DefaultListView;
 

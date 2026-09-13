@@ -39,6 +39,8 @@ else {
             else {
                 <div data-selected="@ModelEditing.Path(selected)" style="font-weight:600; margin-bottom:0.5rem">@ModelEditing.Path(selected)</div>
                 <div class="xlb-node-actions" style="display:flex; flex-wrap:wrap; gap:0.25rem; align-items:center; margin-bottom:0.5rem">
+                    <button type="button" class="xlb-back" disabled="@(historyAt <= 0)" @onclick="() => StepHistory(-1)">Back</button>
+                    <button type="button" class="xlb-forward" disabled="@(historyAt >= history.Count - 1)" @onclick="() => StepHistory(1)">Forward</button>
                     @{ var creatable = ModelEditing.CreatableTypes(selected); }
                     @if (creatable.Count > 0) {
                         <select class="xlb-new-type" @bind="newNodeType">
@@ -72,7 +74,9 @@ else {
                         @foreach (var row in group) {
                             var pending = Session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
                             var text = pending ? pendingText ?? "" : row.Text;
-                            <tr data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
+                            @* Keyed with the refusal count: the controls are not bound, so a refused edit recreates them from the
+                               session and the model instead of leaving the refused text on screen (Codex review 5). *@
+                            <tr @key="(row.Name, refusals)" data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
                                 <td style="padding:2px 6px; white-space:nowrap">
                                     <span class="xlb-value-name" style="cursor:pointer; font-weight:@(row.IsModified ? "600" : "normal")"
                                           @onclick="() => focusedDescription = row.Description">@row.Name</span>
@@ -82,6 +86,13 @@ else {
                                     @if (row.IsLocalizable) {
                                         <span title="Localizable: stored per language" style="opacity:0.6">(L)</span>
                                     }
+                                    @if (typeof(IModelNode).IsAssignableFrom(row.Type) && Session.Referenced(selected, row.Name) is { } target) {
+                                        <button type="button" class="xlb-goto" title="Open the node this value refers to" @onclick="() => Reveal(target)">Go to</button>
+                                    }
+                                    @if (ModelEditing.ValueSource(selected, row.Name) is { } source) {
+                                        <button type="button" class="xlb-source" title="Open the value this one is calculated from"
+                                                @onclick="() => GoToSource(source.Node, source.Name)">Source</button>
+                                    }
                                 </td>
                                 <td style="padding:2px 6px; width:100%">
                                     @if (!row.CanEdit) {
@@ -89,14 +100,25 @@ else {
                                     }
                                     else if (row.Choices is { } choices) {
                                         <select style="width:100%" @onchange="e => Set(row.Name, e.Value as string)">
-                                            <option value="" selected="@(text.Length == 0)"></option>
+                                            @if (!row.IsRequired || text.Length == 0) {
+                                                <option value="" selected="@(text.Length == 0)"></option>
+                                            }
                                             @foreach (var choice in choices) {
                                                 <option value="@choice" selected="@(choice == text)">@choice</option>
                                             }
                                         </select>
                                     }
                                     else {
-                                        <input style="width:100%" value="@text" @onchange="e => Set(row.Name, e.Value as string)" />
+                                        @* Field names and languages are offered as the WinForms field picker offers them, other text is still accepted. *@
+                                        <input style="width:100%" value="@text" list="@(row.Suggestions is null ? null : "xlb-suggest-" + row.Name)"
+                                               @onchange="e => Set(row.Name, e.Value as string)" />
+                                        @if (row.Suggestions is { } suggestions) {
+                                            <datalist id="xlb-suggest-@row.Name">
+                                                @foreach (var suggestion in suggestions) {
+                                                    <option value="@suggestion"></option>
+                                                }
+                                            </datalist>
+                                        }
                                     }
                                 </td>
                                 <td style="padding:2px 6px; white-space:nowrap">
@@ -133,8 +155,13 @@ else {
 @code {
     [Parameter] public XafApplication Application { get; set; } = null!;
     [Parameter] public ModelEditSession Session { get; set; } = null!;
+    [Parameter] public string? StartViewId { get; set; }
 
-    readonly HashSet<IModelNode> expanded = [];
+    // By path: the node instances Parent returns are not the tree's own (ModelEditing.IsInModel).
+    readonly HashSet<string> expanded = [];
+    // Back and Forward walk the nodes selected before, as in the WinForms editor (docs/model-editor-scope.md, navigation).
+    readonly List<IModelNode> history = [];
+    int historyAt = -1;
     IModelNode? selected;
     string? focusedDescription;
     string? message;
@@ -143,16 +170,23 @@ else {
     string newNodeId = "";
     string? newNodeType;
     bool allowed;
+    // Actions Run refused; part of the value rows' @key.
+    int refusals;
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
+
+    // View in Model: open on the node of the view the action ran in.
+    protected override void OnInitialized() {
+        if (StartViewId is not null && Application.Model.Views[StartViewId] is { } view) Reveal(view);
+    }
 
     // Captions from [DisplayProperty], modified nodes in bold as in the WinForms tree, an expand button only for node types
     // that can have children. Added nodes are in italics, nodes to be deleted struck through.
     RenderFragment TreeNode(IModelNode node) => @<li style="white-space:nowrap">
         @if (ModelEditing.CanHaveChildren(node)) {
             <button type="button" data-expand="@ModelEditing.Path(node)" style="width:1.5em; border:none; background:none"
-                    @onclick="() => Toggle(node)">@(expanded.Contains(node) ? "-" : "+")</button>
+                    @onclick="() => Toggle(node)">@(expanded.Contains(ModelEditing.Path(node)) ? "-" : "+")</button>
         }
         else {
             <span style="display:inline-block; width:1.5em"></span>
@@ -160,7 +194,7 @@ else {
         <span data-node="@ModelEditing.Path(node)" class="@(ModelEditing.IsModified(node) ? "xlb-modified" : null)"
               style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); font-style:@(Session.IsAdded(node) ? "italic" : "normal"); text-decoration:@(Session.IsPendingDelete(node) ? "line-through" : "none"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
               @onclick="() => Select(node)">@ModelEditing.Caption(node)</span>
-        @if (expanded.Contains(node)) {
+        @if (expanded.Contains(ModelEditing.Path(node))) {
             <ul style="list-style:none; padding-left:1.25em; margin:0">
                 @foreach (var child in ModelEditing.Children(node)) {
                     @TreeNode(child)
@@ -170,20 +204,44 @@ else {
     </li>;
 
     void Toggle(IModelNode node) {
-        if (!expanded.Remove(node)) expanded.Add(node);
+        var path = ModelEditing.Path(node);
+        if (!expanded.Remove(path)) expanded.Add(path);
     }
 
     void Select(IModelNode node) {
+        history.RemoveRange(historyAt + 1, history.Count - historyAt - 1);
+        history.Add(node);
+        historyAt = history.Count - 1;
+        Show(node);
+    }
+
+    void Show(IModelNode node) {
         selected = node;
         focusedDescription = null;
         message = null;
+    }
+
+    // A node removed since is skipped.
+    void StepHistory(int direction) {
+        for (var at = historyAt + direction; at >= 0 && at < history.Count; at += direction) {
+            if (!ModelEditing.IsInModel(history[at])) continue;
+            historyAt = at;
+            Show(history[at]);
+            return;
+        }
+    }
+
+    // Source: open the node a calculated value comes from, with that value's description.
+    void GoToSource(IModelNode node, string name) {
+        Reveal(node);
+        focusedDescription = ModelEditing.Values(node).FirstOrDefault(r => r.Name == name)?.Description;
     }
 
     void RunSearch() => Run(() => searchResults = string.IsNullOrWhiteSpace(searchText) ? null : ModelEditing.Search(Application.Model, searchText), null);
 
     // Picking a search result opens the tree down to it and selects it.
     void Reveal(IModelNode node) {
-        for (var parent = node.Parent; parent is not null; parent = parent.Parent) expanded.Add(parent);
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent) expanded.Add(ModelEditing.Path(parent));
         searchText = "";
         searchResults = null;
         Select(node);
@@ -199,7 +257,7 @@ else {
         if (string.IsNullOrEmpty(newNodeType) || !ModelEditing.CreatableTypes(parent).TryGetValue(newNodeType, out var type))
             throw new InvalidOperationException("Choose the type of node to add.");
         var node = Session.AddChild(parent, type, NewId());
-        expanded.Add(parent);
+        expanded.Add(ModelEditing.Path(parent));
         Select(node);
     }, null);
 
@@ -252,6 +310,7 @@ else {
         }
         catch (Exception ex) {
             message = ex.Message;
+            refusals++;
         }
     }
 }

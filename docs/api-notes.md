@@ -460,6 +460,31 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   and `IModelBand` are `IModelBandedLayoutItem`s, `IModelBandsLayout.cs` 75, 82), so Up/Down moves an item only among the
   items of its owner band. Clone is offered where `FastModelEditorHelper.CanAddNode(parent, node)` (312) allows a copy,
   independently of `CanDeleteNode`: a generated member cannot be deleted but can be copied as a custom one.
+- Lookups and navigation (MODELEDITOR-005). A value's lookup list comes from `ModelValueInfo.PersistentPath`
+  (`[DataSourceProperty]`, `Model/Core/ModelValueInfo.cs` 81). The WinForms editor splits it at the last dot into a node,
+  found with the public, `EditorBrowsable(Never)` `ModelNodePersistentPathHelper.FindValueByPath`
+  (`Model/Core/ModelValueCalculator.cs` 107-141), and one of that node's list members; keeps the items of the value's type
+  that fit `[DataSourceCriteria]` (the public `CriteriaWrapper`, `DevExpress.Persistent.Base/CriteriaWrapper.cs` 146, 162,
+  203, evaluated by an `ExpressionEvaluator` over `EvaluatorContextDescriptorDefault`); orders nodes as the tree does and a
+  class's or list view's views with `ViewNamesCalculator.SortByInheritanceHierarchy` (`Model/DomainLogics/ModelViewLogic.cs`
+  344) (`DevExpress.ExpressApp.Win/Core/ModelEditor/AttributeList/ModelAttributesPropertyGridHelper.cs` 448-478, 696-705,
+  800-849). The editor builds the same list with that public API. `ListEditorsType` lists the list editors registered with
+  the application's editor descriptors (`Model/DomainLogics/EditorFactoryLogics.cs` 58-70), so it is empty in a model built
+  without a platform module. The WinForms field pickers (PropertyName, LookupProperty, TargetPropertyName, 405-447) become
+  suggestions from the model class's members, the PreferredLanguage combo the default and user language plus
+  `GetAspectNames()` (388-397, 850-856). A calculated value's source is `[ModelValueCalculator]`'s `LinkValue`, or its
+  `NodeName` and `PropertyName` (`Model/ModelAttributes.cs` 70-95), as `RefValue` reads it (339-387). The WinForms View in
+  Model action demands `ModelOperationPermissionRequest`, focuses the node and calls `EditModel`
+  (`DevExpress.ExpressApp.Win/SystemModule/ViewInModelController.cs` 125-137). A reference value is kept under a helper
+  name, `{Name}_ID` (`ModelValuePersistentPathCalculator.GetHelperValueName`, `Model/Core/ModelValueCalculator.cs` 58,
+  96-98), and one read from stored differences only under that name (`ModelNode.cs` 3149-3166); `ClearValue(name)` does not
+  reach it (2368-2390). Measured in the gate: a saved reset of Order_ListView's DetailView left `DetailViewID` stored
+  (reproduced in `WarmedUpModelTests`), so the editor clears the helper value too (support request item 10). An empty
+  reference value in stored differences is loaded as the helper value `""` (`ModelNode.cs` 3115-3126), an explicit none
+  that hides the calculated value, while a cleared one lets it through; so the editor's empty choice of an optional
+  reference sets the value to null, and only Reset clears it (Codex review, `WarmedUpModelTests`). A
+  calculator's `NodeName` is a value of the node, `this` (`IModelListView.cs` 68) or a path from the root
+  (`Application.Options`, `IModelView.cs` 64); `FindValueByPath` reads all three, so Source resolves it with that.
 - Model saves the editor does not start. Every application registers a deferred user-model save when it loads the user
   differences (`DevExpress.ExpressApp.Blazor/BlazorApplication.cs` 103-111); it is flushed when the same user's next
   application loads its differences (107, 286-289) and when the circuit closes

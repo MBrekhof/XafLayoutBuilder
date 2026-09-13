@@ -14,26 +14,42 @@ namespace XafLayoutBuilder.ModelEditor;
 public sealed class ModelEditorController : ViewController<ObjectView> {
     public SimpleAction EditModelAction { get; }
 
+    /// <summary>
+    /// Opens the editor on the current view's node, as the WinForms View in Model action focuses it before EditModel
+    /// (ViewInModelController.cs 125-137). ponytail: the view node only, not WinForms' class and validation rule items.
+    /// </summary>
+    public SimpleAction ViewInModelAction { get; }
+
     public ModelEditorController() {
         EditModelAction = new SimpleAction(this, "XafLayoutBuilder.EditModel", PredefinedCategory.Tools) {
             Caption = "Edit Model",
             ImageName = "Action_EditModel",
             ToolTip = "Edit the application model; changes are saved to your own model differences",
         };
-        EditModelAction.Execute += (_, _) => Show();
+        EditModelAction.Execute += (_, _) => Show(null);
+        ViewInModelAction = new SimpleAction(this, "XafLayoutBuilder.ViewInModel", PredefinedCategory.Tools) {
+            Caption = "View in Model",
+            ImageName = "Action_EditModel",
+            ToolTip = "Open the Model Editor on this view's node",
+        };
+        ViewInModelAction.Execute += (_, _) => Show(View.Id);
     }
 
     protected override void OnActivated() {
         base.OnActivated();
-        EditModelAction.Active["Security"] = CanEditModel(Application);
+        var allowed = CanEditModel(Application);
+        EditModelAction.Active["Security"] = allowed;
+        ViewInModelAction.Active["Security"] = allowed;
     }
 
     public static bool CanEditModel(XafApplication application) =>
         application.Security is not IRequestSecurity security || security.IsGranted(new ModelOperationPermissionRequest());
 
-    void Show() {
+    void Show(string? startViewId) {
         var os = Application.CreateObjectSpace(typeof(ModelEditorWindow));
-        var view = Application.CreateDetailView(os, os.CreateObject<ModelEditorWindow>(), true);
+        var window = os.CreateObject<ModelEditorWindow>();
+        window.StartViewId = startViewId;
+        var view = Application.CreateDetailView(os, window, true);
         view.Caption = "Model Editor";
         view.ViewEditMode = ViewEditMode.Edit;
         // XAF also saves the user model without the editor: the deferred save it flushes when the circuit closes or the same

@@ -1,17 +1,25 @@
+using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
+using DevExpress.Data.Filtering.Helpers;
+using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Model;
 using DevExpress.ExpressApp.Model.Core;
+using DevExpress.ExpressApp.Model.DomainLogics;
+using DevExpress.ExpressApp.Utils;
 using DevExpress.ExpressApp.Utils.Reflection;
+using DevExpress.Persistent.Base;
 
 namespace XafLayoutBuilder.ModelEditor;
 
 /// <summary>One value of a model node as the editor shows it.</summary>
-/// <param name="Choices">What a bool or enum value can be, for a drop-down; null for free text and for read-only values.</param>
+/// <param name="Choices">What a bool, enum, reference or type value can be, for a drop-down; null for free text and for read-only values.</param>
+/// <param name="Suggestions">Names offered for a free-text value (field names, languages); other text is still accepted.</param>
 /// <param name="Description">FastModelEditorHelper's description: type, owner interfaces and [Description], with &lt;b&gt;/&lt;br&gt; markup.</param>
 /// <param name="ReadOnlyMessage">Why a read-only value cannot be edited, when [ModelReadOnly] says.</param>
 public sealed record ModelValueRow(string Name, Type Type, string Text, bool IsModified, bool CanEdit, IReadOnlyList<string>? Choices,
-    string? Category = null, string? Description = null, bool IsRequired = false, bool IsLocalizable = false, string? ReadOnlyMessage = null);
+    string? Category = null, string? Description = null, bool IsRequired = false, bool IsLocalizable = false, string? ReadOnlyMessage = null,
+    IReadOnlyList<string>? Suggestions = null);
 
 /// <summary>
 /// The editor's model logic, kept out of the component so it runs against an in-process model in tests. Reads go through
@@ -171,6 +179,55 @@ public static class ModelEditing {
         return Resolve(node, out var root) is not null && root is IModelApplication;
     }
 
+    /// <summary>The lookup item a drop-down shows as the text, or null.</summary>
+    internal static object? LookupItem(IModelNode node, string name, string text) {
+        var modelNode = (ModelNode)node;
+        return modelNode.GetValueInfo(name) is { } info && LookupItems(modelNode, info) is { } items
+            ? items.FirstOrDefault(i => Format(i) == text)
+            : null;
+    }
+
+    /// <summary>The instance the tree hands out for the node: its path resolved again from the root.</summary>
+    internal static IModelNode Canonical(IModelNode node) => Resolve(node, out _) ?? node;
+
+    /// <summary>
+    /// The node a reference value points to, for Go to (the WinForms editor's Open Related Object reads the value as a node,
+    /// docs/model-editor-scope.md); null for other values and for a value that cannot be read.
+    /// </summary>
+    public static IModelNode? Referenced(IModelNode node, string name) {
+        try {
+            return ((ModelNode)node).GetValue(name) is IModelNode target ? Canonical(target) : null;
+        }
+        catch (Exception) {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The value a calculated value comes from, for Source: [ModelValueCalculator]'s LinkValue on the same node, or its
+    /// NodeName and PropertyName on another (ModelAttributes.cs 70-95), as ModelAttributesPropertyGridHelper.RefValue reads it
+    /// (339-387). ponytail: values calculated by a calculator type or by the node path helper have no source here.
+    /// </summary>
+    public static (IModelNode Node, string Name)? ValueSource(IModelNode node, string name) {
+        if (Helper.GetPropertyAttribute<ModelValueCalculatorAttribute>((ModelNode)node, name) is not { } calculator) return null;
+        if (!string.IsNullOrEmpty(calculator.LinkValue)) return (node, calculator.LinkValue);
+        // NodeName is a value of the node, "this" (IModelListView.cs 68) or a path from the root ("Application.Options",
+        // IModelView.cs 64); the persistent path helper reads all three (ModelValueCalculator.cs 113-141) (Codex review).
+        if (!string.IsNullOrEmpty(calculator.NodeName) && !string.IsNullOrEmpty(calculator.PropertyName)
+            && SourceNode((ModelNode)node, calculator.NodeName) is { } source)
+            return (source, calculator.PropertyName);
+        return null;
+    }
+
+    static IModelNode? SourceNode(ModelNode node, string path) {
+        try {
+            return ModelNodePersistentPathHelper.FindValueByPath(node, path) is IModelNode found ? Canonical(found) : null;
+        }
+        catch (Exception) {
+            return null;
+        }
+    }
+
     // The node's path resolved again from its root, the instance the tree hands out; null when a node on the way is gone.
     static IModelNode? Resolve(IModelNode node, out IModelNode root) {
         var ids = new Stack<string>();
@@ -310,14 +367,28 @@ public static class ModelEditing {
             .ToList();
     }
 
-    /// <summary>Writes a value typed as text. Empty text clears a value that is not a string, so the layers below apply again.</summary>
+    /// <summary>
+    /// Writes a value typed as text. Empty text sets an optional reference to none and clears any other value that is not a
+    /// string, so the layers below apply again.
+    /// </summary>
     public static void SetText(IModelNode node, string name, string text) {
         var modelNode = (ModelNode)node;
         if (Parse(modelNode, name, text) is (true, var value)) modelNode.SetValue(name, value);
-        else modelNode.ClearValue(name);
+        else Reset(node, name);
     }
 
-    public static void Reset(IModelNode node, string name) => ((ModelNode)node).ClearValue(name);
+    /// <summary>
+    /// Clears the value. A reference value read from stored differences is kept under its helper name only ({Name}_ID,
+    /// ModelValuePersistentPathCalculator.GetHelperValueName, ModelValueCalculator.cs 58, 96-98; ModelNode.cs 3149-3166), which
+    /// ClearValue of the value's own name does not reach (ModelNode.cs 2368-2390), so that one is cleared too (MODELEDITOR-005
+    /// gate, docs/devexpress-support-request.md item 10).
+    /// </summary>
+    public static void Reset(IModelNode node, string name) {
+        var modelNode = (ModelNode)node;
+        modelNode.ClearValue(name);
+        if (!string.IsNullOrEmpty(modelNode.GetValueInfo(name)?.PersistentPath))
+            modelNode.ClearValue(ModelValuePersistentPathCalculator.GetHelperValueName(name));
+    }
 
     /// <summary>
     /// The aspects of a differences layer whose XML is empty, written the way ModelDifferenceDbStore.SaveDifference writes
@@ -341,6 +412,15 @@ public static class ModelEditing {
         return EmptyAspects(layer).Except(before).ToList();
     }
 
+    /// <summary>The value the text stands for, (false, _) for a clear; throws when it is none. Changes nothing.</summary>
+    internal static (bool Set, object? Value) ParseText(IModelNode node, string name, string text) => Parse((ModelNode)node, name, text);
+
+    internal static void SetValue(IModelNode node, string name, object? value) => ((ModelNode)node).SetValue(name, value);
+
+    /// <summary>Whether the value is chosen from a lookup list ([DataSourceProperty]).</summary>
+    internal static bool IsLookupValue(IModelNode node, string name) =>
+        !string.IsNullOrEmpty(((ModelNode)node).GetValueInfo(name)?.PersistentPath);
+
     /// <summary>Throws when the text is no value of the named value's type; changes nothing.</summary>
     internal static void Validate(IModelNode node, string name, string text) => Parse((ModelNode)node, name, text);
 
@@ -349,33 +429,101 @@ public static class ModelEditing {
         var info = node.GetValueInfo(name) ?? throw new ArgumentException($"'{name}' is not a value of {Path(node)}.", nameof(name));
         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
         if (type == typeof(string)) return (true, text);
-        if (text.Length == 0) return (false, null);
+        // The empty choice of an optional reference is "none", which the differences keep as an empty helper value (ModelNode.cs
+        // 3115-3126); a clear would bring the calculated or inherited value back (Codex review). A required one is cleared.
+        if (text.Length == 0)
+            return (typeof(IModelNode).IsAssignableFrom(type) && !string.IsNullOrEmpty(info.PersistentPath) && !Helper.IsRequired(node, name), null);
+        // A reference or type value takes one of its lookup items, by the text the drop-down shows (MODELEDITOR-005).
+        if (LookupItems(node, info) is { } items)
+            return (true, items.FirstOrDefault(i => Format(i) == text) ?? throw new FormatException($"'{text}' is not one of the values {name} can take."));
         return (true, TypeDescriptor.GetConverter(type).ConvertFromInvariantString(text));
     }
 
-    // ponytail: strings, primitives and enums are editable; references to other nodes, types and criteria stay read-only
-    // until they get their own editors (MODELEDITOR-005, -006).
+    // Strings, primitives and enums are editable, and references and types that have a lookup list (MODELEDITOR-005).
+    // ponytail: a type without a list and criteria stay read-only until they get their own editors (MODELEDITOR-006).
     static ModelValueRow Row(ModelNode node, ModelValueInfo info) {
         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
         var readOnly = Helper.IsReadOnly(node, info.Name);
-        var editable = (type == typeof(string) || type.IsPrimitive || type.IsEnum) && !readOnly;
+        var editable = !readOnly;
+        IReadOnlyList<object>? lookup = null;
         string text;
         try {
             text = Format(node.GetValue(info.Name));
+            if (editable) lookup = LookupItems(node, info);
         }
         catch (Exception ex) {
-            // A value calculator can throw on a node it does not expect; show that instead of failing the whole grid.
+            // A value calculator or a lookup criteria can throw on a node it does not expect; show that instead of failing the grid.
             text = $"({ex.GetType().Name}: {ex.Message})";
             editable = false;
         }
-        string[]? choices = !editable ? null : type == typeof(bool) ? ["True", "False"] : type.IsEnum ? Enum.GetNames(type) : null;
+        editable &= type == typeof(string) || type.IsPrimitive || type.IsEnum || lookup is not null;
+        string[]? choices = !editable ? null
+            : lookup is not null ? lookup.Select(Format).ToArray()
+            : type == typeof(bool) ? ["True", "False"] : type.IsEnum ? Enum.GetNames(type) : null;
         return new(info.Name, info.PropertyType, text, node.IsValueModified(info.Name), editable, choices,
             Category: Helper.GetPropertyAttribute<CategoryAttribute>(node, info.Name)?.Category,
             Description: Helper.GetPropertyDescription(node, info.Name),
             IsRequired: Helper.IsRequired(node, info.Name),
             IsLocalizable: info.IsLocalizable,
-            ReadOnlyMessage: readOnly ? Helper.GetPropertyAttribute<ModelReadOnlyAttribute>(node, info.Name)?.Message : null);
+            ReadOnlyMessage: readOnly ? Helper.GetPropertyAttribute<ModelReadOnlyAttribute>(node, info.Name)?.Message : null,
+            Suggestions: editable && choices is null ? Suggestions(node, info.Name) : null);
     }
+
+    /// <summary>
+    /// What a value with a [DataSourceProperty] can take, for a drop-down; null when it has none. Built as the WinForms editor
+    /// builds its lookup (ModelAttributesPropertyGridHelper.cs 800-849, 448-478, 696-705): the list the path names, split at its
+    /// last dot into a node and one of its list members; the items of the value's type that fit [DataSourceCriteria]; nodes
+    /// in tree order, and views of a class or list view by class inheritance (ViewNamesCalculator, ModelViewLogic.cs 344).
+    /// </summary>
+    internal static IReadOnlyList<object>? LookupItems(ModelNode node, ModelValueInfo info) {
+        if (string.IsNullOrEmpty(info.PersistentPath)) return null;
+        IEnumerable? list;
+        Type? elementType = null;
+        if (info.PersistentPath == "this") list = node as IEnumerable;
+        else {
+            var dot = info.PersistentPath.LastIndexOf('.');
+            var source = dot < 0 ? node : ModelNodePersistentPathHelper.FindValueByPath(node, info.PersistentPath[..dot]) as ModelNode;
+            var member = source is null ? null : XafTypesInfo.Instance.FindTypeInfo(source.GetType()).FindMember(info.PersistentPath[(dot + 1)..]);
+            if (member is not { IsList: true }) return null;
+            elementType = member.ListElementType;
+            list = member.GetValue(source) as IEnumerable;
+        }
+        if (list is null) return null;
+        ExpressionEvaluator? evaluator = null;
+        if (elementType is not null && Helper.GetPropertyAttribute<DataSourceCriteriaAttribute>(node, info.Name) is { } criteria) {
+            var wrapper = new CriteriaWrapper(criteria.Value.ToString(), node);
+            wrapper.UpdateParametersValues(node);
+            evaluator = new ExpressionEvaluator(new EvaluatorContextDescriptorDefault(elementType), wrapper.CriteriaOperator, false, null);
+        }
+        var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
+        var items = list.Cast<object>().Where(i => type.IsInstanceOfType(i) && (evaluator is null || evaluator.Fit(i))).ToList();
+        if (items.All(i => i is IModelNode)) items = items.Cast<IModelNode>().Order(TreeOrder).Cast<object>().ToList();
+        var ownerClass = node switch { IModelClass c => c, IModelListView v => v.ModelClass, _ => null };
+        if (ownerClass is not null && items.Count > 0 && items.All(i => i is IModelObjectView))
+            items = ViewNamesCalculator.SortByInheritanceHierarchy(items.Cast<IModelView>().ToList(), ownerClass).Cast<object>().ToList();
+        return items;
+    }
+
+    // Free-text suggestions where the WinForms editor offers a field picker or a language combo (ModelAttributesPropertyGridHelper.cs
+    // 388-447, 850-856). ponytail: the class's member names; a path through a reference (Customer.Name) is typed in.
+    static IReadOnlyList<string>? Suggestions(ModelNode node, string name) => name switch {
+        "PreferredLanguage" when node.Root is ModelApplicationBase root =>
+            [CaptionHelper.DefaultLanguage, CaptionHelper.UserLanguage, .. root.GetAspectNames().Order(StringComparer.Ordinal)],
+        "PropertyName" => MemberNames(node switch {
+            IModelMemberViewItem item => (item.ParentView as IModelObjectView)?.ModelClass,
+            IModelSortProperty { Parent: IModelSorting { Parent: IModelObjectView view } } => view.ModelClass,
+            _ => null,
+        }),
+        "LookupProperty" when node is IModelMemberViewItem item && (item.ParentView as IModelObjectView)?.ModelClass is { } owner =>
+            MemberNames(owner.TypeInfo.FindMember(item.PropertyName)?.MemberTypeInfo.Type is { } memberType
+                ? item.Application.BOModel.GetClass(memberType) : null),
+        "TargetPropertyName" when node.GetValueInfo("TargetType") is not null && node.GetValue("TargetType") is Type target =>
+            MemberNames(((IModelNode)node).Application.BOModel.GetClass(target)),
+        _ => null,
+    };
+
+    static IReadOnlyList<string>? MemberNames(IModelClass? modelClass) =>
+        modelClass?.AllMembers.Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
 
     static string Format(object? value) => value switch {
         null => "",
@@ -401,6 +549,7 @@ public sealed class ModelEditSession {
     /// </summary>
     public void SetText(IModelNode node, string name, string text) {
         ThrowIfUnderPendingReset(node);
+        ThrowIfLookupConflict(node, name);
         // A node added in this session is removed again unless saved, so its values are written at once: a required value XAF
         // calculates from another one is there only then (the gate: a new column's PropertyEditorType stayed missing while
         // its PropertyName was pending).
@@ -415,7 +564,10 @@ public sealed class ModelEditSession {
         if (IsAddedOrUnder(node)) {
             pending.Remove((node, name));
             ModelEditing.SetText(node, name, text);
-            // Empty text clears the value (ModelEditing.SetText).
+            // Written at once, yet chosen from a model without the pending edits: later edits check it like a pending one.
+            if (ModelEditing.IsLookupValue(node, name)) addedLookups.Add((node, name));
+            // Empty text clears the value, or sets an optional reference to none (ModelEditing.SetText); cleared only counts
+            // for required values, so the reference entry is harmless.
             if (text.Length == 0) cleared.Add((node, name));
             else cleared.Remove((node, name));
         }
@@ -424,6 +576,7 @@ public sealed class ModelEditSession {
 
     public void Reset(IModelNode node, string name) {
         ThrowIfUnderPendingReset(node);
+        ThrowIfLookupConflict(node, name);
         // ponytail: on an added node a warmed-up model shows the cleared value until the reload (ClearValue skips the cache).
         if (IsAddedOrUnder(node)) {
             pending.Remove((node, name));
@@ -435,6 +588,17 @@ public sealed class ModelEditSession {
 
     // An error on a node marked for deletion does not count: the edit goes with the node (Codex review).
     public bool HasErrors => pending.Any(p => p.Value.Error is not null && !IsDeleted(p.Key.Node));
+
+    /// <summary>
+    /// The node a reference value points to as the editor shows it, for Go to: a pending selection before the model's value
+    /// (Codex review). A pending reset has no target until the model is built again.
+    /// </summary>
+    public IModelNode? Referenced(IModelNode node, string name) {
+        if (!pending.TryGetValue((node, name), out var entry)) return ModelEditing.Referenced(node, name);
+        return entry is { Error: null, Text.Length: > 0 } && ModelEditing.LookupItem(node, name, entry.Text) is IModelNode target
+            ? ModelEditing.Canonical(target)
+            : null;
+    }
 
     /// <param name="text">The pending text, or null for a pending reset.</param>
     /// <param name="error">Why the text is no value of that type, or null.</param>
@@ -451,6 +615,8 @@ public sealed class ModelEditSession {
     readonly HashSet<IModelNode> nodeResets = [];
     // Values the editor cleared on added nodes or nodes under them, which a warmed-up model still returns from its cache (Codex review).
     readonly HashSet<(IModelNode Node, string Name)> cleared = [];
+    // Lookup values the editor set on added nodes or nodes under them (Codex review 5).
+    readonly HashSet<(IModelNode Node, string Name)> addedLookups = [];
 
     public IModelNode AddChild(IModelNode parent, Type type, string id) {
         ThrowIfUnderPendingReset(parent);
@@ -485,6 +651,7 @@ public sealed class ModelEditSession {
     public void Delete(IModelNode node, bool delete = true) {
         if (delete) {
             ThrowIfUnderPendingReset(node);
+            ThrowIfPendingLookup(deleting: node);
             deletes.Add(node);
         }
         else deletes.Remove(node);
@@ -494,12 +661,35 @@ public sealed class ModelEditSession {
 
     /// <summary>Takes back every difference of the node on Apply (ModelNode.Undo, ModelNode.cs 609-637).</summary>
     public void ResetNode(IModelNode node) {
+        ThrowIfPendingLookup();
         if (!CanResetNode(node))
             throw new InvalidOperationException($"{ModelEditing.Path(node)} exists only in your model differences; delete it instead of resetting it.");
         if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [node])) || deletes.Any(d => IsAtOrUnder(d, [node]))
             || added.Any(a => IsAtOrUnder(a, [node])))
             throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before resetting it.");
         nodeResets.Add(node);
+    }
+
+    // A lookup's choices are worked out from the model as it is, and can depend on other values, of the node or elsewhere (a
+    // view's DetailView on its ModelClass, a column's PropertyEditorType on its PropertyName). Pending edits are not in the model
+    // yet, so a lookup edit is the only pending edit until a Save, in either order (Codex review). ponytail: stricter than the
+    // actual dependencies, which the model's domain logic knows and the editor does not.
+    void ThrowIfLookupConflict(IModelNode node, string name) {
+        // On an added node too: its lookup edit is written at once, but a view marked for deletion is still offered (Codex review 5).
+        if (ModelEditing.IsLookupValue(node, name)
+            && (pending.Keys.Any(k => !(ReferenceEquals(k.Node, node) && k.Name == name)) || deletes.Count > 0 || nodeResets.Count > 0))
+            throw new InvalidOperationException($"Save the pending edits first: the choices of {name} are worked out from the saved model.");
+        if (!IsAddedOrUnder(node)) ThrowIfPendingLookup((node, name));
+    }
+
+    // Pending lookup edits and the ones written to added nodes; one on or under the node being deleted goes with it.
+    void ThrowIfPendingLookup((IModelNode Node, string Name)? except = null, IModelNode? deleting = null) {
+        foreach (var (lookupNode, lookupName) in pending.Keys.Concat(addedLookups)) {
+            if (except is { } e && ReferenceEquals(e.Node, lookupNode) && e.Name == lookupName) continue;
+            if (deleting is not null && IsAtOrUnder(lookupNode, [deleting])) continue;
+            if (ModelEditing.IsLookupValue(lookupNode, lookupName))
+                throw new InvalidOperationException($"Save the edit of {ModelEditing.Path(lookupNode)} {lookupName} first: its choices were worked out before the other edits.");
+        }
     }
 
     // A node reset takes back the node's whole subtree (ModelNode.Undo, 609-637), on Apply and again on the replay after Save,
@@ -520,8 +710,12 @@ public sealed class ModelEditSession {
     /// <summary>Moves the node one place up or down among its shown siblings, as Index edits that count earlier moves (Codex review).</summary>
     public void Move(IModelNode node, bool up) {
         var moves = ModelEditing.IndexesForMove(node, up, EffectiveIndex);
-        // Every sibling is checked first, so a refused move leaves no partial renumbering behind (Codex review).
-        foreach (var (sibling, _) in moves) ThrowIfUnderPendingReset(sibling);
+        // Every sibling is checked first, so a refused move leaves no partial renumbering behind: an added sibling's Index is
+        // written at once (Codex reviews).
+        foreach (var (sibling, _) in moves) {
+            ThrowIfUnderPendingReset(sibling);
+            ThrowIfLookupConflict(sibling, ModelValueNames.Index);
+        }
         foreach (var (sibling, index) in moves)
             SetText(sibling, ModelValueNames.Index, index.ToString(CultureInfo.InvariantCulture));
     }
@@ -541,6 +735,7 @@ public sealed class ModelEditSession {
         }
         added.Clear();
         cleared.Clear();
+        addedLookups.Clear();
         foreach (var key in pending.Keys.Where(k => !ModelEditing.IsInModel(k.Node)).ToList()) pending.Remove(key);
         deletes.RemoveWhere(n => !ModelEditing.IsInModel(n));
         nodeResets.RemoveWhere(n => !ModelEditing.IsInModel(n));
@@ -590,6 +785,7 @@ public sealed class ModelEditSession {
         emptiedAspects.Clear();
         added.Clear();
         cleared.Clear();
+        addedLookups.Clear();
     }
 
     // The session's writes to the model since the last Save, and the saved ones (ReplaySaved).
@@ -620,9 +816,14 @@ public sealed class ModelEditSession {
 
     // Values first, then node resets, then deletes; nothing is written to a node that goes.
     void WritePending() {
-        foreach (var ((node, name), (text, _)) in pending) {
-            if (IsDeleted(node)) continue;
-            Action write = text is null ? () => ModelEditing.Reset(node, name) : () => ModelEditing.SetText(node, name, text);
+        // Every text becomes its value before anything is written, so a refusal cannot come after a first write has reached
+        // the live model (Codex review).
+        var values = pending
+            .Where(p => !IsDeleted(p.Key.Node))
+            .Select(p => (p.Key.Node, p.Key.Name, Parsed: p.Value.Text is null ? (Set: false, Value: null) : ModelEditing.ParseText(p.Key.Node, p.Key.Name, p.Value.Text)))
+            .ToList();
+        foreach (var (node, name, (set, value)) in values) {
+            Action write = set ? () => ModelEditing.SetValue(node, name, value) : () => ModelEditing.Reset(node, name);
             write();
             writes.Add((node, write));
         }
@@ -638,6 +839,7 @@ public sealed class ModelEditSession {
             node.Remove();
             added.RemoveAll(a => IsAtOrUnder(a, [node]));
             cleared.RemoveWhere(c => IsAtOrUnder(c.Node, [node]));
+            addedLookups.RemoveWhere(l => IsAtOrUnder(l.Node, [node]));
         }
         deletes.Clear();
     }
