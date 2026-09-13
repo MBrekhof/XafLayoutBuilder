@@ -36,16 +36,22 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | MODELEDITOR-002 | 5bf9061 | Warmed-up (collapsed, cached) model built in-process like XAF Blazor's (`WarmedUpModelTests`; needs `BlazorModelMultipleMasterStore`, a cleared shared values cache per warm-up). Save reloads the page: `ClearValue` leaves the value cache stale and no public call refreshes it. The gate found a second DevExpress defect: `ModelDifferenceDbStore` keeps an aspect row whose XML became empty, so a reset localized caption came back; `StoredAspectCleanup` blanks such rows with public API, keeping the store's version guard, only for aspects this save emptied, retried after a failed save while still empty. Five Codex rounds, four findings fixed. |
 | MODELEDITOR-003 | 849e0a3 | Tree in the WinForms order (DevExpress's `ModelNodeComparerBase`), captions from `[DisplayProperty]`, modified nodes bold, expand buttons only for node types with children, a bounded breadth-first search; values grouped by category with required/localizable cues, read-only messages and an HTML-encoded description panel. Cosmetics batched to MODELEDITOR-012. Two Codex rounds, one finding fixed. |
 | MODELEDITOR-004 | d573de4 | Node operations: add (creatable types as WinForms offers them; a band under a band goes into the bands layout, owned by that band), clone (wherever `CanAddNode` allows), delete, Up/Down (within the owner band) and Reset node. Deletes, moves and node resets pend until Save; added nodes are live with their values written at once, and Save checks required values across every added or cloned subtree. The gate found two framework behaviours: XAF's deferred user-model save (circuit close, the same user's next logon) stores whatever the running model holds, and it first lets the old circuit's views write their state, so the Order grid hid a saved added column (`Index -1`). The controller handles both in `CreateCustomUserModelDifferenceStore`, right before every save: unsaved added nodes are removed, saved edits replayed. Combinations the running model cannot resolve are refused with "save first". Nine Codex rounds, 19 findings fixed, the last round clean. |
+| MODELEDITOR-005 | e36049f | Drop-downs for reference and type values built as the WinForms editor builds them ([DataSourceProperty] path, [DataSourceCriteria] via `CriteriaWrapper`, views by class inheritance), field and language suggestions, Go to, Source, Back/Forward, View in Model. The gate sets Order_ListView's DetailView to the compact form through the lookup. DevExpress defect found: a reference loaded from differences lives under its `{Name}_ID` helper value, which `ClearValue` misses; Reset clears it too (support request item 10). Six Codex rounds, every finding fixed with a red-proven test: a lookup edit is the only edit until Save, either order, also on added nodes; the empty choice of an optional reference stores none (`ModelNode.cs` 3115-3126) instead of a reset; a refused move renumbers nothing; a refused edit re-renders its control (value rows keyed by a refusal count). Round 6 clean. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003), 2beb758, d573de4 (MODELEDITOR-004).
-181 unit tests pass.
+c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003), 2beb758, d573de4 (MODELEDITOR-004), fe1f282, e36049f (MODELEDITOR-005).
+197 unit tests pass.
 
-**Model Editor all the way (owner, 2026-09-13: "the whole 100 yards", plus which DevExpress source changes would help,
+**Next (2026-09-13):** MODELEDITOR-005 is committed (e36049f, card in Review). The Model Editor cards continue with
+MODELEDITOR-006 (#1698) through MODELEDITOR-012 (#1704), same loop: test first, gate, Codex review, stop the broker, commit
+with exact files. `docs/devexpress-support-request.md` is still uncommitted (ten items, the owner's to send) and
+`extras.jpg` stays untracked. Nothing since 7b388b8 has been pushed.
+
+**Model Editor all the way (owner, 2026-09-13: "the whole nine yards", plus which DevExpress source changes would help,
 possibly as a support call).** Scope: `docs/model-editor-scope.md` (what the WinForms Model Editor does). Cards:
 MODELEDITOR-003 (#1695, tree and property grid parity, research notes on the card) through MODELEDITOR-012 (#1704,
 packaging and the RUNTIME-001 hook); DXSUPPORT-001 (#1693): `docs/devexpress-support-request.md` is drafted and
@@ -66,7 +72,9 @@ The two "no test"/"not established" items further down are resolved: TEST-001 (4
 **Environment, 2026-09-13:** each Codex plugin review leaves an MCP server set running under the repo's
 broker (auto-memory `gate-and-codex-sequential`). The mcpRoslyn session's broker reached 181 processes
 (8.5 GB), one Codex review here was killed for low memory, and the owner reboots after mcpRoslyn's bug-fix
-session. Run the gate and a Codex review one after the other, never together.
+session. Run the gate and a Codex review one after the other, never together, and after each review stop the broker with
+`node ~/.claude/scripts/stop-codex-broker.mjs` from the repo root: the plugin keeps it, and every helper a review
+started, until the Claude session ends.
 
 ## BPG references XafLayoutBuilder (decided 2026-09-13)
 
