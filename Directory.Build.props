@@ -12,7 +12,7 @@
          records each module's assembly version in the application database, and an assembly version lower than the
          recorded one makes XAF refuse to start. Bump PackageVersion for every push to the feed. -->
     <IsPackable>false</IsPackable>
-    <PackageVersion>0.1.0</PackageVersion>
+    <PackageVersion>0.2.0</PackageVersion>
     <Authors>Martin Brekhof</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MBrekhof/XafLayoutBuilder</PackageProjectUrl>

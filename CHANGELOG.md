@@ -4,7 +4,7 @@ One line per change, newest first. The version is `PackageVersion` in `Directory
 version the packages on the local feed carry. Ids are ContextBoard cards; the detail is in
 `SESSION_HANDOFF.md`.
 
-## Unreleased
+## 0.2.0 (2026-09-13)
 
 - EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
 - SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.

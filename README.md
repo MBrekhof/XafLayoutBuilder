@@ -4,7 +4,7 @@ Typed, compile-checked C# for DevExpress XAF view layouts, poured into the Appli
 generated-layer defaults. The running Blazor app stays the visual designer. The source of truth
 becomes a fluent builder next to the business class instead of `Model.xafml`.
 
-**Status: proof of concept, version 0.1.0, complete against its start document** (`XafLayoutBuilder-START.md`).
+**Status: proof of concept, version 0.2.0, complete against its start document** (`XafLayoutBuilder-START.md`).
 Built and tested with DevExpress XAF 26.1.4, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
 Server. One subject (the sample `Order`), one end-to-end gate, and the limitations listed below.
 
@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- 0.2.0 published to the local feed, with everything below.
 - EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
 - SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
 - MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
