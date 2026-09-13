@@ -22,15 +22,16 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | NEST-001 | 87824e1 | Columns may follow references: `Column(x => x.Customer.City)`; exporter and printer handle them. |
 | MODEL-001 | 1ed98ac | The updaters and the exporter are unit tested against an Application Model built in-process with `DesignerModelFactory` (`ApplicationModelFixture`). Test types must be top-level public `[DomainComponent]` classes. |
 | SORT-001 | fbc0f33 | `Column(..., sortIndex:)` sets sort priority independently of column order; exported only when it differs. Codex found a column grouped in the Blazor grid exported `sortIndex: -1` (the grid keeps its SortOrder, SortIndex -1); the exporter now ranks priority the way DxGrid sorts, grouped columns first. Grouping itself is not exported. |
+| EXPORT-001 | 6df25b9 | The updater stamps columns the spec hides; the exporter leaves out only generated leftovers (unstamped, `GeneratedIndex` -1), so never-mentioned columns are no longer printed as `.Hide`. Codex: a later-layer-added hidden column must stay (fixed); both bool markers are lost with XAF's model cache on, **deferred to CACHE-001 by the owner** (card body updated). |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Nothing is pushed.** Local commits since the last push: 5291bbb, fabc233, 49382a1, 0eb1349, 9323f72,
-b2bca44, 87824e1, 1ed98ac, 5122e01, 09caaaa, fbc0f33.
+b2bca44, 87824e1, 1ed98ac, 5122e01, 09caaaa, fbc0f33, 85be610, 6df25b9.
 
-Next cards, in order: EXPORT-001 (1669), HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
+Next cards, in order: HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
 E2E4-001 (1674). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
@@ -321,8 +322,7 @@ and invariant number formatting.
   `FreezeColumnIndices`, which is currently reasoned from source only.
 - **Known gaps kept as limitations** (all in the README): copying and downloading are separate
   actions in the optional `XafLayoutBuilder.Blazor` add-on rather than buttons inside the export
-  popup (XAF Blazor renders only OK and Cancel there), exported hidden columns are more verbose than
-  hand-written code, only the default views are handled, and only XAF 26.1.4 Blazor with EF Core and
+  popup (XAF Blazor renders only OK and Cancel there), only the default views are handled, and only XAF 26.1.4 Blazor with EF Core and
   LocalDB was tested.
 - **XAFLogicExplainer reported nothing of the builder layouts**, and two upstream defects
   turned up while checking why; see the 2026-09-12 section above for the cause, the file and
