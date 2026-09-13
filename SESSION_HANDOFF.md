@@ -1,12 +1,54 @@
 # Session handoff
 
-Updated 2026-09-12 (after the WLNCentral findings round). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-13 (board loop over the limitation cards). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 65 unit tests
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
+
+## Board loop 2026-09-13
+
+Owner's instruction: publish to the local feed, work the open cards with a Codex review after each fix
+(fix, re-review), then the known limitations (cards first, then implementing them). Every card went test
+first, red-checked, build, unit tests, E2E gate, Codex working-tree review, commit with exact files.
+
+| Card | Commit | What changed |
+|---|---|---|
+| FREEZE-001 | 0eb1349 | Gate proves an administrator's `FreezeColumnIndices` keeps a later column hidden (application-level diff store fixture). A freeze in a user's own differences has no effect in XAF Blazor. |
+| DIFF-001 | 9323f72 | A stored difference aimed at a stock layout path the builder replaced is ignored (unusable node) and deleted from the database user store at that user's next save (Log Off, reload). Converting a customised view discards its customisations. |
+| JSON-001 | b2bca44 | `LayoutSpecs` JSON document per type, "Export Layout To JSON" and "Download Layout JSON", `LayoutRegistry.RegisterJson<T>` (each half read on its own). |
+| NEST-001 | 87824e1 | Columns may follow references: `Column(x => x.Customer.City)`; exporter and printer handle them. |
+| MODEL-001 | 1ed98ac | The updaters and the exporter are unit tested against an Application Model built in-process with `DesignerModelFactory` (`ApplicationModelFixture`). Test types must be top-level public `[DomainComponent]` classes. |
+
+**Nothing is pushed.** Local commits since the last push: 5291bbb, fabc233, 49382a1, 0eb1349, 9323f72,
+b2bca44, 87824e1, 1ed98ac.
+
+**In progress, uncommitted in the working tree: SORT-001** (card 1668): `Column(..., sortIndex:)` sets
+sort priority independently of column order; validation, updater, exporter (prints it only when priority
+differs from column order), printer, README and SKILL.md. Unit tests (98) and the E2E gate are green and
+both model-level tests were red-checked. **Only the Codex working-tree review is missing**, then commit
+exactly these files: `README.md`, `skills/xaf-layout-builder/SKILL.md`, `XafLayoutBuilder.Core/LayoutSpec.cs`,
+`XafLayoutBuilder.Core/ListViewColumnsBuilder.cs`, `XafLayoutBuilder.Core/CSharpLayoutPrinter.cs`,
+`XafLayoutBuilder.Module/ListViewColumnsUpdater.cs`, `XafLayoutBuilder.Module/LayoutExporter.cs`, and in
+`XafLayoutBuilder.Tests`: `ListViewColumnsBuilderTests.cs`, `SpecValidationTests.cs`,
+`CSharpLayoutPrinterTests.cs`, `ModelTestTypes.cs`, `ApplicationModelFixture.cs`,
+`ListViewColumnsUpdaterTests.cs`, `LayoutExporterTests.cs`. Then complete card 1668 with the SHA.
+
+Next cards, in order: EXPORT-001 (1669), HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
+E2E4-001 (1674). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+
+Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
+ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).
+
+The two "no test"/"not established" items further down are resolved: TEST-001 (49382a1) and DIFF-001
+(9323f72).
+
+**Environment, 2026-09-13:** each Codex plugin review leaves an MCP server set running under the repo's
+broker (auto-memory `gate-and-codex-sequential`). The mcpRoslyn session's broker reached 181 processes
+(8.5 GB), one Codex review here was killed for low memory, and the owner reboots after mcpRoslyn's bug-fix
+session. Run the gate and a Codex review one after the other, never together.
 
 ## BPG references XafLayoutBuilder (decided 2026-09-13)
 
