@@ -149,6 +149,101 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
         Assert.Contains("PropertyName", ex.Message);
     });
 
+    // MODELEDITOR-007 review: a node saved in an earlier session is not in this session's added collection. Clearing its
+    // required reference must still refuse Save: otherwise the DetailView loses ClassName and disappears on reload.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Session_Apply_RefusesARequiredReferenceClearOnASavedCustomView(bool emptyChoice) => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var create = new ModelEditSession();
+        var view = create.AddChild(((IModelApplication)model).Views, typeof(IModelDetailView), "SavedCustomView");
+        var modelClass = ModelEditing.Path(ContactListView(model).ModelClass);
+        create.SetText(view, "ModelClass", modelClass);
+        create.Apply(model.LastLayer);
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        var savedView = ((IModelApplication)loaded).Views["SavedCustomView"]!;
+        var before = loaded.LastLayer.Xml;
+        var edit = new ModelEditSession();
+
+        if (emptyChoice) edit.SetText(savedView, "ModelClass", "");
+        else edit.Reset(savedView, "ModelClass");
+
+        var error = Assert.Throws<InvalidOperationException>(() => edit.Apply(loaded.LastLayer));
+        Assert.Contains("Views/SavedCustomView", error.Message);
+        Assert.Contains("ModelClass", error.Message);
+        Assert.Contains("ModelClass", edit.MissingRequired(savedView));
+        Assert.Equal(before, loaded.LastLayer.Xml);
+        Assert.True(edit.TryGetPending(savedView, "ModelClass", out _, out _));
+
+        edit.SetText(savedView, "ModelClass", modelClass);
+        Assert.DoesNotContain("ModelClass", edit.MissingRequired(savedView));
+        edit.Apply(loaded.LastLayer);
+        var reloaded = build(new StringModelStore(loaded.LastLayer.Xml));
+        var restored = Assert.IsAssignableFrom<IModelDetailView>(((IModelApplication)reloaded).Views["SavedCustomView"]);
+        Assert.Equal(modelClass, ModelEditing.Path(restored.ModelClass));
+    });
+
+    [Fact]
+    public void Session_Apply_RefusesARequiredStringResetOnASavedCustomColumn() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var create = new ModelEditSession();
+        var column = create.AddChild(ContactListView(model).Columns, typeof(IModelColumn), "SavedCustomColumn");
+        create.SetText(column, "PropertyName", nameof(ModelTestContact.Name));
+        create.Apply(model.LastLayer);
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        var savedColumn = ContactListView(loaded).Columns["SavedCustomColumn"]!;
+        var before = loaded.LastLayer.Xml;
+        var edit = new ModelEditSession();
+
+        edit.Reset(savedColumn, "PropertyName");
+
+        var error = Assert.Throws<InvalidOperationException>(() => edit.Apply(loaded.LastLayer));
+        Assert.Contains("PropertyName", error.Message);
+        Assert.Contains("PropertyName", edit.MissingRequired(savedColumn));
+        Assert.Equal(before, loaded.LastLayer.Xml);
+    });
+
+    [Fact]
+    public void Session_Apply_RefusesARequiredResetBelowASavedCustomView() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var create = new ModelEditSession();
+        create.Clone(ContactListView(model).ModelClass.DefaultDetailView, "SavedParentView");
+        create.Apply(model.LastLayer);
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        var savedView = (IModelDetailView)((IModelApplication)loaded).Views["SavedParentView"]!;
+        var item = Assert.IsAssignableFrom<IModelMemberViewItem>(savedView.Items[nameof(ModelTestContact.Name)]);
+        var before = loaded.LastLayer.Xml;
+        var edit = new ModelEditSession();
+
+        edit.Reset(item, "PropertyName");
+
+        var error = Assert.Throws<InvalidOperationException>(() => edit.Apply(loaded.LastLayer));
+        Assert.Contains("PropertyName", error.Message);
+        Assert.Equal(before, loaded.LastLayer.Xml);
+    });
+
+    // A generated view has a class below the user layer; its required reference still resets to that class.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Session_Apply_AllowsARequiredReferenceResetOnAGeneratedView(bool emptyChoice) => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var view = ContactListView(model);
+        var originalClass = ModelEditing.Path(view.ModelClass);
+        view.ModelClass = ((IModelApplication)model).BOModel.GetClass(typeof(ModelTestOrder));
+        var loaded = build(new StringModelStore(model.LastLayer.Xml));
+        var edit = new ModelEditSession();
+
+        if (emptyChoice) edit.SetText(ContactListView(loaded), "ModelClass", "");
+        else edit.Reset(ContactListView(loaded), "ModelClass");
+        Assert.DoesNotContain("ModelClass", edit.MissingRequired(ContactListView(loaded)));
+        edit.Apply(loaded.LastLayer);
+
+        var reloaded = build(new StringModelStore(loaded.LastLayer.Xml));
+        Assert.Equal(originalClass, ModelEditing.Path(ContactListView(reloaded).ModelClass));
+    });
+
     // MODELEDITOR-005: a reference value is stored under its persistent name (DetailViewID, IModelListView.cs 63); a saved
     // reset in the warmed-up model takes that attribute out of the user layer.
     [Fact]
@@ -186,6 +281,18 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
         reset.Reset(ContactListView(loaded), "DetailView");
         reset.Apply(loaded.LastLayer);
         Assert.Equal(calculated, ModelEditing.Path(ContactListView(build(new StringModelStore(loaded.LastLayer.Xml))).DetailView));
+    });
+
+    // MODELEDITOR-007: a stored difference whose node the model no longer has is set aside as unusable when the differences load
+    // (ModelNode.CreateMasterNode, docs/api-notes.md DIFF-001), and the database store drops it at the next save, so the editor
+    // warns before saving, as the WinForms editor warns after it (ModelEditorViewController.cs 732-737).
+    [Fact]
+    public void HasUnusableDifferences_ReportsAStoredNodeTheModelNoLongerHas() => WithWarmedUpModels(build => {
+        Assert.False(ModelEditing.HasUnusableDifferences(build(ModelStoreBase.Empty)));
+
+        var orphaned = build(new StringModelStore(
+            "<Application><Views><DetailView Id=\"NoSuchClass_DetailView\" Caption=\"Gone\" /></Views></Application>"));
+        Assert.True(ModelEditing.HasUnusableDifferences(orphaned));
     });
 
     static IModelListView ContactListView(ModelApplicationBase model) =>

@@ -36,7 +36,9 @@ using Microsoft.Playwright;
 //            open in the filter builder over Order's fields, invalid text keeps the builder
 //            open and the value unchanged, and Apply writes valid criteria back, ImageName
 //            offers the image names, the saved Criteria leave Order_ListView one row, a column's ToolTip is a text area, and a
-//            reset of the Criteria lists every order again
+//            reset of the Criteria lists every order again; MODELEDITOR-007: a column's PropertyName left empty is marked
+//            required and Save is refused naming the node and the value, and closing the editor saves nothing;
+//            resetting a saved custom column's required PropertyName is refused and the column survives a reload
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -630,7 +632,24 @@ try
     var addedHeaders = await GridHeaders(page);
     Console.WriteLine("    headers after adding a column in the Model Editor: " + string.Join(" | ", addedHeaders));
     Assert(addedHeaders.Contains("Notes"), $"the column added in the Model Editor shows after Save (got {string.Join(",", addedHeaders)})");
+    Step("MODELEDITOR-007: a required reset on a saved custom column is refused before writing differences");
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/EditorNotes");
+    await modelEditor.Locator("tr[data-value='PropertyName'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='PropertyName'] .xlb-required-missing").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-save").ClickAsync();
+    var resetRequiredMessage = modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "PropertyName required" });
+    await resetRequiredMessage.WaitForAsync(new() { Timeout = 10_000 });
+    Assert((await resetRequiredMessage.InnerTextAsync()).Contains("Views/Order_ListView/Columns/EditorNotes"),
+        "the refused required reset names the saved custom column");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-27-model-editor-required-reset.png") });
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await OpenListView(page, "Order_ListView", "ORD-001"); // full navigation: rebuild the model from its stored differences
+    var headersAfterRequiredReset = await GridHeaders(page);
+    Assert(headersAfterRequiredReset.Contains("Notes"), "the saved custom column survives a refused required reset and reload");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/EditorNotes");
+    Assert(await modelEditor.Locator("tr[data-value='PropertyName'] input").InputValueAsync() == "Notes",
+        "the saved custom column still has its required PropertyName after reload");
     await modelEditor.Locator(".xlb-delete").ClickAsync();
     await modelEditor.Locator(".xlb-delete", new() { HasText = "Keep" }).WaitForAsync(new() { Timeout = 10_000 });
     await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
@@ -761,6 +780,25 @@ try
     await page.GetByText("ORD-002", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 15_000 });
     var unfilteredList = await page.InnerTextAsync("body");
     Assert(unfilteredList.Contains("Data grid with 4 rows"), "after resetting the Criteria Order_ListView lists every order again");
+
+    Step("MODELEDITOR-007: a required value left empty is marked and blocks Save, which names the node and the value");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/Number");
+    var propertyNameInput = modelEditor.Locator("tr[data-value='PropertyName'] input");
+    await propertyNameInput.FillAsync("");
+    await propertyNameInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='PropertyName'] .xlb-required-missing").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-save").ClickAsync();
+    var requiredMessage = modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "PropertyName required" });
+    await requiredMessage.WaitForAsync(new() { Timeout = 10_000 });
+    var requiredText = await requiredMessage.InnerTextAsync();
+    Assert(requiredText.Contains("Views/Order_ListView/Columns/Number"),
+        $"Save with a required value cleared is refused, naming the node and the value (got '{requiredText}')");
+    Assert(await modelEditor.IsVisibleAsync(), "the refused Save leaves the Model Editor open with the edit to correct");
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    var headersAfterRefusedSave = await GridHeaders(page);
+    Assert(headersAfterRefusedSave.Contains("Number"),
+        $"nothing was saved: Order_ListView still shows its Number column (got {string.Join(",", headersAfterRefusedSave)})");
 
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property

@@ -68,6 +68,7 @@ else {
                         <button type="button" class="xlb-reset-node" @onclick="ResetNode">@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")</button>
                     }
                 </div>
+                var missingRequired = Session.MissingRequired(selected);
                 <table style="width:100%; border-collapse:collapse">
                     @foreach (var group in ModelEditing.Values(selected).GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
                         <tr class="xlb-category"><td colspan="3" style="padding:6px 6px 2px; font-weight:600; opacity:0.7">@group.Key</td></tr>
@@ -135,6 +136,10 @@ else {
                                     }
                                 </td>
                                 <td style="padding:2px 6px; white-space:nowrap">
+                                    @* MODELEDITOR-007: a required value the node lacks once the pending edits are written. *@
+                                    @if (missingRequired.Contains(row.Name)) {
+                                        <span class="xlb-required-missing" title="A value is required" style="color:#c00; margin-right:0.25rem">required</span>
+                                    }
                                     @if (pendingError is not null) {
                                         <span class="xlb-invalid" title="@pendingError" style="color:#c00">invalid</span>
                                     }
@@ -206,6 +211,7 @@ else {
     CriteriaOperator? criteria;
     DxFilterBuilder? filterBuilderRef;
     int criteriaOpenings;
+    bool unusableWarned;
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
@@ -242,11 +248,16 @@ else {
         if (!expanded.Remove(path)) expanded.Add(path);
     }
 
+    // MODELEDITOR-007: leaving a node that lacks required values says so. ponytail: the WinForms editor refuses the node change
+    // (ModelEditorViewController.cs 1351); here Save refuses, listing every node, so moving around the tree stays free.
     void Select(IModelNode node) {
+        var left = selected is not null && ModelEditing.IsInModel(selected) ? Session.MissingRequired(selected) : [];
+        var leftPath = selected is null ? null : ModelEditing.Path(selected);
         history.RemoveRange(historyAt + 1, history.Count - historyAt - 1);
         history.Add(node);
         historyAt = history.Count - 1;
         Show(node);
+        if (left.Count > 0) message = $"{leftPath}: {string.Join(", ", left)} required";
     }
 
     void Show(IModelNode node) {
@@ -367,6 +378,13 @@ else {
     // already created keep the model they were built from. So Save reloads the page, as the WinForms editor restarts every
     // window (WinApplication.EditModel): the new circuit builds its model again from the differences just saved.
     void Save() => Run(() => {
+        // MODELEDITOR-007: stored differences the model can no longer use are dropped by this save (the database store writes
+        // only the usable layer), so the first Save says so and the next one goes ahead.
+        if (!unusableWarned && ModelEditing.HasUnusableDifferences((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model)) {
+            unusableWarned = true;
+            throw new InvalidOperationException("Your stored model differences hold nodes the model no longer has (after a module or version change, " +
+                "for example). They are not applied, and saving rewrites your differences without them. Press Save again to go ahead.");
+        }
         // The database store keeps an aspect whose differences became empty; without the cleanup a reset localized caption
         // returns. Only the aspects these edits emptied are blanked, and the session keeps them until that succeeded.
         Session.Apply(((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model).LastLayer);

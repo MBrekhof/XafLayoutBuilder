@@ -45,25 +45,43 @@ session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
 c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003), 2beb758, d573de4 (MODELEDITOR-004), fe1f282, e36049f (MODELEDITOR-005), 2d9cc32, ec94400 (MODELEDITOR-006).
-202 unit tests pass.
+211 unit tests pass.
 
-**Next (2026-09-13):** MODELEDITOR-005 (e36049f) and MODELEDITOR-006 (ec94400) are committed, both cards in Review. The
-Model Editor cards continue with MODELEDITOR-007 (#1699, validation) through MODELEDITOR-012 (#1704), same loop: test
+**Next (2026-09-13):** MODELEDITOR-005 (e36049f) and MODELEDITOR-006 (ec94400) are committed, both cards in Review.
+MODELEDITOR-007 (#1699, validation), including the review fix below, is included in this commit at the owner's request
+to commit all changes. No board status was changed by this session (ContextBoard tools were unavailable). The remaining
+Model Editor cards start at MODELEDITOR-008 and continue through MODELEDITOR-012 (#1704), same loop: test
 first, gate, Codex review, stop the broker, commit with exact files. A gate step that needs a DevExpress component's DOM
-(MODELEDITOR-006's filter builder) was read from the running sample first rather than guessed. `docs/devexpress-support-request.md` is still uncommitted (ten items, the owner's to send) and
-`extras.jpg` stays untracked. Nothing since 7b388b8 has been pushed.
+(MODELEDITOR-006's filter builder) was read from the running sample first rather than guessed. This commit also includes
+`docs/devexpress-support-request.md` (ten items, still a draft for the owner to send) and `extras.jpg`.
+Nothing since 7b388b8 has been pushed.
+
+**MODELEDITOR-007 review fix (2026-09-13, user delegated implementation):** the first review reproduced a P1: resetting
+`ModelClass` on a custom DetailView saved in an earlier session passed validation, removed `ClassName` from its differences,
+and made the view disappear on reload. `MissingRequired` now treats required resets and empty required-reference choices
+on or below a user-created node as missing, using the persisted `IsNewNode` flag independently of the current session's
+added list. An explicit value repairs the edit. This retains the existing conservative rule for newly added nodes:
+calculator fallbacks on custom subtrees are not assumed; generated-node and optional-value resets retain their behavior.
+Six warmed-model regression/control cases were added; all four refusal cases were proven red before the fix, then the
+complete suite passed (211 tests). The solution builds with existing warnings, and the full E2E gate passed (exit 0),
+including a refused required reset on a saved custom column followed by a fresh circuit that still has its `PropertyName`.
+The error screenshot was inspected; the sample host stopped and freed :5100. Final independent review found no correctness
+issues. Logs: `artifacts/modeleditor-007-e2e.log`; screenshot: the E2E output's
+`screenshots/e2e-27-model-editor-required-reset.png`. Plan: `docs/plans/2026-09-13-modeleditor-007-required-resets.md`.
+All changes are included in this commit. The initial review reproducer's `Review.exe` popup came from dereferencing the vanished
+view; the corrected reproducer reported its absence and exited normally.
 
 **Model Editor all the way (owner, 2026-09-13: "the whole nine yards", plus which DevExpress source changes would help,
 possibly as a support call).** Scope: `docs/model-editor-scope.md` (what the WinForms Model Editor does). Cards:
 MODELEDITOR-003 (#1695, tree and property grid parity, research notes on the card) through MODELEDITOR-012 (#1704,
 packaging and the RUNTIME-001 hook); DXSUPPORT-001 (#1693): `docs/devexpress-support-request.md` is drafted and
-**uncommitted** (nine items so far, ClearValue cache and the empty-aspect store row the most important; MODELEDITOR-004
+included in this commit (ten items so far, ClearValue cache and the empty-aspect store row the most important; MODELEDITOR-004
 added the deferred save that stores unsaved state and the old views that overwrite saved edits); it is the
 owner's to send. RUNTIME-001 default taken meanwhile: the editor may change builder-owned views in a user's own
 differences, as XAF's layout editor can. RUNTIME-001 (1688): the facts are on the card (no
 runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); allow or restrict stays the
 owner's call. `extras.jpg` in the repo root is the owner's screenshot for
-RUNTIME-001, untracked on purpose. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+RUNTIME-001, now tracked at the owner's request. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
 ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).

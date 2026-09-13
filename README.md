@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- MODELEDITOR-007: required-value validation also blocks resets on saved user-created nodes, preventing custom views from losing their class on reload.
 - MODELEDITOR-001 (spike): `XafLayoutBuilder.ModelEditor` add-on, "Edit Model" in XAF Blazor: model tree, value grid, saved to the user's differences.
 - RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.

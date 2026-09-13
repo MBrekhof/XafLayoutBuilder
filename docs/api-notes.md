@@ -516,6 +516,28 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   `IImageUrlService.GetImageUrl` (`DevExpress.ExpressApp.Blazor/Services/IImageUrlService.cs` 44-46). Masks: the model has
   only `EditMask` and `EditMaskType` (`CommonInterfaces.cs` 575-582), plain values here; the WinForms mask editor is attached
   by the Win extender only.
+- Validation (MODELEDITOR-007). The WinForms `ModelValidator` (`DevExpress.ExpressApp.Win/Core/ModelEditor/ModelValidator.cs`
+  47-93) builds a `RuleSet` per node from the rule attributes of the node type and its interfaces, adds a
+  `RuleRequiredField` for every value `FastModelEditorHelper.IsRequired` reports and for each interface's `[KeyProperty]`
+  (`Model/ModelAttributes.cs` 50; `Name` on `IModelLocalizationItemBase` and others, `CommonInterfaces.cs` 142), drops rules
+  on values the grid hides, and validates only a node with `HasModification` or `IsNewNode`. The model interfaces carry no
+  rule attributes (none under `DevExpress.ExpressApp/Model`), so its rules are exactly required and key values; the rule
+  classes live in `DevExpress.Persistent.Base.v26.1.dll` (dxdocs), which the add-on already references. The editor checks
+  those values without `RuleSet`, because its edits are pending until Save and a written value cannot be taken back in a
+  warmed-up model: a pending empty text for a string counts as missing. A required reset (including an empty required-reference
+  choice) on or below a user-created node also counts as missing, even when saved in an earlier session. `ModelNode.IsNewNode`
+  (`ModelNode.cs` 679-682) identifies such nodes independently of the editor's session; parent nodes are checked too. The warmed-up
+  regression creates and saves a custom DetailView with ModelClass, reloads it, and proves the refusal leaves its XML unchanged.
+  Before the fix, Reset removed ClassName and the next reload lost the view. Generated-view resets still restore their inherited
+  class (also tested). This conservatively requires an explicit value on user-created subtrees even when a calculator could
+  supply one: `ClearValue` cannot preview the fallback safely (`ModelNode.cs` 2368-2390, 2507-2523). WinForms refuses a node change while
+  the focused node is invalid (`ModelEditorViewController.cs` 1299-1324, 1351) and shows the errors per value (1378-1443).
+  Unusable differences: a stored node the model no longer has is set aside when the differences load, and
+  `ModelApplicationBase.CalculateUnusableModel()` (public, `EditorBrowsable(Never)`, `Model/Core/ModelApplication.cs`
+  433-443) returns the layer's unusable model; `ModelEditorHelper.GetUnusableModel` reads the same field without updating it
+  (`Model/ModelEditorHelper.cs` 376-380). The WinForms editor warns once after saving when it has modifications
+  (`ModelEditorViewController.cs` 732-737); the database store writes only the usable layer (DIFF-001 above), so the
+  Blazor editor warns before the save that would drop them.
 - Model saves the editor does not start. Every application registers a deferred user-model save when it loads the user
   differences (`DevExpress.ExpressApp.Blazor/BlazorApplication.cs` 103-111); it is flushed when the same user's next
   application loads its differences (107, 286-289) and when the circuit closes

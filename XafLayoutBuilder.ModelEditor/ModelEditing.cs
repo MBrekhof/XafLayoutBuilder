@@ -282,19 +282,52 @@ public static class ModelEditing {
         return writes;
     }
 
-    /// <summary>The required values ([Required] or an IModelIsRequired calculator) the node has no value for.</summary>
+    /// <summary>
+    /// The required values the node has no value for: [Required] or an IModelIsRequired calculator, and the [KeyProperty] of
+    /// an interface the node implements, leaving out values the grid hides, as the WinForms ModelValidator builds its rules
+    /// (DevExpress.ExpressApp.Win/Core/ModelEditor/ModelValidator.cs 50-77; the model interfaces carry no rule attributes).
+    /// </summary>
     /// <param name="cleared">Values cleared on the node. A warmed-up model keeps returning a cleared value from its cache
     /// (ClearValue, ModelNode.cs 2368-2390), so these count as missing. ponytail: a required value XAF would calculate counts
     /// too; setting it explicitly clears the error.</param>
-    public static IReadOnlyList<string> MissingRequired(IModelNode node, IEnumerable<string>? cleared = null) {
+    /// <param name="pending">Texts pending for the node's values, which the model does not hold yet: an empty text for a string
+    /// is missing. A reset or an empty text for another type is also missing on or below a user-created node, even one
+    /// saved in an earlier session: there is no independent generated node to fall back to (MODELEDITOR-007).</param>
+    public static IReadOnlyList<string> MissingRequired(IModelNode node, IEnumerable<string>? cleared = null, IReadOnlyDictionary<string, string?>? pending = null) {
         var modelNode = (ModelNode)node;
         var clearedNames = cleared?.ToHashSet() ?? [];
+        var keys = AttributeHelper.GetAttributesConsideringInterfaces<KeyPropertyAttribute>(modelNode.GetType(), true)
+            .Select(a => a.KeyPropertyName)
+            .ToHashSet();
         return modelNode.NodeInfo.ValuesInfo
-            .Where(v => !Bookkeeping.Contains(v.Name) && Helper.IsRequired(modelNode, v.Name))
-            .Where(v => clearedNames.Contains(v.Name) || modelNode.GetValue(v.Name) is null or "")
+            .Where(v => !Bookkeeping.Contains(v.Name) && (Helper.IsRequired(modelNode, v.Name) || keys.Contains(v.Name))
+                && Helper.IsPropertyModelBrowsableVisible(modelNode, v.Name))
+            .Where(v => pending is not null && pending.TryGetValue(v.Name, out var text)
+                ? text is null || (text.Length == 0 && v.PropertyType != typeof(string))
+                    ? IsUnderNewNode(modelNode)
+                    : text.Length == 0
+                : clearedNames.Contains(v.Name) || modelNode.GetValue(v.Name) is null or "")
             .Select(v => v.Name)
             .ToList();
     }
+
+    // IsNewNode survives saving user-created nodes (ModelNode.cs 679-682); the session's added list does not. Include
+    // children generated under such a node. As for unsaved additions, require an explicit value instead of assuming a
+    // calculator can restore it: ClearValue cannot safely preview that result in the warmed-up model.
+    static bool IsUnderNewNode(ModelNode node) {
+        for (ModelNode? current = node; current is not null; current = current.Parent) {
+            if (current.IsNewNode) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the stored differences hold nodes the model no longer has, set aside as unusable when they loaded
+    /// (ModelApplicationBase.CalculateUnusableModel, Model/Core/ModelApplication.cs 433-443). The database store writes only
+    /// the usable layer, so the next save drops them (docs/api-notes.md, DIFF-001); the WinForms editor warns after saving
+    /// (ModelEditorViewController.cs 732-737), this editor before, since its Save reloads the page.
+    /// </summary>
+    public static bool HasUnusableDifferences(ModelApplicationBase model) => model.CalculateUnusableModel() is { HasModification: true };
 
     /// <summary>
     /// The Index changes that move the node one place up or down among its shown siblings, renumbering them as
@@ -727,6 +760,19 @@ public sealed class ModelEditSession {
         return node;
     }
 
+    /// <summary>
+    /// The required values the node lacks once the pending edits are written (MODELEDITOR-007): a node added in this session with
+    /// the values it holds and the ones cleared, any other node with the texts pending for it.
+    /// </summary>
+    public IReadOnlyList<string> MissingRequired(IModelNode node) {
+        if (IsAddedOrUnder(node)) {
+            var ids = ModelEditing.Ids(node);
+            return ModelEditing.MissingRequired(node, cleared.Where(c => ModelEditing.Ids(c.Node).SequenceEqual(ids)).Select(c => c.Name));
+        }
+        return ModelEditing.MissingRequired(node,
+            pending: pending.Where(p => ReferenceEquals(p.Key.Node, node)).ToDictionary(p => p.Key.Name, p => p.Value.Text));
+    }
+
     public bool IsAdded(IModelNode node) => added.Contains(node);
 
     bool IsAddedOrUnder(IModelNode node) => IsAtOrUnder(node, added);
@@ -849,15 +895,17 @@ public sealed class ModelEditSession {
         // Checked before anything is written, so a refused Save leaves the model and every pending edit as they were.
         if (pending.FirstOrDefault(p => p.Value.Error is not null && !IsDeleted(p.Key.Node)) is { Value.Error: { } error } invalid)
             throw new InvalidOperationException($"{ModelEditing.Path(invalid.Key.Node)}: {invalid.Key.Name} is not saved: {error}");
-        // Every node of an added or cloned subtree is saved only with its required values (MODELEDITOR-004); a clone copies its
-        // source's children (Codex review). Their values are in the model already.
-        var subtrees = added.Where(n => !IsDeleted(n) && ModelEditing.IsInModel(n)).SelectMany(ModelEditing.Subtree);
-        foreach (var node in subtrees.Where(n => !IsDeleted(n))) {
-            var ids = ModelEditing.Ids(node);
-            var missing = ModelEditing.MissingRequired(node, cleared.Where(c => ModelEditing.Ids(c.Node).SequenceEqual(ids)).Select(c => c.Name));
-            if (missing.Count > 0)
-                throw new InvalidOperationException($"{ModelEditing.Path(node)}: {string.Join(", ", missing)} required");
-        }
+        // MODELEDITOR-007: the required values of every node this save touches, as the WinForms ModelValidator checks a modified or
+        // new node: each node of an added or cloned subtree (MODELEDITOR-004; a clone copies its source's children, Codex review)
+        // with the values it holds, each other node with pending edits with the values those edits write. Every error is listed.
+        var subtrees = added.Where(n => !IsDeleted(n) && ModelEditing.IsInModel(n)).SelectMany(ModelEditing.Subtree).Where(n => !IsDeleted(n));
+        var edited = pending.Keys.Select(k => k.Node).Distinct().Where(n => !IsDeleted(n) && !IsAddedOrUnder(n));
+        var errors = subtrees.Concat(edited)
+            .Select(node => (Node: node, Missing: MissingRequired(node)))
+            .Where(e => e.Missing.Count > 0)
+            .Select(e => $"{ModelEditing.Path(e.Node)}: {string.Join(", ", e.Missing)} required")
+            .ToList();
+        if (errors.Count > 0) throw new InvalidOperationException(string.Join("; ", errors));
         if (userLayer is null) WritePending();
         else {
             emptiedAspects.UnionWith(ModelEditing.AspectsEmptiedBy(userLayer, WritePending));
