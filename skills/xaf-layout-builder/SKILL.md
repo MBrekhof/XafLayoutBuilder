@@ -190,9 +190,9 @@ buttons are not in the popup itself.
 
 - Prints groups, tabs, items, captions that differ from XAF's default, flow, collapsible, explicit
   relative sizes and images. Layout items that are not property editors are listed in a comment.
-- Lists every unplaced visible member as `.Hide(...)`, and every unshown column except the key.
-  The model cannot tell a hidden column from an unmentioned one, so the export is more explicit
-  than hand-written code. A hidden column's sort order is not carried over.
+- Lists every unplaced visible member as `.Hide(...)`. For columns it prints `.Hide(...)` only for
+  one the spec hid, or one a later layer hid or added, never the key; a column the spec never
+  mentioned stays out. A hidden column's sort order is not carried over.
 - Skips what the builder cannot express, such as a layout item bound to a nested path or a column
   path that casts to a descendant class, and names it in the leading comment instead of printing
   code that would not compile or would throw. A column over a reference's member is printed as

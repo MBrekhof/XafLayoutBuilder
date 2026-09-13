@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
 - SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
 - MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
 - NEST-001: columns may follow references, `Column(x => x.Customer.City)`, and export that way.
@@ -221,10 +222,10 @@ specs, and a printer turns specs into the builder C#.
 - The download needs one small JavaScript module, shipped inside the add-on. A server-side action
   cannot start a browser download on its own, and Chrome blocks top-level `data:` navigation, so an
   anchor has to be created and clicked. That file is the only JavaScript in the repository.
-- Exported ListViews list every unshown column as `.Hide(...)`, except the key. The model does not
-  record whether a column was hidden or never mentioned, so the export is more verbose than
-  hand-written code. One difference is not cosmetic: a hidden column that still carried a sort
-  order loses it, because the applier clears the sort of every column the spec does not list.
+- Exported ListViews print `.Hide(...)` for a column the spec hid and for one a later layer hid or
+  added; a column the spec never mentioned stays out, as in hand-written code.
+  A hidden column that still carried a sort order loses it, because the applier clears the sort of
+  every column the spec does not list.
 - Layout items bound to a nested path, such as `Customer.Name`, and columns whose path casts to a
   descendant class (`<Descendant>Member`), cannot be expressed by the builder. They are skipped and
   named in the leading comment instead of printed. A column over a reference's member is exported

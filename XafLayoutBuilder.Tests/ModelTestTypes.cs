@@ -115,6 +115,24 @@ public class ModelTestShipment : ISupportViewLayoutCustomization {
             .Build();
 }
 
+// EXPORT-001: LayoutExporterTests hides Subject and adds a hidden Customer.City the way a later layer does; Notes and
+// Customer are never mentioned.
+[DomainComponent]
+public class ModelTestTicket : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public string? Subject { get; set; }
+    public string? Notes { get; set; }
+    public ModelTestCustomer? Customer { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestTicket>.Create()
+            .Column(x => x.Number)
+            .Column(x => x.Subject)
+            .Build();
+}
+
 // SORT-001: sorted in column order; LayoutExporterTests groups ShipDate the way the Blazor grid stores it.
 [DomainComponent]
 public class ModelTestParcel : ISupportViewLayoutCustomization {

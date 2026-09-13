@@ -6,6 +6,7 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
 - SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
 - MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
 - NEST-001: columns may follow references, `Column(x => x.Customer.City)`, and export that way.

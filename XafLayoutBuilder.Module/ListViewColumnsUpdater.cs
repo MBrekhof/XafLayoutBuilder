@@ -20,7 +20,10 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
     // This literal is the one thing here that a DevExpress release can rename. If it ever happens, hidden columns
     // reappear and the order goes natural, which fails the E2E gate's "columns are Number, Customer, Order Date in
     // that order" assertion in E2E 2 (XafLayoutBuilder.E2ETests/Program.cs). Start there.
-    const string GeneratedIndex = "GeneratedIndex";
+    internal const string GeneratedIndex = "GeneratedIndex";
+
+    /// <summary>Model value marking a column this updater hid because the spec said Hide (EXPORT-001).</summary>
+    internal const string HiddenMarker = "XafLayoutBuilder.HiddenColumn";
 
     public override void UpdateNode(ModelNode node) {
         // Degrades like DetailViewLayoutUpdater: logged, and the view keeps XAF's generated columns.
@@ -67,9 +70,10 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
             // An explicit sort priority (SORT-001) wins; validation guarantees every sorted column has one or none does.
             column.SortIndex = c.SortOrder == Core.ColumnSortOrder.None ? -1 : c.SortIndex ?? sortIndex++;
         }
-        // Hidden members must exist as columns so the chooser can offer them, even where the generator made none.
+        // Hidden members must exist as columns so the chooser can offer them, even where the generator made none. Stamped,
+        // because the model cannot otherwise tell a column the spec hid from one it never mentioned (EXPORT-001).
         foreach (var hidden in spec.HiddenMembers)
-            if (columns[hidden] is null) AddColumn(hidden);
+            ((ModelNode)(columns[hidden] ?? AddColumn(hidden))).SetValue(HiddenMarker, true);
         foreach (var column in columns) {
             if (listed.Contains(column.Id)) continue;
             // Hidden and unmentioned alike: available in the column chooser, not shown, and never sorted by default

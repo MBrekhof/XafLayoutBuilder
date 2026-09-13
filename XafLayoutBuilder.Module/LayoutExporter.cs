@@ -112,10 +112,9 @@ public static class LayoutExporter {
         && !Explicit(group, "RelativeSize") && string.IsNullOrEmpty(group.ImageName);
 
     /// <summary>
-    /// Every column with an index is listed; every other column is exported as hidden, except the key, which XAF never
-    /// shows by default. Hidden and merely unmentioned columns are indistinguishable in the model, so the export is
-    /// explicit where the original builder may have been silent. A hidden column's own sort order is not exported:
-    /// the applier clears it, so it cannot round-trip.
+    /// Every column with an index is listed. An unshown column is exported as hidden only when the spec hid it or a later
+    /// layer hid it (EXPORT-001); one the spec never mentioned stays out, as in hand-written code, and so does the key.
+    /// A hidden column's own sort order is not exported: the applier clears it, so it cannot round-trip.
     /// </summary>
     public static (ListColumnsSpec Spec, IReadOnlyList<string> Skipped) ExportColumns(IModelListView view, IModelListView? lookupView) {
         var skipped = new List<string>();
@@ -153,8 +152,15 @@ public static class LayoutExporter {
                 .ToList();
         }
 
+        // Left out is only a generated leftover: a column the generated layer made unshown (GeneratedIndex -1; the stock
+        // generator and the updater give every column they make one) that the spec did not hide, or ListViewColumnsUpdater
+        // would have stamped it. A column the generated layer showed was hidden by a later layer; a column with no generated
+        // index was added by one, and leaving it out would lose it from the chooser when the export is applied. Asking
+        // whether some layer stored an Index would also catch a layer that stores one for every column (FreezeColumnIndices).
         List<string> Hidden(IModelListView v) => v.Columns
             .Where(c => c.Index is null or < 0)
+            .Where(c => ((ModelNode)c).GetValue<bool>(ListViewColumnsUpdater.HiddenMarker)
+                        || !(((ModelNode)c).GetValue<int?>(ListViewColumnsUpdater.GeneratedIndex) < 0))
             .Select(Simple)
             .OfType<string>()
             .Where(member => member != key)

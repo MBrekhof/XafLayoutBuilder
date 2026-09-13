@@ -30,8 +30,26 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
         Assert.Empty(skipped);
         Assert.Equal(source.Columns, exported.Columns);
         Assert.Equal(source.Lookup!.Columns, exported.Lookup!.Columns);
-        // Hidden and unmentioned columns look the same in the model, so the export hides every column it does not list.
-        Assert.Subset(exported.HiddenMembers.ToHashSet(), source.HiddenMembers.ToHashSet());
+        // EXPORT-001: only what the spec hid, not every column it left unmentioned.
+        Assert.Equal(source.HiddenMembers, exported.HiddenMembers);
+        Assert.Equal(source.Lookup.HiddenMembers, exported.Lookup.HiddenMembers);
+    }
+
+    // EXPORT-001: a later layer hides Subject, which the builder showed, and adds a hidden Customer.City column, which no
+    // generator made; both are exported as hidden (without the second, re-applying the export would lose that column from
+    // the chooser, Codex review). Notes and Customer, generated but never mentioned by the spec, stay out of the export.
+    [Fact]
+    public void ExportColumns_HidesWhatALaterLayerHidOrAdded_ButNotWhatTheSpecNeverMentioned() {
+        var view = fixture.Class<ModelTestTicket>().DefaultListView;
+        view.Columns[nameof(ModelTestTicket.Subject)].Index = -1;
+        var added = view.Columns.AddNode<DevExpress.ExpressApp.Model.IModelColumn>("Customer.City");
+        added.PropertyName = "Customer.City";
+        added.Index = -1;
+
+        var (exported, _) = LayoutExporter.ExportColumns(view, null);
+
+        Assert.Equal([new ColumnSpec(nameof(ModelTestTicket.Number))], exported.Columns);
+        Assert.Equal(["Customer.City", nameof(ModelTestTicket.Subject)], exported.HiddenMembers.Order());
     }
 
     // SORT-001: when sort priority differs from column order the export keeps the explicit indexes; the Order round trip

@@ -10,8 +10,8 @@ using Microsoft.Playwright;
 //   E2E 2   Order_ListView column order, OrderDate-descending sort, hidden column offered by the column chooser
 //   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
-//   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder
-//   E2E 5   Export Layout To Code prints OrderDate under Details
+//   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder (it also hides the Customer column)
+//   E2E 5   Export Layout To Code prints OrderDate under Details and hides Customer, but not the never-mentioned Notes
 //   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
 //   JSON-001 Export Layout To JSON, read back and printed as C#, gives the popup's builder expressions; Download Layout
@@ -239,13 +239,8 @@ try
     Assert(roundTrip.Contains("Views: Order_DetailView, Order_ListView, Order_LookupListView."), "export names the views it read");
     Assert(NormalizeCode(BuilderExpression(roundTrip, "LayoutBuilder<Order>.Create()")) == NormalizeCode(BuilderExpression(layoutSource, "LayoutBuilder<Order>.Create()")),
         "exported DetailView builder equals the one in Order.Layout.cs (modulo indentation)");
-    var sourceColumns = BuilderExpression(layoutSource, "ListViewColumnsBuilder<Order>.Create()");
-    var exportedColumns = BuilderExpression(roundTrip, "ListViewColumnsBuilder<Order>.Create()");
-    Assert(NormalizeCode(WithoutHideCalls(exportedColumns)) == NormalizeCode(WithoutHideCalls(sourceColumns)),
-        "exported columns and lookup equal the source apart from Hide calls");
-    var exportedHides = HideCalls(exportedColumns);
-    Assert(HideCalls(sourceColumns).All(exportedHides.Contains),
-        $"every column the source hides is hidden in the export (export hides: {string.Join(" ", exportedHides)})");
+    Assert(NormalizeCode(BuilderExpression(roundTrip, "ListViewColumnsBuilder<Order>.Create()")) == NormalizeCode(BuilderExpression(layoutSource, "ListViewColumnsBuilder<Order>.Create()")),
+        "exported columns and lookup equal the ones in Order.Layout.cs, Hide calls included (EXPORT-001)");
     // Column captions are localizable model values; this is the case that needs the exporter's default-caption rule.
     await page.GotoAsync($"{BaseUrl}/Customer_ListView", new() { WaitUntil = WaitUntilState.NetworkIdle });
     await page.GetByText("Acme Corp", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
@@ -286,6 +281,11 @@ try
                 </LayoutGroup>
               </Layout>
             </DetailView>
+            <ListView Id="Order_ListView">
+              <Columns>
+                <ColumnInfo Id="Customer" Index="-1" />
+              </Columns>
+            </ListView>
           </Views>
         </Application>
         """;
@@ -318,6 +318,8 @@ try
     Assert(exported.Contains(".Caption(\"Order\")") && !exported.Contains(".Caption(\"Details\")") && !exported.Contains(".Caption(\"Lines\")"),
         "export prints the explicit Header caption and not XAF's computed captions");
     Assert(!exported.Contains(".Hide(x => x.ID)"), "export does not list the key as a hidden column");
+    Assert(exported.Contains(".Hide(x => x.Customer)"), "a column the user layer hid after the builder showed it is exported as hidden (EXPORT-001)");
+    Assert(!exported.Contains(".Hide(x => x.Notes)"), "a column the spec never mentioned is not exported as hidden (EXPORT-001)");
     Assert(exported.Contains(".Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)") && exported.Contains(".Lookup(l => l"),
         "export includes the ListView columns and the lookup");
 
@@ -838,8 +840,6 @@ static string BuilderExpression(string code, string start)
 
 static string NormalizeCode(string s) =>
     string.Join("\n", s.Replace("\r", "").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
-static string[] HideCalls(string s) => System.Text.RegularExpressions.Regex.Matches(s, @"\.Hide\(x => x\.\w+\)").Select(m => m.Value).ToArray();
-static string WithoutHideCalls(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\s*\.Hide\(x => x\.\w+\)", "");
 
 static async Task<IPage> NewPage(IBrowser browser)
 {

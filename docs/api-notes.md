@@ -188,6 +188,24 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `SetSerializedValue` with the layer detached, not through the domain-logic setter
   (`Model/ModelXmlWriter.cs` lines 171-197); why the user-layer value does not reach `Get_Index` was
   not traced.
+- **Which unshown columns the exporter prints as hidden (EXPORT-001).** In the merged model a column
+  the spec hid and one it never mentioned look the same, so `ListViewColumnsUpdater` stamps every
+  column the spec hides (model value `XafLayoutBuilder.HiddenColumn`). Every other unshown column is
+  printed too, except a generated leftover, an unstamped column with `GeneratedIndex` -1: the stock
+  generator gives every column it makes a generated index (`Model/NodeGenerators/ModelListViewNodesGenerator.cs`
+  lines 398-402) and the updater does the same. So a column the generated layer showed and a later
+  layer hid is printed, and so is one a later layer added (no `GeneratedIndex`), which applying the
+  export would otherwise lose from the column chooser. Not decided by `HasValue("Index")`: `HasValue` does read through the layers
+  (`Model/Core/ModelNode.cs` lines 2435-2447), but a freeze sets `Index` on every column of its layer
+  (above), and `IModelColumn` carries `ApplyDiffValuesMap(GeneratedIndex, Index)`
+  (`Model/IModelListView.cs` line 145, applied in `ModelNode.cs` line 1556), which turns a generated
+  index into a stored `Index` when node values are copied. Either would mark every unshown column hidden.
+  **Not with XAF's model cache (deferred to CACHE-001).** Both markers, this one and
+  `DetailViewLayoutUpdater.CatchAllMarker`, are stored as bools, and `GetSerializedValue` keeps a
+  non-string value for the cache only when it finds a value type for its name (`Model/Core/ModelNode.cs`
+  lines 3061-3071); a cached start runs `UpdateCachedNode`, not `UpdateNode`, so they are not set
+  again. With the cache on, the export would drop the spec's `.Hide(...)` calls and print a catch-all
+  group as ordinary items.
 
 ## Startup forcing (session 5)
 
