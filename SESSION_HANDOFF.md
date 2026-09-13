@@ -23,15 +23,17 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | MODEL-001 | 1ed98ac | The updaters and the exporter are unit tested against an Application Model built in-process with `DesignerModelFactory` (`ApplicationModelFixture`). Test types must be top-level public `[DomainComponent]` classes. |
 | SORT-001 | fbc0f33 | `Column(..., sortIndex:)` sets sort priority independently of column order; exported only when it differs. Codex found a column grouped in the Blazor grid exported `sortIndex: -1` (the grid keeps its SortOrder, SortIndex -1); the exporter now ranks priority the way DxGrid sorts, grouped columns first. Grouping itself is not exported. |
 | EXPORT-001 | 6df25b9 | The updater stamps columns the spec hides; the exporter leaves out only generated leftovers (unstamped, `GeneratedIndex` -1), so never-mentioned columns are no longer printed as `.Hide`. Codex: a later-layer-added hidden column must stay (fixed); both bool markers are lost with XAF's model cache on, **deferred to CACHE-001 by the owner** (card body updated). |
+| release | a246ad3 | 0.2.0 packed and pushed to `C:\Projects\local-nuget` (Core, Module, Blazor); gate exit 0. |
+| CACHE-001 | 9204526 | Docs only: XAF's model cache is WinForms-only (only `WinApplication` overrides `GetModulesVersionInfoFilePath`), so a Blazor host always runs the updaters and the markers issue does not arise there. README and api-notes corrected, WinForms caveats recorded. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
-**Pushed 2026-09-13:** everything up to and including this handoff is on origin/master.
+**Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001).
 
-Next cards, in order: HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
-E2E4-001 (1674). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+Next cards, in order: VIEW-001 (1671), HIER-001 (1670, new builder API: owner's call on its shape),
+E2E4-001 (1674), BAND-001 (1672). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
 ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).
