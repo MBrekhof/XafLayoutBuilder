@@ -2,12 +2,16 @@ using System.ComponentModel;
 using System.Globalization;
 using DevExpress.ExpressApp.Model;
 using DevExpress.ExpressApp.Model.Core;
+using DevExpress.ExpressApp.Utils.Reflection;
 
 namespace XafLayoutBuilder.ModelEditor;
 
 /// <summary>One value of a model node as the editor shows it.</summary>
 /// <param name="Choices">What a bool or enum value can be, for a drop-down; null for free text and for read-only values.</param>
-public sealed record ModelValueRow(string Name, Type Type, string Text, bool IsModified, bool CanEdit, IReadOnlyList<string>? Choices);
+/// <param name="Description">FastModelEditorHelper's description: type, owner interfaces and [Description], with &lt;b&gt;/&lt;br&gt; markup.</param>
+/// <param name="ReadOnlyMessage">Why a read-only value cannot be edited, when [ModelReadOnly] says.</param>
+public sealed record ModelValueRow(string Name, Type Type, string Text, bool IsModified, bool CanEdit, IReadOnlyList<string>? Choices,
+    string? Category = null, string? Description = null, bool IsRequired = false, bool IsLocalizable = false, string? ReadOnlyMessage = null);
 
 /// <summary>
 /// The editor's model logic, kept out of the component so it runs against an in-process model in tests. Reads go through
@@ -21,10 +25,49 @@ public static class ModelEditing {
     // The WinForms Model Editor's attribute rules (Browsable, HideInUI, ModelBrowsable calculators, ModelReadOnly), public.
     static readonly FastModelEditorHelper Helper = new();
 
-    public static IReadOnlyList<IModelNode> Children(IModelNode node) =>
-        Enumerable.Range(0, node.NodeCount).Select(i => node.GetNode(i)).ToList();
+    // The WinForms tree's order (ModelTreeListNodeComparer): DevExpress's ModelNodeComparerBase compares Index (negative
+    // indexes last, Model/Core/ModelNodesComparer.cs 52-75), then the display value.
+    sealed class TreeOrderComparer() : ModelNodeComparerBase<IModelNode>(true) {
+        protected override string GetModelNodeDisplayValue(IModelNode node) => Caption(node);
+    }
+
+    static readonly TreeOrderComparer TreeOrder = new();
+
+    public static IReadOnlyList<IModelNode> Children(IModelNode node) {
+        var children = Enumerable.Range(0, node.NodeCount).Select(i => node.GetNode(i)).ToList();
+        children.Sort(TreeOrder);
+        return children;
+    }
 
     public static string Id(IModelNode node) => ((ModelNode)node).Id;
+
+    /// <summary>What the tree shows: the node's [DisplayProperty] value, or its id.</summary>
+    public static string Caption(IModelNode node) {
+        try {
+            return Helper.GetModelNodeDisplayValue(node);
+        }
+        catch (Exception) {
+            return Id(node); // a display property whose calculator throws must not break the tree
+        }
+    }
+
+    /// <summary>Whether the node's type can have children at all; known without generating them.</summary>
+    public static bool CanHaveChildren(IModelNode node) => ((ModelNode)node).NodeInfo.GetChildrenTypes().Count > 0;
+
+    /// <summary>The node has differences in the writable layer (ModelNode.HasModification, ModelNode.cs 884-890).</summary>
+    public static bool IsModified(IModelNode node) => ((ModelNode)node).HasModification;
+
+    public static string NodeDescription(IModelNode node) => Helper.GetNodeDescription((ModelNode)node);
+
+    /// <summary>
+    /// A description as HTML: everything encoded except the &lt;b&gt;, &lt;/b&gt; and &lt;br&gt; DevExpress formats it with, so a generic type
+    /// name such as System.Nullable&lt;System.Int32&gt; (ModelEditorHelper.GetFriendlyTypeName) shows as text (Codex review).
+    /// </summary>
+    public static string DescriptionHtml(string? description) =>
+        System.Net.WebUtility.HtmlEncode(description ?? "")
+            .Replace("&lt;b&gt;", "<b>")
+            .Replace("&lt;/b&gt;", "</b>")
+            .Replace("&lt;br&gt;", "<br>");
 
     /// <summary>The ids from below the root down to the node, joined with '/': "Views/Order_ListView".</summary>
     public static string Path(IModelNode node) {
@@ -33,10 +76,37 @@ public static class ModelEditing {
         return string.Join("/", ids);
     }
 
+    /// <summary>
+    /// Nodes whose caption or id contains the text, breadth first so shallow matches come first. ponytail: searching reads
+    /// nodes and so generates what it passes, as the WinForms search does; it stops at <paramref name="limit"/> matches or
+    /// <paramref name="maxNodes"/> nodes visited, which bounds the cost on a large model.
+    /// </summary>
+    public static IReadOnlyList<IModelNode> Search(IModelNode root, string text, int limit = 50, int maxNodes = 5000) {
+        var found = new List<IModelNode>();
+        if (string.IsNullOrWhiteSpace(text)) return found;
+        var queue = new Queue<IModelNode>(Children(root));
+        for (var visited = 0; queue.Count > 0 && found.Count < limit && visited < maxNodes; visited++) {
+            var node = queue.Dequeue();
+            if (Caption(node).Contains(text, StringComparison.OrdinalIgnoreCase) || Id(node).Contains(text, StringComparison.OrdinalIgnoreCase))
+                found.Add(node);
+            foreach (var child in Children(node)) queue.Enqueue(child);
+        }
+        return found;
+    }
+
     public static IReadOnlyList<ModelValueRow> Values(IModelNode node) {
         var modelNode = (ModelNode)node;
+        // The WinForms grid's rules (ModelAttributesPropertyGridHelper.CalculatePropertyVisible, 505-540): Index is not
+        // offered for the root or a node right under it, and [ModelHideProperties] hides named values.
+        var hidden = AttributeHelper.GetAttributesConsideringInterfaces<ModelHidePropertiesAttribute>(modelNode.GetType(), true)
+            .SelectMany(a => a.HideProperties ?? [])
+            .ToHashSet();
+        var indexHidden = node.Parent is null or { Parent: null };
         return modelNode.NodeInfo.ValuesInfo
-            .Where(v => !Bookkeeping.Contains(v.Name) && Helper.IsPropertyModelBrowsableVisible(modelNode, v.Name))
+            .Where(v => !Bookkeeping.Contains(v.Name)
+                && !hidden.Contains(v.Name)
+                && !(indexHidden && v.Name == ModelValueNames.Index)
+                && Helper.IsPropertyModelBrowsableVisible(modelNode, v.Name))
             .OrderBy(v => v.Name, StringComparer.Ordinal)
             .Select(v => Row(modelNode, v))
             .ToList();
@@ -86,10 +156,11 @@ public static class ModelEditing {
     }
 
     // ponytail: strings, primitives and enums are editable; references to other nodes, types and criteria stay read-only
-    // until they get their own editors.
+    // until they get their own editors (MODELEDITOR-005, -006).
     static ModelValueRow Row(ModelNode node, ModelValueInfo info) {
         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
-        var editable = (type == typeof(string) || type.IsPrimitive || type.IsEnum) && !Helper.IsReadOnly(node, info.Name);
+        var readOnly = Helper.IsReadOnly(node, info.Name);
+        var editable = (type == typeof(string) || type.IsPrimitive || type.IsEnum) && !readOnly;
         string text;
         try {
             text = Format(node.GetValue(info.Name));
@@ -100,7 +171,12 @@ public static class ModelEditing {
             editable = false;
         }
         string[]? choices = !editable ? null : type == typeof(bool) ? ["True", "False"] : type.IsEnum ? Enum.GetNames(type) : null;
-        return new(info.Name, info.PropertyType, text, node.IsValueModified(info.Name), editable, choices);
+        return new(info.Name, info.PropertyType, text, node.IsValueModified(info.Name), editable, choices,
+            Category: Helper.GetPropertyAttribute<CategoryAttribute>(node, info.Name)?.Category,
+            Description: Helper.GetPropertyDescription(node, info.Name),
+            IsRequired: Helper.IsRequired(node, info.Name),
+            IsLocalizable: info.IsLocalizable,
+            ReadOnlyMessage: readOnly ? Helper.GetPropertyAttribute<ModelReadOnlyAttribute>(node, info.Name)?.Message : null);
     }
 
     static string Format(object? value) => value switch {

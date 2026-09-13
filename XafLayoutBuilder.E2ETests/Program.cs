@@ -27,7 +27,8 @@ using Microsoft.Playwright;
 //            user model after the next save, while the same difference's caption on a builder group applies and is kept
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   MODELEDITOR-001 Edit Model (ModelEditor add-on): a caption edit closed with Cancel is dropped; a saved caption is stored
-//            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once
+//            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once;
+//            MODELEDITOR-003: the search finds the view and a value's description shows
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -549,6 +550,20 @@ try
     await OpenListView(page, "Order_ListView", "ORD-001");
     // Codex review: an edit closed without Save never reaches the model, so it cannot ride along with a later model save.
     var modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    // MODELEDITOR-003: the search finds the view by its id, and a value's description shows when its name is clicked.
+    var search = modelEditor.Locator(".xlb-model-search");
+    await search.FillAsync("Order_ListView");
+    await search.PressAsync("Enter");
+    await modelEditor.Locator("[data-result='Views/Order_ListView']").WaitForAsync(new() { Timeout = 15_000 });
+    await search.FillAsync("");
+    await search.PressAsync("Enter");
+    await modelEditor.Locator("[data-node='Views/Order_ListView']").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-value-name").ClickAsync();
+    // The click is a server round trip; wait for the panel to re-render before reading it.
+    try { await modelEditor.Locator(".xlb-description", new() { HasText = "Property type" }).WaitForAsync(new() { Timeout = 10_000 }); }
+    catch (TimeoutException) { /* the assertion below reports what the panel shows */ }
+    var description = await modelEditor.Locator(".xlb-description").InnerTextAsync();
+    Assert(description.Contains("Property type"), $"the Caption value's description shows (got '{description.Trim()}')");
     var captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
     var originalCaption = await captionInput.InputValueAsync();
     await captionInput.FillAsync("Cancelled edit");

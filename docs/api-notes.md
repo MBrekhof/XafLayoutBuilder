@@ -412,6 +412,18 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   save that is retried (no pending edits left, the aspect already empty) still blanks them, but only while they are
   still empty: an aspect the user filled again before the retry is dropped from the set. The XAF Blazor template creates the user store itself
   (`new ModelDifferenceDbStore(app, typeof(ModelDifference), false, "Blazor")` in its Blazor module).
+- Tree and value grid (MODELEDITOR-003): the WinForms tree order is DevExpress's public, abstract
+  `ModelNodeComparerBase<T>` (`Model/Core/ModelNodesComparer.cs` 50-99: non-negative `Index` ascending, then no
+  `Index`, then negative indexes, ties by display value; only `GetModelNodeDisplayValue` is abstract), which the editor
+  subclasses. `NodeInfo.GetChildrenTypes()` (`Model/Core/ModelNodeInfo.cs` 421, `EditorBrowsable(Never)`) tells whether
+  a node type can have children without generating them; a column can (summary items). `FastModelEditorHelper`
+  gives descriptions with `<b>`/`<br>` markup built from type names and `[Description]` (`Model/ModelEditorHelper.cs`
+  271-323); the type names are not encoded, so a generic one reads `System.Nullable<System.Int32>`
+  (`GetFriendlyTypeName`, 324). The editor HTML-encodes a description and restores only `<b>`, `</b>` and `<br>`. `ModelReadOnlyAttribute.Message` is public (`Model/ModelAttributes.cs` 256-268). `ModelHidePropertiesAttribute`
+  is public, `EditorBrowsable(Never)` (460-468), read through `AttributeHelper.GetAttributesConsideringInterfaces`
+  (`Utils/Reflection/AttributeHelper.cs` 53); no interface in the 26.1 core assembly uses it.
+- `DxTreeView` (dxdocs, DevExpress.Blazor 26.1) loads child nodes on demand in bound mode, but its built-in filter panel
+  loads every node; the editor keeps its own tree markup and a bounded search.
 - A warmed-up model can be built in-process (`WarmedUpModelTests`): `ApplicationOptions().Optimization.WarmUpApplication`
   sets the process-wide flag (`Services/Core/Internal/ApplicationOptions.cs` 67-88); `Collapse()` needs
   `ModelMultipleMasterStore.Instance`, which only `BlazorApplication`'s constructor sets (`BlazorApplication.cs` 82;

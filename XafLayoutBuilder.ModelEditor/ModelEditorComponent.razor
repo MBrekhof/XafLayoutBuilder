@@ -1,59 +1,95 @@
-@* MODELEDITOR-001 spike: the running application's model as a tree, and the selected node's values. Edits stay pending in
-   the session until Save, which writes them to the current user's differences (the model's writable layer) and persists
-   them through XafApplication.SaveModelChanges; closing the popup without Save drops them. *@
+@* The running application's model as a tree, and the selected node's values grouped by category, the way the WinForms
+   Model Editor shows them (docs/model-editor-scope.md). Edits stay pending in the session until Save, which writes them to
+   the current user's differences (the model's writable layer) and persists them through XafApplication.SaveModelChanges;
+   closing the popup without Save drops them. *@
 
 @if (!allowed) {
     <p class="xlb-model-editor-denied">Your role may not edit the application model.</p>
 }
 else {
     <div class="xlb-model-editor" style="display:flex; gap:1rem; height:65vh; font-size:0.875rem">
-        <ul class="xlb-model-tree" style="flex:0 0 40%; overflow:auto; list-style:none; padding-left:0; margin:0">
-            @foreach (var child in ModelEditing.Children(Application.Model)) {
-                @TreeNode(child)
+        <div style="flex:0 0 40%; display:flex; flex-direction:column; min-width:0">
+            <input class="xlb-model-search" placeholder="Search the model" style="width:100%; margin-bottom:0.5rem"
+                   @bind="searchText" @bind:after="RunSearch" />
+            @if (searchResults is not null) {
+                <ul class="xlb-model-search-results" style="overflow:auto; list-style:none; padding-left:0; margin:0">
+                    @if (searchResults.Count == 0) {
+                        <li>No node matches.</li>
+                    }
+                    @foreach (var result in searchResults) {
+                        <li data-result="@ModelEditing.Path(result)" style="cursor:pointer; white-space:nowrap" @onclick="() => Reveal(result)">
+                            @ModelEditing.Path(result)
+                        </li>
+                    }
+                </ul>
             }
-        </ul>
-        <div class="xlb-model-values" style="flex:1; overflow:auto">
+            else {
+                <ul class="xlb-model-tree" style="overflow:auto; list-style:none; padding-left:0; margin:0">
+                    @foreach (var child in ModelEditing.Children(Application.Model)) {
+                        @TreeNode(child)
+                    }
+                </ul>
+            }
+        </div>
+        <div class="xlb-model-values" style="flex:1; overflow:auto; display:flex; flex-direction:column">
             @if (selected is null) {
                 <p>Select a node.</p>
             }
             else {
                 <div data-selected="@ModelEditing.Path(selected)" style="font-weight:600; margin-bottom:0.5rem">@ModelEditing.Path(selected)</div>
                 <table style="width:100%; border-collapse:collapse">
-                    @foreach (var row in ModelEditing.Values(selected)) {
-                        var pending = session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
-                        var text = pending ? pendingText ?? "" : row.Text;
-                        <tr data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
-                            <td style="padding:2px 6px; white-space:nowrap">@row.Name</td>
-                            <td style="padding:2px 6px; width:100%">
-                                @if (!row.CanEdit) {
-                                    <span>@row.Text</span>
-                                }
-                                else if (row.Choices is { } choices) {
-                                    <select style="width:100%" @onchange="e => Set(row.Name, e.Value as string)">
-                                        <option value="" selected="@(text.Length == 0)"></option>
-                                        @foreach (var choice in choices) {
-                                            <option value="@choice" selected="@(choice == text)">@choice</option>
-                                        }
-                                    </select>
-                                }
-                                else {
-                                    <input style="width:100%" value="@text" @onchange="e => Set(row.Name, e.Value as string)" />
-                                }
-                            </td>
-                            <td style="padding:2px 6px; white-space:nowrap">
-                                @if (pendingError is not null) {
-                                    <span class="xlb-invalid" title="@pendingError" style="color:#c00">invalid</span>
-                                }
-                                else if (pending) {
-                                    <span class="xlb-pending">@(pendingText is null ? "reset on save" : "unsaved")</span>
-                                }
-                                else if (row.IsModified) {
-                                    <button type="button" class="xlb-reset" @onclick="() => Reset(row.Name)">Reset</button>
-                                }
-                            </td>
-                        </tr>
+                    @foreach (var group in ModelEditing.Values(selected).GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
+                        <tr class="xlb-category"><td colspan="3" style="padding:6px 6px 2px; font-weight:600; opacity:0.7">@group.Key</td></tr>
+                        @foreach (var row in group) {
+                            var pending = session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
+                            var text = pending ? pendingText ?? "" : row.Text;
+                            <tr data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
+                                <td style="padding:2px 6px; white-space:nowrap">
+                                    <span class="xlb-value-name" style="cursor:pointer; font-weight:@(row.IsModified ? "600" : "normal")"
+                                          @onclick="() => focusedDescription = row.Description">@row.Name</span>
+                                    @if (row.IsRequired) {
+                                        <span title="Required" style="color:#c00">*</span>
+                                    }
+                                    @if (row.IsLocalizable) {
+                                        <span title="Localizable: stored per language" style="opacity:0.6">(L)</span>
+                                    }
+                                </td>
+                                <td style="padding:2px 6px; width:100%">
+                                    @if (!row.CanEdit) {
+                                        <span title="@row.ReadOnlyMessage">@row.Text</span>
+                                    }
+                                    else if (row.Choices is { } choices) {
+                                        <select style="width:100%" @onchange="e => Set(row.Name, e.Value as string)">
+                                            <option value="" selected="@(text.Length == 0)"></option>
+                                            @foreach (var choice in choices) {
+                                                <option value="@choice" selected="@(choice == text)">@choice</option>
+                                            }
+                                        </select>
+                                    }
+                                    else {
+                                        <input style="width:100%" value="@text" @onchange="e => Set(row.Name, e.Value as string)" />
+                                    }
+                                </td>
+                                <td style="padding:2px 6px; white-space:nowrap">
+                                    @if (pendingError is not null) {
+                                        <span class="xlb-invalid" title="@pendingError" style="color:#c00">invalid</span>
+                                    }
+                                    else if (pending) {
+                                        <span class="xlb-pending">@(pendingText is null ? "reset on save" : "unsaved")</span>
+                                    }
+                                    else if (row.IsModified) {
+                                        <button type="button" class="xlb-reset" @onclick="() => Reset(row.Name)">Reset</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
                     }
                 </table>
+                @* DevExpress builds the descriptions from type names and [Description] attributes, with <b> and <br>; everything
+                   else is encoded, generic type arguments included. *@
+                <div class="xlb-description" style="margin-top:0.5rem; padding:0.5rem; border-top:1px solid rgba(128,128,128,0.3); opacity:0.85">
+                    @((MarkupString)ModelEditing.DescriptionHtml(focusedDescription ?? ModelEditing.NodeDescription(selected)))
+                </div>
             }
             <div style="margin-top:0.75rem">
                 <button type="button" class="xlb-save" disabled="@session.HasErrors" @onclick="Save">Save</button>
@@ -71,18 +107,28 @@ else {
     readonly HashSet<IModelNode> expanded = [];
     readonly ModelEditSession session = new();
     IModelNode? selected;
+    string? focusedDescription;
     string? message;
+    string searchText = "";
+    IReadOnlyList<IModelNode>? searchResults;
     bool allowed;
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
 
-    // ponytail: every node shows "+", even a leaf; knowing it has no children would generate them.
+    // Captions from [DisplayProperty], modified nodes in bold as in the WinForms tree, an expand button only for node types
+    // that can have children.
     RenderFragment TreeNode(IModelNode node) => @<li style="white-space:nowrap">
-        <button type="button" data-expand="@ModelEditing.Path(node)" style="width:1.5em; border:none; background:none"
-                @onclick="() => Toggle(node)">@(expanded.Contains(node) ? "-" : "+")</button>
-        <span data-node="@ModelEditing.Path(node)" style="cursor:pointer; font-weight:@(ReferenceEquals(node, selected) ? "600" : "normal")"
-              @onclick="() => Select(node)">@ModelEditing.Id(node)</span>
+        @if (ModelEditing.CanHaveChildren(node)) {
+            <button type="button" data-expand="@ModelEditing.Path(node)" style="width:1.5em; border:none; background:none"
+                    @onclick="() => Toggle(node)">@(expanded.Contains(node) ? "-" : "+")</button>
+        }
+        else {
+            <span style="display:inline-block; width:1.5em"></span>
+        }
+        <span data-node="@ModelEditing.Path(node)" class="@(ModelEditing.IsModified(node) ? "xlb-modified" : null)"
+              style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
+              @onclick="() => Select(node)">@ModelEditing.Caption(node)</span>
         @if (expanded.Contains(node)) {
             <ul style="list-style:none; padding-left:1.25em; margin:0">
                 @foreach (var child in ModelEditing.Children(node)) {
@@ -98,7 +144,18 @@ else {
 
     void Select(IModelNode node) {
         selected = node;
+        focusedDescription = null;
         message = null;
+    }
+
+    void RunSearch() => Run(() => searchResults = string.IsNullOrWhiteSpace(searchText) ? null : ModelEditing.Search(Application.Model, searchText), null);
+
+    // Picking a search result opens the tree down to it and selects it.
+    void Reveal(IModelNode node) {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent) expanded.Add(parent);
+        searchText = "";
+        searchResults = null;
+        Select(node);
     }
 
     void Set(string name, string? text) => Run(() => session.SetText(selected!, name, text ?? ""), null);
