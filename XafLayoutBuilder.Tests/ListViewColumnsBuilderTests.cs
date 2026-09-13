@@ -110,6 +110,17 @@ public class ListViewColumnsBuilderTests {
             .Band("A", b => b.Lookup(l => l.Column(x => x.Number))));
     }
 
+    // HIER-001: a derived class's columns start from its base's, lookup included, and calls append to them.
+    [Fact]
+    public void Extend_StartsFromTheBaseColumns_AndAppends() {
+        var spec = ListViewColumnsBuilder<TestServiceOrder>.Extend(Section4Columns()).Column(x => x.Technician).Build();
+        Assert.Equal(typeof(TestServiceOrder).FullName, spec.TypeName);
+        Assert.Equal(["Number", "Customer", "OrderDate", "Technician"], spec.Columns.Select(c => c.Member));
+        Assert.Equal(["SyncToken"], spec.HiddenMembers);
+        Assert.Equal(["Number", "Customer"], spec.Lookup!.Columns.Select(c => c.Member));
+        Assert.Equal(typeof(TestServiceOrder).FullName, spec.Lookup.TypeName);
+    }
+
     [Fact]
     public void NestedPathThroughAMethodCall_IsRejected() {
         var ex = Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Customer!.Name.Trim()));

@@ -26,7 +26,8 @@ view's current layout back to the same fluent C#.
   `OrderLine.Layout.cs`, columns that also shape Order's Lines tab, VIEW-001), `SampleViews` (a compact
   Order DetailView and ListView declared in code, registered by the host, VIEW-001, and a banded Order
   ListView, BAND-001),
-  `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test),
+  `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test, + `ServiceOrder.Layout.cs`
+  extending Order's layout and columns, HIER-001),
   `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
 - `XafLayoutBuilder.Sample.Blazor.Server`: template host. `--break-layout` registers the broken
   fixture; `XafLayoutBuilder:EnableExport` in appsettings.Development.json enables the export.

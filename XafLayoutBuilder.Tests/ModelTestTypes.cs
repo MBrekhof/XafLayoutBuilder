@@ -150,6 +150,22 @@ public static class ModelTestDeclaredViews {
     }
 }
 
+// HIER-001: a derived class whose layout and columns start from ModelTestOrder's and add its own member.
+[DomainComponent]
+public class ModelTestServiceOrder : ModelTestOrder, ISupportViewLayoutCustomization {
+    public string? Technician { get; set; }
+
+    public static new DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestServiceOrder>.Extend<ModelTestOrder>()
+            .InGroup("Header", g => g.Item(x => x.Technician))
+            .Build();
+
+    public static new ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestServiceOrder>.Extend<ModelTestOrder>()
+            .Column(x => x.Technician)
+            .Build();
+}
+
 // Places one member and lets the catch-all group collect the rest.
 [DomainComponent]
 public class ModelTestContact : ISupportViewLayoutCustomization {

@@ -125,8 +125,12 @@ governs a broken registration like any other layout error.
 
 Static abstract implementations are inherited: `ServiceOrder : Order` maps the interface to
 `Order`'s methods. The resolver only applies a spec whose `TypeName` is the exact type, so a
-derived class keeps XAF's default layout. Composing a derived layout from its base is a phase 2
-candidate.
+derived class keeps XAF's default layout until it declares its own. To start from its base's
+(HIER-001), the derived class re-implements the interface, which maps it to its own static methods,
+and builds with `LayoutBuilder<Derived>.Extend<Base>()`: the base's spec, read through the base's
+static builder, becomes the starting tree, `InGroup(id, ...)` adds to an existing group, and the
+usual calls add the rest. The result is an ordinary spec for the derived type, so the updaters,
+checks and export treat it like any other; the export prints it flattened.
 
 ## Startup check
 
@@ -279,8 +283,9 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 ## Decisions and where they came from
 
 - XLB002 strict placement: proposed in session 3, confirmed by the owner.
-- Derived classes keep XAF's default layout: session 3, consistent with the start document's
-  phase 2 list.
+- Derived classes keep XAF's default layout unless they declare their own: session 3, consistent
+  with the start document's phase 2 list. Composing from the base with `Extend<TBase>()`: HIER-001,
+  the owner's choice over automatic inheritance.
 - Column index through `GeneratedIndex`: a Codex review found that storing `Index` directly broke
   `FreezeColumnIndices` for columns added later.
 - Sibling-only id uniqueness, frozen specs and the registry member check: Codex review of sessions

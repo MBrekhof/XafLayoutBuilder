@@ -6,6 +6,8 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
+- LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
 - BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).
 - E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
 - VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.

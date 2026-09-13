@@ -53,6 +53,30 @@ public class LayoutBuilderTests {
         Assert.Null(tabs.Tabs[1].ImageName);
     }
 
+    // HIER-001: a derived class starts from its base's layout and adds to it.
+    [Fact]
+    public void Extend_StartsFromTheBaseLayout_AndInGroupAddsToAnExistingGroup() {
+        var spec = LayoutBuilder<TestServiceOrder>.Extend(Section4Detail())
+            .InGroup("Header", g => g.Item(x => x.Technician))
+            .Hide(x => x.ServiceDate)
+            .Build();
+        Assert.Equal(typeof(TestServiceOrder).FullName, spec.TypeName);
+        var header = Assert.IsType<LayoutGroupSpec>(spec.Nodes[0]);
+        Assert.Equal(["Number", "Customer", "OrderDate", "Technician"], header.Children.OfType<LayoutItemSpec>().Select(i => i.Member));
+        Assert.Equal("Order", header.Caption);
+        Assert.Equal(["SyncToken", "ServiceDate"], spec.HiddenMembers);
+    }
+
+    [Fact]
+    public void Extend_RejectsAnUnrelatedType_AndInGroupAnUnknownGroupOrItsOptions() {
+        Assert.Contains("does not derive from", Assert.Throws<LayoutSpecException>(() =>
+            LayoutBuilder<KeywordHolder>.Extend(Section4Detail())).Message);
+        Assert.Contains("names no group", Assert.Throws<LayoutSpecException>(() =>
+            LayoutBuilder<TestServiceOrder>.Extend(Section4Detail()).InGroup("Nope", g => g.Item(x => x.Technician))).Message);
+        Assert.Contains("InGroup adds", Assert.Throws<LayoutSpecException>(() =>
+            LayoutBuilder<TestServiceOrder>.Extend(Section4Detail()).InGroup("Header", g => g.Caption("X").Item(x => x.Technician))).Message);
+    }
+
     [Fact]
     public void ValueTypeMember_IsUnboxedToName() {
         var spec = LayoutBuilder<TestOrder>.Create().Group("G", g => g.Item(x => x.OrderDate)).Build();

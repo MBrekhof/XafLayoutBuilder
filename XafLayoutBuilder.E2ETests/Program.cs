@@ -9,7 +9,8 @@ using Microsoft.Playwright;
 //   E2E 1   Order_DetailView renders the builder layout (hidden member absent, group and tab order, collapsible group);
 //           the Lines tab's nested ListView follows OrderLine's columns spec without the Order back-reference (VIEW-001)
 //   E2E 2   Order_ListView column order, OrderDate-descending sort, hidden column offered by the column chooser
-//   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
+//   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer; SRV-001's form extends Order's
+//           layout (HIER-001)
 //   VIEW-001 Order_Compact_ListView and Order_Compact_DetailView, declared in code by the sample, show their own columns
 //            and layout
 //   BAND-001 Order_Banded_ListView's band header Order spans Number and Customer
@@ -210,6 +211,15 @@ try
     async Task<string[]> Buttons() => await lookupItem.EvaluateAsync<string[]>("i => [...i.querySelectorAll('button')].map(b => b.className + ' title=' + (b.title || b.getAttribute('aria-label') || ''))");
     foreach (var b in await Buttons()) Console.WriteLine("    lookup button: " + b);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-07-serviceorder-detail.png") });
+    // HIER-001: ServiceOrder's layout extends Order's. Original Order joins the Header group (captioned Order), and its own
+    // Service group holds Service Date and Technician.
+    var serviceGroups = await activeForm.EvaluateAsync<string[]>(@"f => ['originalorder', 'servicedate', 'technician'].map(m => {
+        const label = f.querySelector('label.xaf-item-' + m);
+        const group = label && label.closest('[role=group]');
+        return group?.querySelector(':scope > .dxbl-group > .dxbl-group-header')?.innerText.trim() ?? '(none)';
+    })");
+    Assert(string.Join(",", serviceGroups) == "Order,Service,Service",
+        $"SRV-001's form extends Order's layout: Original Order in Header, Service Date and Technician in Service (got {string.Join(",", serviceGroups)})");
     await lookupItem.Locator("button").First.ClickAsync(); // view mode -> edit mode (LookupPropertyEditor.DefaultUseViewMode)
     await page.WaitForTimeoutAsync(1000);
     foreach (var b in await Buttons()) Console.WriteLine("    lookup button (edit mode): " + b);

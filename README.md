@@ -78,6 +78,8 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
+- LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
 - BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).
 - E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
 - VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
@@ -204,8 +206,6 @@ specs, and a printer turns specs into the builder C#.
   `EnableModelCache` replaces the updaters with the cached model: a changed layout needs a module
   version bump (or a deleted `Model.Cache.xafml`), and the export loses what the updaters mark
   (the spec's hidden columns, the catch-all group).
-- Composing a derived class's layout from its base. A derived class keeps XAF's default layout
-  unless it declares its own.
 - Runtime editing. No chat, MCP or AI at runtime; the repository gives agents a target.
 - Reconciling the builder with module XAFML for the same view. Module XAFML simply applies on top.
 
@@ -222,6 +222,9 @@ specs, and a printer turns specs into the builder C#.
 - Builder changes appear after a restart. XAF's model cache plays no part in Blazor: XAF creates
   it only where the application supplies a modules-version file, which only `WinApplication` does,
   so a Blazor host runs the updaters on every start. See WinForms above.
+- A derived class keeps XAF's default layout unless it declares its own; to start from its base's,
+  it re-implements `ISupportViewLayoutCustomization` with `LayoutBuilder<Derived>.Extend<Base>()` and
+  `ListViewColumnsBuilder<Derived>.Extend<Base>()`, adding its members with `InGroup(...)` and the usual calls.
 - ListView bands are one level deep, `.Band(id, b => ..., caption: ...)` over adjacent columns, which
   is what XAF Blazor renders; a `.Lookup(...)` has none.
 - Administrator and user differences override the builder, by design. A user who customised a

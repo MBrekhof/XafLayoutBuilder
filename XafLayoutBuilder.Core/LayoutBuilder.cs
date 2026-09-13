@@ -12,6 +12,56 @@ public sealed class LayoutBuilder<T> {
 
     public static LayoutBuilder<T> Create() => new();
 
+    /// <summary>
+    /// HIER-001: starts from <typeparamref name="TBase"/>'s DetailView layout, so a derived class adds to its base's form
+    /// instead of repeating it. The base layout is read when this is called, so the derived form follows later changes to
+    /// the base. Every member the derived class adds must still be placed or hidden (XLB002).
+    /// </summary>
+    public static LayoutBuilder<T> Extend<TBase>() where TBase : ISupportViewLayoutCustomization =>
+        Extend(TBase.BuildDetailViewLayout()
+            ?? throw new LayoutSpecException($"{typeof(T).Name}: {typeof(TBase).Name} has no DetailView layout to extend."));
+
+    /// <summary>HIER-001: starts from <paramref name="baseLayout"/>, the layout of a class <typeparamref name="T"/> derives from (a registered one, say).</summary>
+    public static LayoutBuilder<T> Extend(DetailLayoutSpec baseLayout) {
+        Hierarchy.EnsureDerives(typeof(T), baseLayout.TypeName);
+        var builder = new LayoutBuilder<T>();
+        builder.nodes.AddRange(baseLayout.Nodes);
+        builder.hidden.UnionWith(baseLayout.HiddenMembers);
+        if (baseLayout.UnplacedGroupId is { } catchAll) builder.unplaced = UnplacedMembers.AppendToGroup(catchAll);
+        return builder;
+    }
+
+    /// <summary>
+    /// HIER-001: adds items and groups to a group the layout already has, found by id anywhere in the tree, tabs included:
+    /// how a derived class puts its own members into its base's groups. The group's caption and options stay as the layout
+    /// it extends set them.
+    /// </summary>
+    public LayoutBuilder<T> InGroup(string id, Action<GroupBuilder<T>> configure) {
+        var additions = new GroupBuilder<T>(id);
+        configure(additions);
+        var added = additions.Build();
+        if (added.Caption is not null || added.Collapsible || added.Direction != FlowDirection.Vertical || added.RelativeSize is not null || added.ImageName is not null)
+            throw new LayoutSpecException($"{typeof(T).Name}: InGroup adds items and groups to \"{id}\"; its caption and options come from the layout it extends.");
+        var found = false;
+        for (var i = 0; i < nodes.Count; i++) nodes[i] = Add(nodes[i]);
+        if (!found) throw new LayoutSpecException($"{typeof(T).Name}: InGroup(\"{id}\") names no group in the layout.");
+        return this;
+
+        LayoutNodeSpec Add(LayoutNodeSpec node) {
+            switch (node) {
+                case LayoutGroupSpec g when g.Id == id:
+                    found = true;
+                    return g with { Children = [.. g.Children, .. added.Children] };
+                case LayoutGroupSpec g:
+                    return g with { Children = g.Children.Select(Add).ToArray() };
+                case TabbedGroupSpec t:
+                    return t with { Tabs = t.Tabs.Select(tab => (LayoutGroupSpec)Add(tab)).ToArray() };
+                default:
+                    return node;
+            }
+        }
+    }
+
     public LayoutBuilder<T> Group(string id, Action<GroupBuilder<T>> configure) {
         var g = new GroupBuilder<T>(id);
         configure(g);
@@ -118,4 +168,13 @@ public sealed class TabsBuilder<T> {
     }
 
     internal TabbedGroupSpec Build() => new(id, tabs.ToArray());
+}
+
+internal static class Hierarchy {
+    /// <summary>HIER-001: <paramref name="derived"/> must derive from the class a base spec was built for.</summary>
+    public static void EnsureDerives(Type derived, string baseTypeName) {
+        for (var t = derived.BaseType; t is not null; t = t.BaseType)
+            if (t.FullName == baseTypeName) return;
+        throw new LayoutSpecException($"{derived.Name} does not derive from {baseTypeName}, so it cannot extend its layout.");
+    }
 }

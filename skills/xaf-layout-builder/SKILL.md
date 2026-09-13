@@ -112,8 +112,15 @@ ListView's spec is ignored. Do not try to give a builder layout to a view that e
   `Column(x => x.Customer.City)` and `Hide(x => x.Customer.City)` store `Customer.City`, the path XAF's
   own generator uses for such a column, and every segment must exist on its type. Detail items stay
   simple: `Item(x => x.Customer.Name)` throws, and so does a raw detail spec naming a nested path.
-- Derived classes keep XAF's default layout unless they declare their own. A base class's spec is
-  not inherited.
+- Derived classes keep XAF's default layout unless they declare their own; a base class's spec is
+  not inherited. To start from it, the derived class re-implements the interface (`public partial class
+  ServiceOrder : ISupportViewLayoutCustomization` with `public static new ... Build...()`) and uses
+  `LayoutBuilder<ServiceOrder>.Extend<Order>()` / `ListViewColumnsBuilder<ServiceOrder>.Extend<Order>()`.
+  `.InGroup("Header", g => g.Item(x => x.OriginalOrder))` adds to a group the base layout already has
+  (found by id anywhere, tabs included; its caption and options stay the base's); the usual calls add
+  groups, columns and hides. `Extend(spec)` takes a base spec directly, for a base that is registered.
+  Every member the derived class adds must still be placed or hidden (XLB002), and the export prints the
+  flattened result.
 
 ## ListView surface
 

@@ -11,6 +11,12 @@ public class TestOrder {
     public IList<object> Attachments { get; set; } = [];
 }
 
+// HIER-001: a derived class for the Extend tests.
+public class TestServiceOrder : TestOrder {
+    public string? Technician { get; set; }
+    public DateTime? ServiceDate { get; set; }
+}
+
 public class TestCustomer {
     public string Name { get; set; } = "";
     public string? City { get; set; }
