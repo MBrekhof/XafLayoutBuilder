@@ -4,7 +4,7 @@ Typed, compile-checked C# for DevExpress XAF view layouts, poured into the Appli
 generated-layer defaults. The running Blazor app stays the visual designer. The source of truth
 becomes a fluent builder next to the business class instead of `Model.xafml`.
 
-**Status: proof of concept, complete against its start document** (`XafLayoutBuilder-START.md`).
+**Status: proof of concept, version 0.1.0, complete against its start document** (`XafLayoutBuilder-START.md`).
 Built and tested with DevExpress XAF 26.1.4, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
 Server. One subject (the sample `Order`), one end-to-end gate, and the limitations listed below.
 
@@ -73,6 +73,20 @@ That file is the sample's only layout source for `Order`; the sample module has 
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
+## Latest changes
+
+Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
+[SESSION_HANDOFF.md](SESSION_HANDOFF.md).
+
+- MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
+- NEST-001: columns may follow references, `Column(x => x.Customer.City)`, and export that way.
+- JSON-001: "Export Layout To JSON", "Download Layout JSON" and `LayoutRegistry.RegisterJson<T>`.
+- DIFF-001: a stored difference aimed at a replaced stock layout path is ignored, then deleted at the user's next save.
+- FREEZE-001: the gate proves an administrator's frozen column set keeps a later-added column hidden.
+- TEST-001: the gate covers a spec factory that throws a non-layout exception.
+- CASE-001: `docs/cases.md`, the intake route for layout cases from generated applications.
+- PKG-001: Core, Module and Blazor published as 0.1.0 to the local feed.
+
 ## Screenshots
 
 From the E2E gate's run on the sample.
@@ -125,7 +139,7 @@ dotnet nuget push "artifacts/packages/*.nupkg" --source C:\Projects\local-nuget
 Register the feed once per machine: `dotnet nuget add source C:\Projects\local-nuget --name local-nuget`
 (a Windows path with backslashes; NuGet rejects `C:/Projects/local-nuget` as an invalid source).
 A folder feed does not accept the same version twice, so bump `PackageVersion` in
-`Directory.Build.props` before every push. The packages need DevExpress 26.1.4 or a later 26.1
+`Directory.Build.props` before every push, and give the changelog's Unreleased lines that version. The packages need DevExpress 26.1.4 or a later 26.1
 patch and refuse 26.2; the version the repository builds against is `DevExpressVersion` in the same
 file.
 
