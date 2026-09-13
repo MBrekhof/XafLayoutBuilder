@@ -108,10 +108,23 @@ else {
                                             }
                                         </select>
                                     }
+                                    else if (row.Editor is ModelValueEditor.Multiline or ModelValueEditor.Expression) {
+                                        @* MODELEDITOR-006: multiline strings and expressions. DevExpress Blazor has no expression editor; the text is free. *@
+                                        <textarea rows="3" style="width:100%" value="@text" @onchange="e => Set(row.Name, e.Value as string)"></textarea>
+                                    }
                                     else {
-                                        @* Field names and languages are offered as the WinForms field picker offers them, other text is still accepted. *@
-                                        <input style="width:100%" value="@text" list="@(row.Suggestions is null ? null : "xlb-suggest-" + row.Name)"
-                                               @onchange="e => Set(row.Name, e.Value as string)" />
+                                        @* Field names, languages and image names are offered as suggestions, other text is still accepted. *@
+                                        <div style="display:flex; gap:0.25rem; align-items:center">
+                                            <input style="flex:1; min-width:0" value="@text" list="@(row.Suggestions is null ? null : "xlb-suggest-" + row.Name)"
+                                                   @onchange="e => Set(row.Name, e.Value as string)" />
+                                            @if (row.Editor == ModelValueEditor.Criteria) {
+                                                <button type="button" class="xlb-criteria-builder" title="Edit the criteria in the filter builder"
+                                                        @onclick="() => OpenCriteria(row.Name, text)">Filter builder</button>
+                                            }
+                                            @if (row.Editor == ModelValueEditor.Image && ImageUrl(text) is { } imageUrl) {
+                                                <img class="xlb-image-preview" src="@imageUrl" alt="" style="height:1.25em" />
+                                            }
+                                        </div>
                                         @if (row.Suggestions is { } suggestions) {
                                             <datalist id="xlb-suggest-@row.Name">
                                                 @foreach (var suggestion in suggestions) {
@@ -136,6 +149,21 @@ else {
                         }
                     }
                 </table>
+                @* MODELEDITOR-006: XAF Blazor edits criteria with DxFilterBuilder (CriteriaPropertyEditor); the fields are the filtered type's
+                   members as its criteria editor lists them. Apply writes the builder's criteria back as text. *@
+                @if (criteriaName is not null && ModelEditing.CriteriaTypeInfo(selected, criteriaName) is { } criteriaType) {
+                    @* Keyed per opening: a reused DxFilterBuilder keeps an invalid draft when the criteria it is given do not change,
+                       null for two empty values (Codex review 2). *@
+                    <div @key="(criteriaName, criteriaOpenings)" class="xlb-filter-builder" style="margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid rgba(128,128,128,0.3)">
+                        <div style="font-weight:600; margin-bottom:0.25rem">@criteriaName: @criteriaType.Name</div>
+                        <DxFilterBuilder @ref="filterBuilderRef" @bind-FilterCriteria="criteria" ViewMode="FilterBuilderViewMode.VisualAndText"
+                                         Fields="@FilterFieldsFragment(ModelEditing.FilterFields(criteriaType))" />
+                        <div style="margin-top:0.25rem">
+                            <button type="button" class="xlb-criteria-apply" @onclick="ApplyCriteria">Apply</button>
+                            <button type="button" class="xlb-criteria-cancel" @onclick="() => criteriaName = null">Cancel</button>
+                        </div>
+                    </div>
+                }
                 @* DevExpress builds the descriptions from type names and [Description] attributes, with <b> and <br>; everything
                    else is encoded, generic type arguments included. *@
                 <div class="xlb-description" style="margin-top:0.5rem; padding:0.5rem; border-top:1px solid rgba(128,128,128,0.3); opacity:0.85">
@@ -151,6 +179,7 @@ else {
 }
 
 @inject NavigationManager Navigation
+@inject DevExpress.ExpressApp.Blazor.Services.IImageUrlService ImageUrls
 
 @code {
     [Parameter] public XafApplication Application { get; set; } = null!;
@@ -172,6 +201,11 @@ else {
     bool allowed;
     // Actions Run refused; part of the value rows' @key.
     int refusals;
+    // MODELEDITOR-006: the criteria value open in the filter builder, and the criteria the builder holds.
+    string? criteriaName;
+    CriteriaOperator? criteria;
+    DxFilterBuilder? filterBuilderRef;
+    int criteriaOpenings;
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
@@ -219,6 +253,7 @@ else {
         selected = node;
         focusedDescription = null;
         message = null;
+        criteriaName = null;
     }
 
     // A node removed since is skipped.
@@ -250,6 +285,57 @@ else {
     void Set(string name, string? text) => Run(() => Session.SetText(selected!, name, text ?? ""), null);
 
     void Reset(string name) => Run(() => Session.Reset(selected!, name), null);
+
+    // The text is parsed as XAF's criteria editor parses it, inside an object space's parse scope (DxFilterBuilderAdapter.SetValue).
+    void OpenCriteria(string name, string text) => Run(() => {
+        var typeInfo = ModelEditing.CriteriaTypeInfo(selected!, name)
+            ?? throw new InvalidOperationException($"{name} filters no type yet; set the value it names first.");
+        using var objectSpace = Application.CreateObjectSpace(typeInfo.Type);
+        using (objectSpace.CreateParseCriteriaScope()) criteria = CriteriaOperator.Parse(text);
+        criteriaName = name;
+        criteriaOpenings++;
+    }, null);
+
+    // As DxFilterBuilderAdapter.GetValue: the criteria's text. The builder keeps its last valid FilterCriteria while its text
+    // is invalid, so Apply waits for the builder's validation (DxFilterBuilder.GetEditContext) and leaves the text open for
+    // correction (Codex review). A refused edit leaves the grid's value and says why.
+    void ApplyCriteria() {
+        if (filterBuilderRef?.GetEditContext().GetValidationMessages().ToList() is { Count: > 0 } errors) {
+            message = "Correct the criteria first: " + string.Join(" ", errors);
+            return;
+        }
+        var name = criteriaName!;
+        criteriaName = null;
+        Set(name, criteria?.ToString() ?? "");
+    }
+
+    // A reference with nested fields is only a way to reach them, as the DxFilterBuilder docs nest references.
+    RenderFragment FilterFieldsFragment(IReadOnlyList<FilterField> fields) => builder => {
+        foreach (var field in fields) {
+            builder.OpenComponent<DxFilterBuilderField>(0);
+            builder.SetKey(field.FieldName);
+            builder.AddAttribute(1, nameof(DxFilterBuilderField.FieldName), field.FieldName);
+            builder.AddAttribute(2, nameof(DxFilterBuilderField.Caption), field.Caption);
+            builder.AddAttribute(3, nameof(DxFilterBuilderField.Type), field.Type);
+            builder.AddAttribute(4, nameof(DxFilterBuilderField.IsCollection), field.IsCollection);
+            if (field.Fields.Count > 0) {
+                builder.AddAttribute(5, nameof(DxFilterBuilderField.AllowSelection), field.IsCollection);
+                builder.AddAttribute(6, nameof(DxFilterBuilderField.Fields), FilterFieldsFragment(field.Fields));
+            }
+            builder.CloseComponent();
+        }
+    };
+
+    // An image name the application does not know shows no preview.
+    string? ImageUrl(string imageName) {
+        if (string.IsNullOrEmpty(imageName)) return null;
+        try {
+            return ImageUrls.GetImageUrl(imageName);
+        }
+        catch (Exception) {
+            return null;
+        }
+    }
 
     // MODELEDITOR-004: node operations.
     void AddNode() => Run(() => {

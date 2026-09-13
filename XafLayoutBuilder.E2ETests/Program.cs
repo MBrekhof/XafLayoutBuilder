@@ -31,7 +31,12 @@ using Microsoft.Playwright;
 //            MODELEDITOR-003: the search finds the view and a value's description shows; MODELEDITOR-004: a column added
 //            in the editor shows after Save and is gone again after deleting it, and a model save from a second logon does
 //            not store a node added in the open editor but not saved; MODELEDITOR-005: the DetailView drop-down sets
-//            Order_ListView's form, View in Model selects the open view's node, Go to and Back navigate, a reset restores it
+//            Order_ListView's form, View in Model selects the open view's node, Go to and Back navigate, a reset restores it;
+//            MODELEDITOR-006: switching the filter builder from Criteria to Filter drops Criteria's draft, typed Criteria
+//            open in the filter builder over Order's fields, invalid text keeps the builder
+//            open and the value unchanged, and Apply writes valid criteria back, ImageName
+//            offers the image names, the saved Criteria leave Order_ListView one row, a column's ToolTip is a text area, and a
+//            reset of the Criteria lists every order again
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -690,6 +695,72 @@ try
     var resetForm = await OpenOrderFromOrderList(page, "ORD-003");
     Assert(!resetForm.Contains("Compact order") && resetForm.Contains("Notes"),
         $"after resetting the DetailView in the Model Editor, Order_ListView opens its own form again (got {resetForm.Replace('\n', ' ')})");
+
+    Step("MODELEDITOR-006: the filter builder round-trips Order_ListView's Criteria; image and multiline values get their editors");
+    // Typed criteria open in the filter builder over Order's fields; Apply writes back what the builder holds.
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    var filterBuilder = modelEditor.Locator(".xlb-filter-builder");
+    var criteriaText = filterBuilder.GetByLabel("Criteria expression");
+    // Switching the builder to another criteria value starts from that value, not from the draft left in the first; with
+    // Criteria and Filter both empty the builder's criteria do not change between them (Codex review 2).
+    await modelEditor.Locator("tr[data-value='Criteria'] .xlb-criteria-builder").ClickAsync();
+    await criteriaText.WaitForAsync(new() { Timeout = 10_000 });
+    await criteriaText.FillAsync("[Number] = ");
+    await criteriaText.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Filter'] .xlb-criteria-builder").ClickAsync();
+    await filterBuilder.GetByText("Filter: Order").WaitForAsync(new() { Timeout = 10_000 });
+    var switchedText = await criteriaText.InputValueAsync();
+    Assert(switchedText == "", $"opening the filter builder for Filter does not carry over Criteria's draft (got '{switchedText}')");
+    await filterBuilder.Locator(".xlb-criteria-cancel").ClickAsync();
+    await filterBuilder.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    var criteriaInput = modelEditor.Locator("tr[data-value='Criteria'] input");
+    await criteriaInput.FillAsync("[Number] = 'ORD-001'");
+    await criteriaInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Criteria'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator("tr[data-value='Criteria'] .xlb-criteria-builder").ClickAsync();
+    await filterBuilder.WaitForAsync(new() { Timeout = 10_000 });
+    var builderText = await filterBuilder.InnerTextAsync();
+    Assert(builderText.Contains("Number") && builderText.Contains("ORD-001"),
+        $"the filter builder shows the typed Criteria over Order's fields (got {builderText.Replace('\n', ' ')})");
+    // Text the builder cannot parse leaves it holding its last valid criteria, so Apply must not write those: the builder stays
+    // open with the text to correct (Codex review).
+    await criteriaText.FillAsync("[Number] = ");
+    await criteriaText.PressAsync("Tab");
+    await filterBuilder.Locator(".xlb-criteria-apply").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Correct the criteria first" }).WaitForAsync(new() { Timeout = 10_000 });
+    Assert(await filterBuilder.IsVisibleAsync() && await criteriaText.InputValueAsync() == "[Number] = ",
+        "Apply with invalid criteria text keeps the filter builder open with that text");
+    var criteriaAfterInvalid = await modelEditor.Locator("tr[data-value='Criteria'] input").InputValueAsync();
+    Assert(criteriaAfterInvalid == "[Number] = 'ORD-001'",
+        $"Apply with invalid criteria text leaves the Criteria value as it was (got '{criteriaAfterInvalid}')");
+    await criteriaText.FillAsync("[Number] = 'ORD-001'");
+    await criteriaText.PressAsync("Tab");
+    await filterBuilder.Locator(".xlb-criteria-apply").ClickAsync();
+    await filterBuilder.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    var appliedCriteria = await modelEditor.Locator("tr[data-value='Criteria'] input").InputValueAsync();
+    Assert(appliedCriteria == "[Number] = 'ORD-001'", $"Apply writes the filter builder's criteria back as text (got '{appliedCriteria}')");
+    // ImageName offers the application's image names ([Editor] ImageGalleryModelEditorControl, IModelView.cs 59).
+    var imageNameOptions = await modelEditor.Locator("tr[data-value='ImageName'] datalist option").CountAsync();
+    Assert(imageNameOptions > 0, $"Order_ListView's ImageName offers the application's image names (got {imageNameOptions})");
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-26-model-editor-criteria.png") });
+    var filteredList = await page.InnerTextAsync("body");
+    Assert(filteredList.Contains("Data grid with 1 rows"),
+        $"after Save Order_ListView applies the Criteria set through the filter builder: one row left (got {filteredList.Replace('\n', ' ')[..Math.Min(400, filteredList.Length)]})");
+    // A column's ToolTip takes the multiline string editor (IModelToolTip, CommonInterfaces.cs 562).
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/Number");
+    Assert(await modelEditor.Locator("tr[data-value='ToolTip'] textarea").CountAsync() == 1, "a column's ToolTip is edited in a text area");
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    // Reset and save, for the steps after this one.
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator("tr[data-value='Criteria'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Criteria'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    await page.GetByText("ORD-002", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 15_000 });
+    var unfilteredList = await page.InnerTextAsync("body");
+    Assert(unfilteredList.Contains("Data grid with 4 rows"), "after resetting the Criteria Order_ListView lists every order again");
 
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property

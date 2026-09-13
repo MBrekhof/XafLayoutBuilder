@@ -485,6 +485,37 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   reference sets the value to null, and only Reset clears it (Codex review, `WarmedUpModelTests`). A
   calculator's `NodeName` is a value of the node, `this` (`IModelListView.cs` 68) or a path from the root
   (`Application.Options`, `IModelView.cs` 64); `FindValueByPath` reads all three, so Source resolves it with that.
+- Special editors (MODELEDITOR-006). The WinForms Model Editor attaches them through `[Editor]` attributes that name
+  WinForms types as strings: `CriteriaModelEditorControl` (`Model/IModelListView.cs` 102, 107, `Model/CommonInterfaces.cs`
+  434, 604, 608, `Model/IModelDashboardView.cs` 63), `ExpressionModelEditorControl` (`CommonInterfaces.cs` 295),
+  `ImageGalleryModelEditorControl` (`Model/IModelView.cs` 59 and others) and `Constants.MultilineStringEditorType`
+  (`Utils/Constants.cs` 41; `IModelStaticText.Text`, `Model/ModelPropertyEditorInterfaces.cs` 64, `IModelToolTip.ToolTip`,
+  `CommonInterfaces.cs` 562). The editor reads `EditorAttribute.EditorTypeName` through
+  `FastModelEditorHelper.GetPropertyAttribute` (`Model/FastModelEditorHelper.cs` 55-75) and loads nothing of WinForms. A
+  criteria value's filtered type is `[CriteriaOptions].ObjectTypeMemberName`, comma-separated paths from the node, each
+  resolved with `FindValueByPath` to an `ITypeInfo`, a `Type`, a type name or an `IMemberInfo`
+  (`DevExpress.ExpressApp.Win/Core/ModelEditor/AttributeList/CriteriaModelEditorControl.cs` 91-137); `IModelListView.Criteria`
+  and `Filter` name `ModelClass.TypeInfo` (101, 106). XAF Blazor edits criteria with `DxFilterBuilder`
+  (`DevExpress.ExpressApp.Blazor/Editors/CriteriaPropertyEditor.cs` 59-68; dxdocs "Criteria Properties"): its adapter parses
+  the text with `CriteriaOperator.Parse` inside `IObjectSpace.CreateParseCriteriaScope()` (`IObjectSpace.cs` 82,
+  `Editors/Adapters/DxFilterBuilderAdapter.cs` 113-130) and writes back `FilterCriteria.ToString()`. Its fields come from
+  the public `DxFilterBuilderHelper.GetMembers` (178-259: visible public properties, not `Type` or `Color`, not hidden by
+  `HideInUI`) through an internal fields provider (`DxFilterBuilderFieldsProvider.cs` 49), so the editor builds the
+  `DxFilterBuilderField` tree from `GetMembers` itself: a reference's fields by full path, a collection's by their own
+  name, as the DxFilterBuilder docs nest them. XAF's nesting rule is not persistence or `IsDomainComponent`: the field
+  type loses `Nullable`, a list is a collection field over its elements, and any other member whose type is not
+  `SimpleTypes.IsSimpleType` (`DevExpress.Persistent.Base/SimpleTypes.cs` 80) and no `System.Drawing.Image` has nested fields
+  (`DxFilterBuilderHelper.GetFieldModel`, `DxFilterBuilderAdapter.cs` 301-308, 335-337). An EF Core entity is persistent but
+  no domain component, so a domain-component test would miss it (Codex review 2). While the builder's text (`FilterBuilderViewMode.VisualAndText`, an editable
+  text area labelled "Criteria expression") does not parse, `FilterCriteria` keeps its last valid value; the validation
+  shows in `DxFilterBuilder.GetEditContext().GetValidationMessages()` (dxdocs "DxFilterBuilder.GetEditContext() Method"), so
+  the editor's Apply refuses while there are messages (Codex review). DevExpress Blazor documents no expression editor, so an expression is free
+  multiline text. `ImageLoader` has no list of image names; each `ImageSource.GetImages(ImagePickerMode)` returns
+  `ImageWrapper`s carrying `ImageName` (`Utils/ImageLoader.cs` 62-79, 391, 1454; the DevExpress images source overrides only
+  `GetImages`, 1021) and loads the images, so the editor reads the list once. Previews use the public
+  `IImageUrlService.GetImageUrl` (`DevExpress.ExpressApp.Blazor/Services/IImageUrlService.cs` 44-46). Masks: the model has
+  only `EditMask` and `EditMaskType` (`CommonInterfaces.cs` 575-582), plain values here; the WinForms mask editor is attached
+  by the Win extender only.
 - Model saves the editor does not start. Every application registers a deferred user-model save when it loads the user
   differences (`DevExpress.ExpressApp.Blazor/BlazorApplication.cs` 103-111); it is flushed when the same user's next
   application loads its differences (107, 286-289) and when the circuit closes

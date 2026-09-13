@@ -3,6 +3,9 @@ using System.ComponentModel;
 using System.Globalization;
 using DevExpress.Data.Filtering.Helpers;
 using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.Blazor.Editors.Adapters;
+using DevExpress.ExpressApp.DC;
+using DevExpress.ExpressApp.Editors;
 using DevExpress.ExpressApp.Model;
 using DevExpress.ExpressApp.Model.Core;
 using DevExpress.ExpressApp.Model.DomainLogics;
@@ -17,9 +20,16 @@ namespace XafLayoutBuilder.ModelEditor;
 /// <param name="Suggestions">Names offered for a free-text value (field names, languages); other text is still accepted.</param>
 /// <param name="Description">FastModelEditorHelper's description: type, owner interfaces and [Description], with &lt;b&gt;/&lt;br&gt; markup.</param>
 /// <param name="ReadOnlyMessage">Why a read-only value cannot be edited, when [ModelReadOnly] says.</param>
+/// <param name="Editor">The special editor the value takes (MODELEDITOR-006).</param>
 public sealed record ModelValueRow(string Name, Type Type, string Text, bool IsModified, bool CanEdit, IReadOnlyList<string>? Choices,
     string? Category = null, string? Description = null, bool IsRequired = false, bool IsLocalizable = false, string? ReadOnlyMessage = null,
-    IReadOnlyList<string>? Suggestions = null);
+    IReadOnlyList<string>? Suggestions = null, ModelValueEditor Editor = ModelValueEditor.Text);
+
+/// <summary>The editors the WinForms Model Editor attaches to a value through [Editor] (docs/model-editor-scope.md, "Special editors").</summary>
+public enum ModelValueEditor { Text, Criteria, Expression, Multiline, Image }
+
+/// <summary>A field a criteria value's filter builder offers: a reference's fields by full path, a collection's by their own name.</summary>
+public sealed record FilterField(string FieldName, string Caption, Type Type, bool IsCollection, IReadOnlyList<FilterField> Fields);
 
 /// <summary>
 /// The editor's model logic, kept out of the component so it runs against an in-process model in tests. Reads go through
@@ -349,6 +359,84 @@ public static class ModelEditing {
         return found;
     }
 
+    /// <summary>
+    /// The special editor of a value, from the type name its [Editor] attribute gives the WinForms Model Editor (for example
+    /// IModelListView.cs 102, CommonInterfaces.cs 295 and 562, IModelView.cs 59); nothing of WinForms is loaded.
+    /// </summary>
+    public static ModelValueEditor SpecialEditor(IModelNode node, string name) =>
+        Helper.GetPropertyAttribute<EditorAttribute>((ModelNode)node, name)?.EditorTypeName switch {
+            Constants.MultilineStringEditorType => ModelValueEditor.Multiline,
+            { } editor when editor.Contains("CriteriaModelEditorControl", StringComparison.Ordinal) => ModelValueEditor.Criteria,
+            { } editor when editor.Contains("ExpressionModelEditorControl", StringComparison.Ordinal) => ModelValueEditor.Expression,
+            { } editor when editor.Contains("ImageGalleryModelEditorControl", StringComparison.Ordinal) => ModelValueEditor.Image,
+            _ => ModelValueEditor.Text,
+        };
+
+    /// <summary>
+    /// The type a criteria value filters: [CriteriaOptions].ObjectTypeMemberName, comma-separated paths from the node, the first
+    /// that resolves, as CriteriaModelEditorControl.CalculateFilteredTypeInfo does (DevExpress.ExpressApp.Win/Core/ModelEditor/
+    /// AttributeList/CriteriaModelEditorControl.cs 91-137). Null for other values and when no path resolves.
+    /// </summary>
+    public static ITypeInfo? CriteriaTypeInfo(IModelNode node, string name) {
+        if (Helper.GetPropertyAttribute<CriteriaOptionsAttribute>((ModelNode)node, name)?.ObjectTypeMemberName is not { Length: > 0 } paths) return null;
+        foreach (var path in paths.Split(',')) {
+            object? value;
+            try {
+                value = ModelNodePersistentPathHelper.FindValueByPath((ModelNode)node, path.Trim());
+            }
+            catch (Exception) {
+                continue;
+            }
+            if (value switch {
+                ITypeInfo typeInfo => typeInfo,
+                Type type => XafTypesInfo.Instance.FindTypeInfo(type),
+                string typeName => XafTypesInfo.Instance.FindTypeInfo(typeName),
+                IMemberInfo member => member.IsList ? member.ListElementTypeInfo : member.MemberTypeInfo,
+                _ => null,
+            } is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The fields a filter builder offers for the type: the members XAF Blazor's criteria editor shows (the public
+    /// DxFilterBuilderHelper.GetMembers, DxFilterBuilderAdapter.cs 205-259), a reference's fields by full path and a collection's
+    /// by their own name, as DxFilterBuilderField nests them. ponytail: <paramref name="depth"/> levels, since references can cycle.
+    /// </summary>
+    public static IReadOnlyList<FilterField> FilterFields(ITypeInfo typeInfo, int depth = 2) {
+        using var helper = new DxFilterBuilderHelper(typeInfo, null, null, null);
+        return Fields(typeInfo, "", depth);
+
+        // XAF's rule (DxFilterBuilderHelper.GetFieldModel, DxFilterBuilderAdapter.cs 301-308, 335-337): the type without Nullable,
+        // a list is a collection field over its elements, and any other member of a non-simple type that is no image has nested
+        // fields, a persistent EF Core entity as much as a domain component (Codex review 2).
+        IReadOnlyList<FilterField> Fields(ITypeInfo owner, string prefix, int levels) =>
+            helper.GetMembers(owner).Select(member => {
+                var type = Nullable.GetUnderlyingType(member.MemberType) ?? member.MemberType;
+                var element = member.IsList ? member.ListElementTypeInfo : member.MemberTypeInfo;
+                var nests = member.IsList || (!SimpleTypes.IsSimpleType(type) && !typeof(System.Drawing.Image).IsAssignableFrom(type));
+                IReadOnlyList<FilterField> nested = levels > 1 && element is not null && nests
+                    ? Fields(element, member.IsList ? "" : prefix + member.Name + ".", levels - 1)
+                    : [];
+                return new FilterField(prefix + member.Name, CaptionHelper.GetMemberCaption(owner, member.Name), type, member.IsList, nested);
+            }).ToList();
+    }
+
+    // The names of the SVG and PNG images every image source offers, as the WinForms image picker lists them
+    // (ImageSource.GetImages(ImagePickerMode), ImageLoader.cs 79, 391, 1454; the DevExpress images source overrides only
+    // GetImages, 1021). ponytail: read once per process, since GetImages loads the images; none before ImageLoader is
+    // initialized (the in-process model), and a source added later is not listed.
+    static IReadOnlyList<string>? ImageNames() => ImageLoader.IsInitialized ? imageNames.Value : null;
+
+    static readonly Lazy<IReadOnlyList<string>> imageNames = new(() => ImageLoader.Instance.ImageSources
+        .SelectMany(source => new[] { ImagePickerMode.SvgImages, ImagePickerMode.PngImages }.SelectMany(mode => source.GetImages(mode).Values))
+        .SelectMany(images => images)
+        .Select(image => image.ImageName)
+        .Where(name => !string.IsNullOrEmpty(name))
+        .Distinct()
+        .Order(StringComparer.Ordinal)
+        .ToList());
+
     public static IReadOnlyList<ModelValueRow> Values(IModelNode node) {
         var modelNode = (ModelNode)node;
         // The WinForms grid's rules (ModelAttributesPropertyGridHelper.CalculatePropertyVisible, 505-540): Index is not
@@ -444,6 +532,7 @@ public static class ModelEditing {
     static ModelValueRow Row(ModelNode node, ModelValueInfo info) {
         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
         var readOnly = Helper.IsReadOnly(node, info.Name);
+        var editor = SpecialEditor(node, info.Name);
         var editable = !readOnly;
         IReadOnlyList<object>? lookup = null;
         string text;
@@ -466,7 +555,8 @@ public static class ModelEditing {
             IsRequired: Helper.IsRequired(node, info.Name),
             IsLocalizable: info.IsLocalizable,
             ReadOnlyMessage: readOnly ? Helper.GetPropertyAttribute<ModelReadOnlyAttribute>(node, info.Name)?.Message : null,
-            Suggestions: editable && choices is null ? Suggestions(node, info.Name) : null);
+            Suggestions: editable && choices is null ? (editor == ModelValueEditor.Image ? ImageNames() : Suggestions(node, info.Name)) : null,
+            Editor: editor);
     }
 
     /// <summary>

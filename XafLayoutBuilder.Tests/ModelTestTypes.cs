@@ -218,6 +218,17 @@ public class ModelTestDegradedBroken : ISupportViewLayoutCustomization {
     public static ListColumnsSpec? BuildListViewColumns() => null;
 }
 
+// MODELEDITOR-006, Codex review 2: plain classes, no [DomainComponent], standing in for a reference to an EF Core entity,
+// which is persistent but no domain component. Only ModelEditorSpecialEditorsTests reads them; they get no views.
+public class ModelTestPlainPart {
+    public string? Code { get; set; }
+}
+
+public class ModelTestPlainOwner {
+    public string? Name { get; set; }
+    public ModelTestPlainPart? Part { get; set; }
+}
+
 // SORT-001: sorted by Customer, then ShipDate, while ShipDate is shown first.
 [DomainComponent]
 public class ModelTestShipment : ISupportViewLayoutCustomization {
