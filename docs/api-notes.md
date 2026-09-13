@@ -17,11 +17,18 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 - Register in `ModuleBase.AddGeneratorUpdaters(ModelNodesGeneratorUpdaters updaters)` via
   `updaters.Add(new X())`. Updaters run at the Application Model zero (generated) layer; module,
   admin and user differences apply on top. [dxdocs 404125, 113315]
-- **Model cache bypasses `UpdateNode`.** With `ModelApplicationBase.EnableModelCache = true`,
+- **Model cache bypasses `UpdateNode`, and exists only in WinForms (CACHE-001).** With a cache,
   `ModelNodesGeneratorBase.GenerateNodes` calls only `UpdateCachedNode` (default no-op) because the
-  cached model already contains the updater output. The sample does not enable the cache; a host
-  that does must rely on cache invalidation to pick up builder changes. [source
-  `Model/ModelNodeGenerator.cs` lines 50-64, 113-122]
+  cached model already contains the updater output. [source `Model/ModelNodeGenerator.cs` lines
+  50-64, 113-122] XAF creates a cache manager only when `EnableModelCache` is set and
+  `GetModulesVersionInfoFilePath()` is not empty (`XafApplication.cs` lines 1709-1712). The base
+  returns null (line 1329), and the only override in the 26.1 sources is `WinApplication`'s
+  (`DevExpress.ExpressApp.Win/WinApplication.cs` line 686). In XAF Blazor the cache is therefore
+  never loaded or saved, and the generator layer, updaters included, is built on every start
+  (`ApplicationModelsManager.cs` lines 241-262). Where the cache is used, it is reloaded only while
+  every module's version matches the `ModulesVersionInfo` file (`XafApplication.cs` lines 436-463;
+  dxdocs, `XafApplication.EnableModelCache`), so a changed spec in an application module needs that
+  module's version bumped or `Model.Cache.xafml` deleted.
 - `ModelNodesGeneratorUpdater<T>` also implements `ISupportCachedNodesGeneratorUpdater`; `T` must
   derive from `ModelNodesGeneratorBase`. [source `Model/ModelNodesGeneratorUpdater.cs`]
 - **An updater that throws leaves its partial work behind.** `GenerateNodes` runs the stock generator
@@ -200,12 +207,12 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   (above), and `IModelColumn` carries `ApplyDiffValuesMap(GeneratedIndex, Index)`
   (`Model/IModelListView.cs` line 145, applied in `ModelNode.cs` line 1556), which turns a generated
   index into a stored `Index` when node values are copied. Either would mark every unshown column hidden.
-  **Not with XAF's model cache (deferred to CACHE-001).** Both markers, this one and
+  **Not with XAF's model cache, which only WinForms uses (top of this file).** Both markers, this one and
   `DetailViewLayoutUpdater.CatchAllMarker`, are stored as bools, and `GetSerializedValue` keeps a
   non-string value for the cache only when it finds a value type for its name (`Model/Core/ModelNode.cs`
   lines 3061-3071); a cached start runs `UpdateCachedNode`, not `UpdateNode`, so they are not set
   again. With the cache on, the export would drop the spec's `.Hide(...)` calls and print a catch-all
-  group as ordinary items.
+  group as ordinary items. Left as is while nothing is run on WinForms (CACHE-001).
 
 ## Startup forcing (session 5)
 

@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
 - 0.2.0 published to the local feed, with everything below.
 - EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
 - SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
@@ -193,7 +194,10 @@ specs, and a printer turns specs into the builder C#.
 
 - Localised captions. A separate repository.
 - ListView bands. Not investigated beyond the model node's existence.
-- WinForms. The module is platform neutral, but nothing was run on WinForms.
+- WinForms. The module is platform neutral, but nothing was run on WinForms. There,
+  `EnableModelCache` replaces the updaters with the cached model: a changed layout needs a module
+  version bump (or a deleted `Model.Cache.xafml`), and the export loses what the updaters mark
+  (the spec's hidden columns, the catch-all group).
 - Composing a derived class's layout from its base. A derived class keeps XAF's default layout
   unless it declares its own.
 - Runtime editing. No chat, MCP or AI at runtime; the repository gives agents a target.
@@ -205,8 +209,9 @@ specs, and a printer turns specs into the builder C#.
   `{Type}_LookupListView`. View variants, nested ListViews and custom views are left to XAF.
 - Member lambdas must be simple member access, except that a column may follow references:
   `Column(x => x.Customer.City)`. A detail item stays simple; `Item(x => x.Customer.Name)` is rejected.
-- Builder changes appear after a restart. With XAF's model cache enabled, the cache must be
-  invalidated as well; the sample does not enable it.
+- Builder changes appear after a restart. XAF's model cache plays no part in Blazor: XAF creates
+  it only where the application supplies a modules-version file, which only `WinApplication` does,
+  so a Blazor host runs the updaters on every start. See WinForms above.
 - Administrator and user differences override the builder, by design. A user who customised a
   property keeps seeing their value after the builder changes, until their differences are reset.
 - Every visible member must be placed or hidden in a DetailView layout, so adding a property to a
