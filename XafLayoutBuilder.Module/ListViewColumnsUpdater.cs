@@ -85,6 +85,20 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         // because the model cannot otherwise tell a column the spec hid from one it never mentioned (EXPORT-001).
         foreach (var hidden in spec.HiddenMembers)
             ((ModelNode)(columns[hidden] ?? AddColumn(hidden))).SetValue(HiddenMarker, true);
+        // BAND-001: the spec's bands, each at its first column's position and over its columns. Written from this updater, the
+        // band nodes still land in the generated layer: XAF counts generators in progress per layer (ModelNode.cs 430, 460-463).
+        if (spec.Bands is { Count: > 0 } bands) {
+            view.BandsLayout.Enable = true;
+            foreach (var bandSpec in bands) {
+                var first = shownColumns.FindIndex(c => c.Band == bandSpec.Id);
+                if (first < 0) continue; // a nested view left out the band's only column, the owner back-reference
+                var band = view.BandsLayout.AddNode<IModelBand>(bandSpec.Id);
+                band.Index = first;
+                if (bandSpec.Caption is not null) band.Caption = bandSpec.Caption;
+                foreach (var c in shownColumns.Where(c => c.Band == bandSpec.Id))
+                    ((IModelBandedColumn)columns[c.Member]!).OwnerBand = band;
+            }
+        }
         foreach (var column in columns) {
             if (listed.Contains(column.Id)) continue;
             // Hidden and unmentioned alike: available in the column chooser, not shown, and never sorted by default

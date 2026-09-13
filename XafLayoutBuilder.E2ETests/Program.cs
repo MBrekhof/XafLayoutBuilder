@@ -12,6 +12,7 @@ using Microsoft.Playwright;
 //   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
 //   VIEW-001 Order_Compact_ListView and Order_Compact_DetailView, declared in code by the sample, show their own columns
 //            and layout
+//   BAND-001 Order_Banded_ListView's band header Order spans Number and Customer
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
 //   E2E 4   Admin drags OrderDate into Details in XAF's layout editor and hides the Customer column from the grid header
 //           menu (E2E4-001); the user layer wins over the builder
@@ -257,6 +258,16 @@ try
     Assert(compactText.Contains("Compact order") && compactText.Contains("Order Date"),
         $"Order_Compact_DetailView, declared with LayoutRegistry.AddDetailView, shows its Compact order group (got {compactText.Replace('\n', ' ')})");
     Assert(!compactText.Contains("Notes") && !compactText.Contains("Customer"), "Order_Compact_DetailView leaves out what its declared layout hides");
+
+    Step("BAND-001: a band header spans its columns");
+    await OpenListView(page, "Order_Banded_ListView", "ORD-001");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09b-banded-listview.png") });
+    var bandedHeaders = await GridHeaders(page);
+    var bandSpan = await page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First.EvaluateAsync<int>(
+        @"g => [...g.querySelectorAll('th')].find(h => h.textContent.replace(/No filter applied/g,'').trim() === 'Order')?.colSpan ?? 0");
+    Assert(bandSpan == 2, $"the band header Order spans Number and Customer (colspan {bandSpan}; headers {string.Join(",", bandedHeaders)})");
+    Assert(new[] { "Number", "Customer", "Order Date" }.All(bandedHeaders.Contains),
+        $"the banded ListView still shows Number, Customer and Order Date (got {string.Join(",", bandedHeaders)})");
 
     Step("E2E 5a: exporting the untouched builder layout reproduces the source (section 6 round trip)");
     await OpenOrd001Detail(page);

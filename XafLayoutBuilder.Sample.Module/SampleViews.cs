@@ -11,6 +11,7 @@ namespace XafLayoutBuilder.Sample.Module;
 public static class SampleViews {
     public const string CompactDetailViewId = "Order_Compact_DetailView";
     public const string CompactListViewId = "Order_Compact_ListView";
+    public const string BandedListViewId = "Order_Banded_ListView";
 
     public static void Register() {
         LayoutRegistry.AddDetailView<Order>(CompactDetailViewId, () =>
@@ -21,6 +22,12 @@ public static class SampleViews {
         LayoutRegistry.AddListView<Order>(CompactListViewId, () =>
             ListViewColumnsBuilder<Order>.Create()
                 .Column(x => x.Number)
+                .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+                .Build());
+        // BAND-001: a band header over Number and Customer.
+        LayoutRegistry.AddListView<Order>(BandedListViewId, () =>
+            ListViewColumnsBuilder<Order>.Create()
+                .Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")
                 .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
                 .Build());
     }

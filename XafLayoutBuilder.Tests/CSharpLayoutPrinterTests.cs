@@ -138,6 +138,27 @@ public class CSharpLayoutPrinterTests {
         Assert.DoesNotContain("sortIndex", CSharpLayoutPrinter.PrintColumns(ListViewColumnsBuilderTests.Section4Columns(), "TestOrder"));
     }
 
+    // BAND-001: consecutive columns of one band print inside its .Band(...) call, with the caption only when it is set.
+    [Fact]
+    public void Bands_PrintAroundTheirColumns() {
+        const string code = """
+            ListViewColumnsBuilder<TestOrder>.Create()
+                .Band("Identity", b => b
+                    .Column(x => x.Number, width: 90)
+                    .Column(x => x.Customer), caption: "Order")
+                .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+                .Band("Remarks", b => b
+                    .Column(x => x.Notes))
+                .Build()
+            """;
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Band("Identity", b => b.Column(x => x.Number, width: 90).Column(x => x.Customer), caption: "Order")
+            .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+            .Band("Remarks", b => b.Column(x => x.Notes))
+            .Build();
+        Assert.Equal(Norm(code), Norm(CSharpLayoutPrinter.PrintColumns(spec, "TestOrder")));
+    }
+
     [Fact]
     public void EmptyGroupAndEmptyTabs_PrintABlockLambda() {
         // `g => g` is an expression, not a statement, so it does not convert to Action<GroupBuilder<T>>.

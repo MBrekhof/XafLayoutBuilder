@@ -89,6 +89,27 @@ public class ListViewColumnsBuilderTests {
         Assert.Equal(new int?[] { 1, 0, null }, spec.Columns.Select(c => c.SortIndex));
     }
 
+    // BAND-001: a band groups the columns declared inside it; they keep their place in the column order.
+    [Fact]
+    public void Band_SetsTheBandOnItsColumns_AndDeclaresTheBand() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")
+            .Column(x => x.OrderDate)
+            .Build();
+        Assert.Equal(["Number", "Customer", "OrderDate"], spec.Columns.Select(c => c.Member));
+        Assert.Equal(new[] { "Identity", "Identity", null }, spec.Columns.Select(c => c.Band));
+        Assert.Equal([new BandSpec("Identity", "Order")], spec.Bands!);
+        Assert.Null(Section4Columns().Bands);
+    }
+
+    [Fact]
+    public void ABandInsideABand_OrALookupInsideABand_Throws() {
+        Assert.Contains("cannot be nested", Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create()
+            .Band("A", b => b.Band("B", c => c.Column(x => x.Number)))).Message);
+        Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create()
+            .Band("A", b => b.Lookup(l => l.Column(x => x.Number))));
+    }
+
     [Fact]
     public void NestedPathThroughAMethodCall_IsRejected() {
         var ex = Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Customer!.Name.Trim()));

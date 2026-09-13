@@ -74,6 +74,22 @@ public class SpecValidationTests {
                 new ListColumnsSpec(Order, [new ColumnSpec("Customer"), new ColumnSpec("Customer")], [])))).Message);
     }
 
+    // BAND-001: the band rules, for a spec from any source.
+    [Fact]
+    public void RawColumns_BandRules_Throw() {
+        static ListColumnsSpec Spec(ColumnSpec[] columns, BandSpec[] bands) => new(Order, columns, [], Bands: bands);
+        string Error(ListColumnsSpec spec) => Assert.Throws<LayoutSpecException>(() => LayoutSpecChecks.Validate(spec)).Message;
+
+        Assert.Contains("a band has no id", Error(Spec([new ColumnSpec("Number", Band: " ")], [new BandSpec(" ")])));
+        Assert.Contains("band id 'A' is used twice", Error(Spec([new ColumnSpec("Number", Band: "A")], [new BandSpec("A"), new BandSpec("A")])));
+        Assert.Contains("names band 'X', which is not declared", Error(Spec([new ColumnSpec("Number", Band: "X")], [])));
+        Assert.Contains("band 'A' has no columns", Error(Spec([new ColumnSpec("Number")], [new BandSpec("A")])));
+        Assert.Contains("the columns of band 'A' are not next to each other", Error(Spec(
+            [new ColumnSpec("Number", Band: "A"), new ColumnSpec("Customer"), new ColumnSpec("OrderDate", Band: "A")], [new BandSpec("A")])));
+        Assert.Contains("bands are for the ListView", Error(new ListColumnsSpec(Order, [], [],
+            new ListColumnsSpec(Order, [new ColumnSpec("Number", Band: "A")], [], Bands: [new BandSpec("A")]))));
+    }
+
     // NEST-001: nested paths are for columns. A detail item's id is its member name, and the builder keeps it simple.
     [Fact]
     public void RawDetailSpec_WithANestedMember_Throws() {

@@ -48,4 +48,20 @@ public class LayoutSpecJsonTests {
         Assert.Equal(ColumnSortOrder.Descending, back.Columns[2].SortOrder);
         Assert.Equal(["Number", "Customer"], back.Lookup!.Columns.Select(c => c.Member));
     }
+
+    // BAND-001: bands are additive fields, left out of the JSON of a list that has none.
+    [Fact]
+    public void Bands_RoundTrip_AndAreLeftOutWhenThereAreNone() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Band("Identity", b => b.Column(x => x.Number), caption: "Order")
+            .Column(x => x.OrderDate)
+            .Build();
+        var json = LayoutSpecJson.Serialize(spec);
+        var back = LayoutSpecJson.Deserialize<ListColumnsSpec>(json);
+
+        Assert.Equal(json, LayoutSpecJson.Serialize(back));
+        Assert.Contains("\"band\": \"Identity\"", json);
+        Assert.Equal([new BandSpec("Identity", "Order")], back.Bands!);
+        Assert.DoesNotContain("band", LayoutSpecJson.Serialize(ListViewColumnsBuilderTests.Section4Columns()));
+    }
 }

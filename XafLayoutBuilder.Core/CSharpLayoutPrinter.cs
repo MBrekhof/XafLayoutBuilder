@@ -59,15 +59,29 @@ public static class CSharpLayoutPrinter {
     }
 
     static void PrintColumnCalls(StringBuilder sb, ListColumnsSpec spec, int depth) {
+        // BAND-001: a band's columns are adjacent (validation), so each run of one band prints inside its .Band(...) call.
+        string? openBand = null;
         foreach (var c in spec.Columns) {
-            sb.AppendLine().Append(Pad(depth)).Append(".Column(x => x.").Append(PathIdent(c.Member));
+            if (c.Band != openBand) {
+                CloseBand();
+                if (c.Band is not null) sb.AppendLine().Append(Pad(depth)).Append(".Band(").Append(Quote(c.Band)).Append(", b => b");
+                openBand = c.Band;
+            }
+            sb.AppendLine().Append(Pad(openBand is null ? depth : depth + 1)).Append(".Column(x => x.").Append(PathIdent(c.Member));
             if (c.Width is { } w) sb.Append(", width: ").Append(w);
             if (c.SortOrder != ColumnSortOrder.None) sb.Append(", sort: ColumnSortOrder.").Append(c.SortOrder);
             if (c.SortIndex is { } sortIndex) sb.Append(", sortIndex: ").Append(sortIndex);
             if (c.Caption is not null) sb.Append(", caption: ").Append(Quote(c.Caption));
             sb.Append(')');
         }
+        CloseBand();
         foreach (var hidden in spec.HiddenMembers) sb.AppendLine().Append(Pad(depth)).Append(".Hide(x => x.").Append(PathIdent(hidden)).Append(')');
+
+        void CloseBand() {
+            if (openBand is null) return;
+            if (spec.Bands?.FirstOrDefault(b => b.Id == openBand)?.Caption is { } caption) sb.Append(", caption: ").Append(Quote(caption));
+            sb.Append(')');
+        }
     }
 
     static void PrintNode(StringBuilder sb, LayoutNodeSpec node, int depth) {

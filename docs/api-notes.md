@@ -150,6 +150,18 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   same for `LayoutRegistry.AddDetailView`/`AddListView`, so the layout and columns generators, and this
   module's updaters, run for those views. The in-process model confirms it: before the updaters looked
   views up by id, a declared DetailView came back with XAF's stock `SimpleEditors` layout.
+- **Bands (BAND-001).** `IModelListView.BandsLayout` is an `IModelList<IModelBand>` with `Enable`;
+  bands are nodes under it, columns stay under `Columns` and join a band through
+  `IModelBandedColumn.OwnerBand` (`Model/IModelBandsLayout.cs` lines 52-83). Every runtime column is an
+  `IModelBandedColumn` (`ModelBandsLayoutHelper` casts them, `Model/DomainLogics/ModelBandViewLogic.cs`
+  line 59), and a band's default caption is its id (`Get_Caption`, line 84). No generator fills
+  `BandsLayout`. XAF Blazor uses bands only when `Enable` is set and groups data columns by
+  `OwnerBand` (`DxGridBase/DxGridColumnsListEditorModelSynchronizer.cs` line 99,
+  `DxGridBandLayoutModelSynchronizer.cs` lines 180-210); dxdocs (List Views: Banded Column Layout)
+  says Blazor does not support multi-level bands. Siblings and bands sort by `Index`
+  (`ModelBandedLayoutItemComparer`, `Model/ColumnModelNodesComparer.cs` line 48). Writing `BandsLayout`
+  from the columns updater stays in the generated layer, because the generator-in-progress counter
+  belongs to the layer's root (`Model/Core/ModelNode.cs` lines 430, 460-463, 1249-1251).
 
 - `IModelColumn : IModelMemberViewItem`: `int Width`, `DevExpress.Data.ColumnSortOrder SortOrder`,
   `int SortIndex`, `int GroupIndex`, `GroupInterval GroupInterval` (line 146). `Index` comes from

@@ -94,18 +94,28 @@ public sealed record ColumnSpec(
     int? Width = null,
     ColumnSortOrder SortOrder = ColumnSortOrder.None,
     string? Caption = null,
-    int? SortIndex = null);
+    int? SortIndex = null,
+    string? Band = null);
 
-/// <summary>ListView columns for one type. Hidden columns stay available in the column chooser (applier sets Index = -1).</summary>
+/// <summary>A band (BAND-001): a header over a run of adjacent columns. A null <see cref="Caption"/> shows the id, as XAF does.</summary>
+public sealed record BandSpec(string Id, string? Caption = null);
+
+/// <summary>
+/// ListView columns for one type. Hidden columns stay available in the column chooser (applier sets Index = -1).
+/// <see cref="Bands"/> (BAND-001) are headers over adjacent columns; a column names its band in <see cref="ColumnSpec.Band"/>.
+/// </summary>
 public sealed record ListColumnsSpec(
     string TypeName,
     IReadOnlyList<ColumnSpec> Columns,
     IReadOnlyList<string> HiddenMembers,
-    ListColumnsSpec? Lookup = null) {
+    ListColumnsSpec? Lookup = null,
+    IReadOnlyList<BandSpec>? Bands = null) {
     readonly IReadOnlyList<ColumnSpec> columns = Columns.Frozen();
     readonly IReadOnlyList<string> hiddenMembers = HiddenMembers.Frozen();
+    readonly IReadOnlyList<BandSpec>? bands = Bands?.Frozen();
     public IReadOnlyList<ColumnSpec> Columns { get => columns; init => columns = value.Frozen(); }
     public IReadOnlyList<string> HiddenMembers { get => hiddenMembers; init => hiddenMembers = value.Frozen(); }
+    public IReadOnlyList<BandSpec>? Bands { get => bands; init => bands = value?.Frozen(); }
 
     /// <summary>Every member referenced, including the lookup's.</summary>
     public IEnumerable<string> Members() =>
@@ -203,6 +213,8 @@ public static class LayoutSpecChecks {
         Check(spec);
         if (spec.Lookup is { } lookup) {
             if (lookup.Lookup is not null) throw new LayoutSpecException($"{type}: Lookup() cannot be nested inside Lookup().");
+            if (lookup.Bands is { Count: > 0 } || lookup.Columns.Any(c => c?.Band is not null))
+                throw new LayoutSpecException($"{type}: bands are for the ListView, not for Lookup().");
             Check(lookup);
         }
 
@@ -232,6 +244,21 @@ public static class LayoutSpecChecks {
             foreach (var c in s.Columns) {
                 if (!seen.Add(c.Member)) throw new LayoutSpecException($"{type}: column '{c.Member}' is listed twice.");
                 if (hidden.Contains(c.Member)) throw new LayoutSpecException($"{type}: column '{c.Member}' is both listed and hidden.");
+            }
+            // BAND-001: every band has an id of its own and at least one column, every column's band is declared, and a band's
+            // columns are next to each other (one level of bands over adjacent columns, which is what XAF Blazor renders).
+            var bands = s.Bands ?? [];
+            if (bands.Any(b => string.IsNullOrWhiteSpace(b?.Id))) throw new LayoutSpecException($"{type}: a band has no id.");
+            if (bands.GroupBy(b => b.Id, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1) is { } twiceBand)
+                throw new LayoutSpecException($"{type}: band id '{twiceBand.Key}' is used twice.");
+            var declared = bands.Select(b => b.Id).ToHashSet(StringComparer.Ordinal);
+            if (s.Columns.FirstOrDefault(c => c.Band is not null && !declared.Contains(c.Band)) is { } orphan)
+                throw new LayoutSpecException($"{type}: column '{orphan.Member}' names band '{orphan.Band}', which is not declared.");
+            foreach (var band in bands) {
+                var positions = s.Columns.Select((c, i) => (c.Band, i)).Where(x => x.Band == band.Id).Select(x => x.i).ToList();
+                if (positions.Count == 0) throw new LayoutSpecException($"{type}: band '{band.Id}' has no columns.");
+                if (positions[^1] - positions[0] + 1 != positions.Count)
+                    throw new LayoutSpecException($"{type}: the columns of band '{band.Id}' are not next to each other.");
             }
         }
     }

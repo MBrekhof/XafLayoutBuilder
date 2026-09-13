@@ -120,14 +120,55 @@ public static class LayoutExporter {
         var skipped = new List<string>();
         var type = view.ModelClass.TypeInfo.Type;
         var key = view.ModelClass.KeyProperty;
-        var spec = new ListColumnsSpec(type.FullName!, Columns(view), Hidden(view),
-            lookupView is null ? null : new ListColumnsSpec(type.FullName!, Columns(lookupView), Hidden(lookupView)));
+        var listed = Columns(view, withBands: true);
+        if (lookupView is { BandsLayout: { Enable: true, Count: > 0 } })
+            skipped.Add("note: the lookup's bands were not exported; Lookup() takes no bands");
+        if (view.BandsLayout is { Enable: true } bandsLayout && bandsLayout.Any(b => b.OwnerBand is not null))
+            skipped.Add("note: nested bands were flattened into their outermost band; the builder has one band level");
+        var spec = new ListColumnsSpec(type.FullName!, listed, Hidden(view),
+            lookupView is null ? null : new ListColumnsSpec(type.FullName!, Columns(lookupView, withBands: false), Hidden(lookupView)),
+            Bands(view, listed));
         return (spec, skipped);
 
-        List<ColumnSpec> Columns(IModelListView v) {
-            var shown = v.Columns
-                .Where(c => c.Index is >= 0)
-                .OrderBy(c => c.Index)
+        // BAND-001: the order the grid shows. Without bands that is the column Index. With bands, XAF Blazor numbers the root
+        // bands and unbanded columns, and each band's own columns, separately (SynchronizeVisibleIndexesToBands,
+        // DxGridColumnsListEditorModelSynchronizer.cs 79-97), so every level is ordered on its own and a band's columns take
+        // its place. Each level sorts with XAF's own comparer: index, then id, then bands before columns (Codex re-review).
+        IEnumerable<IModelColumn> DisplayOrder(IModelListView v) {
+            var visible = v.Columns.Where(c => c.Index is >= 0).ToList();
+            if (!v.BandsLayout.Enable) return visible.OrderBy(c => c.Index);
+            return Level(null);
+
+            IEnumerable<IModelColumn> Level(string? bandId) {
+                var items = visible
+                    .Where(c => ((IModelBandedColumn)c).OwnerBand?.Id == bandId)
+                    .Cast<IModelBandedLayoutItem>()
+                    .Concat(v.BandsLayout.Where(b => b.Index is not < 0 && b.OwnerBand?.Id == bandId))
+                    .ToList();
+                items.Sort(new ModelBandedLayoutItemComparer(true));
+                return items.SelectMany(i => i is IModelBand band ? Level(band.Id) : new[] { (IModelColumn)i });
+            }
+        }
+
+        // One band level is all the builder has and all XAF Blazor renders: a column in a nested band exports under the
+        // outermost band, which keeps that band's columns adjacent.
+        static IModelBand? Outermost(IModelBand? band) {
+            while (band?.OwnerBand is { } parent) band = parent;
+            return band;
+        }
+
+        // BAND-001: the bands over at least one exported column, in column order, with a caption only when it is not the id,
+        // which is XAF's default (ModelBandDomainLogic.Get_Caption).
+        List<BandSpec>? Bands(IModelListView v, List<ColumnSpec> exported) {
+            if (!v.BandsLayout.Enable) return null;
+            var used = exported.Select(c => c.Band).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+            return used.Count == 0
+                ? null
+                : used.Select(id => v.BandsLayout[id] is { } band && band.Caption != id ? new BandSpec(id, band.Caption) : new BandSpec(id)).ToList();
+        }
+
+        List<ColumnSpec> Columns(IModelListView v, bool withBands) {
+            var shown = DisplayOrder(v)
                 .Select(c => (Column: c, Member: Simple(c)))
                 .Where(x => x.Member is not null)
                 .ToList();
@@ -148,7 +189,8 @@ public static class LayoutExporter {
                     x.Column.SortOrder switch { DxSort.Ascending => ColumnSortOrder.Ascending, DxSort.Descending => ColumnSortOrder.Descending, _ => ColumnSortOrder.None },
                     // Localizable like a group caption: compare with the member caption XAF falls back to.
                     x.Column.Caption != x.Column.ModelMember?.Caption ? x.Column.Caption : null,
-                    explicitSortPriority && priority.TryGetValue(x.Column, out var rank) ? rank : null))
+                    explicitSortPriority && priority.TryGetValue(x.Column, out var rank) ? rank : null,
+                    withBands && v.BandsLayout.Enable ? Outermost(((IModelBandedColumn)x.Column).OwnerBand)?.Id : null))
                 .ToList();
         }
 

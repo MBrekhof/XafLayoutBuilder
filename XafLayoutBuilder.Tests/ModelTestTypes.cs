@@ -68,6 +68,69 @@ public class ModelTestOrder : ISupportViewLayoutCustomization {
             .Build();
 }
 
+// BAND-001: Number and Customer in the band "Identity", captioned "Order"; OrderDate outside any band.
+[DomainComponent]
+public class ModelTestBanded : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public string? Customer { get; set; }
+    public DateTime OrderDate { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestBanded>.Create()
+            .Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")
+            .Column(x => x.OrderDate)
+            .Build();
+}
+
+// BAND-001, Codex review: two bands of two columns, which LayoutExporterTests renumbers the way the Blazor grid saves them.
+[DomainComponent]
+public class ModelTestTwoBands : ISupportViewLayoutCustomization {
+    public string? A1 { get; set; }
+    public string? A2 { get; set; }
+    public string? B1 { get; set; }
+    public string? B2 { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestTwoBands>.Create()
+            .Band("A", b => b.Column(x => x.A1).Column(x => x.A2))
+            .Band("B", b => b.Column(x => x.B1).Column(x => x.B2))
+            .Build();
+}
+
+// BAND-001, Codex re-review: P1, C1 and P2 in band "P"; LayoutExporterTests nests a band "C" holding C1 inside it.
+[DomainComponent]
+public class ModelTestNestedBands : ISupportViewLayoutCustomization {
+    public string? P1 { get; set; }
+    public string? C1 { get; set; }
+    public string? P2 { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestNestedBands>.Create()
+            .Band("P", b => b.Column(x => x.P1).Column(x => x.C1).Column(x => x.P2))
+            .Build();
+}
+
+// BAND-001, Codex re-review: an unbanded Alpha column and a Zeta band holding Beta, which LayoutExporterTests puts on one index.
+[DomainComponent]
+public class ModelTestTiedBands : ISupportViewLayoutCustomization {
+    public string? Alpha { get; set; }
+    public string? Beta { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestTiedBands>.Create()
+            .Column(x => x.Alpha)
+            .Band("Zeta", b => b.Column(x => x.Beta))
+            .Build();
+}
+
 // VIEW-001: views declared in code for ModelTestOrder, registered by ApplicationModelFixture before it builds the model.
 public static class ModelTestDeclaredViews {
     public const string DetailViewId = "ModelTestOrder_Compact_DetailView";

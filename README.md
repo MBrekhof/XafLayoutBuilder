@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).
 - E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
 - VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
 - VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
@@ -199,7 +200,6 @@ specs, and a printer turns specs into the builder C#.
 **Out of scope by design** (start document section 2):
 
 - Localised captions. A separate repository.
-- ListView bands. Not investigated beyond the model node's existence.
 - WinForms. The module is platform neutral, but nothing was run on WinForms. There,
   `EnableModelCache` replaces the updaters with the cached model: a changed layout needs a module
   version bump (or a deleted `Model.Cache.xafml`), and the export loses what the updaters mark
@@ -222,6 +222,8 @@ specs, and a printer turns specs into the builder C#.
 - Builder changes appear after a restart. XAF's model cache plays no part in Blazor: XAF creates
   it only where the application supplies a modules-version file, which only `WinApplication` does,
   so a Blazor host runs the updaters on every start. See WinForms above.
+- ListView bands are one level deep, `.Band(id, b => ..., caption: ...)` over adjacent columns, which
+  is what XAF Blazor renders; a `.Lookup(...)` has none.
 - Administrator and user differences override the builder, by design. A user who customised a
   property keeps seeing their value after the builder changes, until their differences are reset.
 - Every visible member must be placed or hidden in a DetailView layout, so adding a property to a

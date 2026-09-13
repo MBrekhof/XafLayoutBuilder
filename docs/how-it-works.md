@@ -84,6 +84,12 @@ views to the generated layer the way DevExpress's Dashboards and Reports modules
 updaters apply a declared view's own spec by its id. Views defined only in XAFML cannot be served this
 way: XAF never runs their layout or columns generator, so no updater of it is called either.
 
+Bands (`.Band(...)`) are applied by the same updater. It turns on `BandsLayout.Enable`, adds one
+`IModelBand` per band at the position of its first column, and points each of the band's columns at
+it through `IModelBandedColumn.OwnerBand`, which is how XAF itself relates columns to bands. The spec
+keeps its flat column list: a column names its band, so a spec without bands is unchanged, JSON
+included. One level only, because XAF Blazor renders no band inside a band.
+
 Unlike the DetailView, the generated columns are kept. Listed columns get their order, width,
 caption and sort. Every other column is set to index -1: not shown, still offered by the column
 chooser. Any default sort on those columns is cleared, because the stock generator sorts the

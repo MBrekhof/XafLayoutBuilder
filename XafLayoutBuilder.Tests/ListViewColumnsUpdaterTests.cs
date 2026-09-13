@@ -42,6 +42,20 @@ public class ListViewColumnsUpdaterTests(ApplicationModelFixture fixture) {
         Assert.Equal("City", column.ModelMember?.Name);
     }
 
+    // BAND-001: the spec's bands are enabled, added with their captions, and own their columns.
+    [Fact]
+    public void Bands_AreEnabled_AddedWithCaptions_AndOwnTheirColumns() {
+        var view = fixture.Class<ModelTestBanded>().DefaultListView;
+        _ = view.Columns.Count; // the bands come with the columns
+        Assert.True(view.BandsLayout.Enable);
+        var band = Assert.Single(view.BandsLayout);
+        Assert.Equal("Identity", band.Id);
+        Assert.Equal("Order", band.Caption);
+        Assert.Equal("Identity", ((IModelBandedColumn)view.Columns["Number"]).OwnerBand?.Id);
+        Assert.Equal("Identity", ((IModelBandedColumn)view.Columns["Customer"]).OwnerBand?.Id);
+        Assert.Null(((IModelBandedColumn)view.Columns["OrderDate"]).OwnerBand);
+    }
+
     // VIEW-001: a nested ListView (a collection of the type inside another class) takes the element type's columns spec.
     [Fact]
     public void NestedListView_TakesTheElementTypesColumnsSpec() {
