@@ -33,17 +33,23 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | HIER-001 | 55ba749 | `LayoutBuilder<Derived>.Extend<Base>()`, `Extend(spec)`, `InGroup(id, ...)`; the same `Extend` for columns (owner's choice). Sample `ServiceOrder.Layout.cs`; E2E 3 checks SRV-001's groups. |
 | RECHECK-001 | bad4952 | A repeated startup check repeats XLB001-003: the updaters' checks are shared as `CheckAgainstView`, each updater marks the node it applied, and the check re-runs them on any view not marked applied (XAF marks a node generated even when its updater threw). Codex: an applied view is not re-checked against the merged model, where a later layer may have removed an editor on purpose. |
 | MODELEDITOR-001 | d88b30b | Spike, verdict on the card: a reduced runtime Model Editor for XAF Blazor is feasible on public API. New add-on `XafLayoutBuilder.ModelEditor` (not packaged): "Edit Model" (Tools) opens a tree plus value grid; edits stay pending until Save, which writes the user's differences and calls `SaveModelChanges`; gated by `ModelOperationPermissionRequest`, so the sample's Administrators role now sets `CanEditModel`. Found in the gate: 26.1's warmed-up model caches values and `ClearValue` does not update that cache, so unsaved edits cannot be rolled back (two attempts failed) and a saved Reset shows the old value until the next page load. Three Codex rounds, two findings fixed. |
+| MODELEDITOR-002 | 5bf9061 | Warmed-up (collapsed, cached) model built in-process like XAF Blazor's (`WarmedUpModelTests`; needs `BlazorModelMultipleMasterStore`, a cleared shared values cache per warm-up). Save reloads the page: `ClearValue` leaves the value cache stale and no public call refreshes it. The gate found a second DevExpress defect: `ModelDifferenceDbStore` keeps an aspect row whose XML became empty, so a reset localized caption came back; `StoredAspectCleanup` blanks such rows with public API, keeping the store's version guard, only for aspects this save emptied, retried after a failed save while still empty. Five Codex rounds, four findings fixed. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001).
-133 unit tests pass.
+c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002).
+142 unit tests pass.
 
-All cards with the owner's go are done (2026-09-13). Waiting on the owner: whether MODELEDITOR-001's editor goes
-further (nodes, reference and criteria editors, shared differences) or stays a spike. RUNTIME-001 (1688): the facts are on the card (no
+**Model Editor all the way (owner, 2026-09-13: "the whole 100 yards", plus which DevExpress source changes would help,
+possibly as a support call).** Scope: `docs/model-editor-scope.md` (what the WinForms Model Editor does). Cards:
+MODELEDITOR-003 (#1695, tree and property grid parity, research notes on the card) through MODELEDITOR-012 (#1704,
+packaging and the RUNTIME-001 hook); DXSUPPORT-001 (#1693): `docs/devexpress-support-request.md` is drafted and
+**uncommitted** (seven items so far, ClearValue cache and the empty-aspect store row the most important); it is the
+owner's to send. RUNTIME-001 default taken meanwhile: the editor may change builder-owned views in a user's own
+differences, as XAF's layout editor can. RUNTIME-001 (1688): the facts are on the card (no
 runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); allow or restrict stays the
 owner's call. `extras.jpg` in the repo root is the owner's screenshot for
 RUNTIME-001, untracked on purpose. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
