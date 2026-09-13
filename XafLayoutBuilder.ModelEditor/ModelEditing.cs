@@ -69,11 +69,209 @@ public static class ModelEditing {
             .Replace("&lt;/b&gt;", "</b>")
             .Replace("&lt;br&gt;", "<br>");
 
-    /// <summary>The ids from below the root down to the node, joined with '/': "Views/Order_ListView".</summary>
-    public static string Path(IModelNode node) {
+    /// <summary>
+    /// The child node types that may be added under the node, keyed by caption: FastModelEditorHelper.GetChildNodeTypes,
+    /// filtered as LinksNodeHelper.FilterCreatableItems does (DevExpress.ExpressApp.Win/Core/ModelEditor/LinkCollection/
+    /// LinksNodeHelper.cs 76-134).
+    /// </summary>
+    public static IReadOnlyDictionary<string, Type> CreatableTypes(IModelNode node) {
+        var target = (ModelNode)node;
+        return Helper.GetChildNodeTypes(target)
+            .Where(item => AllowedByFilter(target, item.Value) && AllowedByRequiredPath(target, item.Value))
+            .ToDictionary(item => item.Key, item => item.Value);
+
+        static bool AllowedByFilter(ModelNode target, Type type) =>
+            !AttributeHelper.GetAttributesConsideringInterfaces<ModelVirtualTreeCreatableItemsFilterAttribute>(type, true).Any(a =>
+                (a.FilteredTypes ?? []).Any(t => t.IsAssignableFrom(target.GetType()))
+                || (a.FilteredTypesName ?? []).Contains(target.GetType().Name));
+
+        static bool AllowedByRequiredPath(ModelNode target, Type type) {
+            var canAdd = true;
+            foreach (var attribute in AttributeHelper.GetAttributesConsideringInterfaces<ModelVirtualTreeCreatableItemsRequiredPathFilterAttribute>(type, true)) {
+                canAdd = !attribute.AllowNew;
+                for (ModelNode? parent = target; parent is not null; parent = parent.Parent) {
+                    if ((attribute.ParentNodeType?.IsAssignableFrom(parent.GetType()) ?? false) || attribute.ParentNodeTypeName == parent.GetType().Name) {
+                        canAdd = attribute.AllowNew;
+                        break;
+                    }
+                }
+            }
+            return canAdd;
+        }
+    }
+
+    /// <summary>
+    /// Adds a child node (ModelNode.AddNode, ModelNode.cs 473-476); a new member is marked custom and calculated. AddNode returns
+    /// the node in the writable layer, so the merged node, the one the tree shows, is looked up by its id.
+    /// </summary>
+    public static IModelNode AddChild(IModelNode parent, Type type, string id) {
+        // A virtual tree item, a band under a band, is created under its real parent and owned by the selected node, as the
+        // WinForms editor's add action does (ModelEditorViewController.cs 2232-2250; IModelBandsLayout.cs 71) (Codex review).
+        if (RealParent(parent) is not { } realParent) {
+            ThrowIfTaken(parent, id);
+            ((ModelNode)parent).AddNode(id, type);
+            return MarkNew(parent.GetNode(id));
+        }
+        ThrowIfTaken(realParent, id);
+        ((ModelNode)realParent).AddNode(id, type);
+        var node = MarkNew(Resolve(realParent.GetNode(id), out _)!);
+        if (node is IModelBandedLayoutItem item && parent is IModelBand band) item.OwnerBand = band;
+        return node;
+    }
+
+    // The node a ModelVirtualTreeAddItemAttribute on the node's type names as the real parent of the items added under it
+    // (ModelAttributes.cs 373-378), the nearest such ancestor; null when the type has none.
+    static IModelNode? RealParent(IModelNode node) {
+        var realType = AttributeHelper.GetAttributesConsideringInterfaces<ModelVirtualTreeAddItemAttribute>(node.GetType(), true)
+            .FirstOrDefault()?.RealParentNode;
+        for (var n = realType is null ? null : node.Parent; n is not null; n = n.Parent) {
+            if (realType!.IsInstanceOfType(n)) return n;
+        }
+        return null;
+    }
+
+    /// <summary>Adds a copy of the node next to it (ModelNode.AddClonedNode, ModelNode.cs 1361-1368), returned as the merged node.</summary>
+    public static IModelNode Clone(IModelNode source, string id) {
+        ThrowIfTaken(source.Parent, id);
+        ((ModelNode)source.Parent).AddClonedNode((ModelNode)source, id);
+        return MarkNew(source.Parent.GetNode(id));
+    }
+
+    // Checked before AddNode: a generated node counts too (a ListView has a hidden column for every property), and a
+    // failed AddNode in the running model left the editor's selection unusable (MODELEDITOR-004 gate).
+    static void ThrowIfTaken(IModelNode parent, string id) {
+        if (parent.GetNode(id) is not null) throw new InvalidOperationException($"{Path(parent)} already has a node '{id}'.");
+    }
+
+    // As the WinForms editor's UpdateNewNode (ModelEditorViewController.cs 881-886).
+    static IModelNode MarkNew(IModelNode node) {
+        if (node is IModelMember member) {
+            member.IsCustom = true;
+            member.IsCalculated = true;
+        }
+        return node;
+    }
+
+    public static bool CanDelete(IModelNode node) => Helper.CanDeleteNode((ModelNode)node, false);
+
+    /// <summary>
+    /// Whether a copy of the node can be added next to it (FastModelEditorHelper.CanAddNode, FastModelEditorHelper.cs 312). Not
+    /// tied to CanDelete: a generated member cannot be deleted, but a custom copy of it can be made (Codex review).
+    /// </summary>
+    public static bool CanClone(IModelNode node) => node.Parent is not null && Helper.CanAddNode((ModelNode)node.Parent, (ModelNode)node);
+
+    /// <summary>
+    /// Whether the node is still part of the model. A removed node is no longer found under its parent. The nodes Parent returns
+    /// further up are other instances than GetNode hands out (measured in the test model), so a node under a removed one is
+    /// caught by resolving its path again from the root.
+    /// </summary>
+    public static bool IsInModel(IModelNode node) {
+        if (node.Parent is null) return node is IModelApplication;
+        if (!ReferenceEquals(node.Parent.GetNode(Id(node)), node)) return false;
+        return Resolve(node, out var root) is not null && root is IModelApplication;
+    }
+
+    // The node's path resolved again from its root, the instance the tree hands out; null when a node on the way is gone.
+    static IModelNode? Resolve(IModelNode node, out IModelNode root) {
         var ids = new Stack<string>();
-        for (var n = node; n.Parent is not null; n = n.Parent) ids.Push(Id(n));
-        return string.Join("/", ids);
+        root = node;
+        for (; root.Parent is not null; root = root.Parent) ids.Push(Id(root));
+        IModelNode? found = root;
+        while (found is not null && ids.Count > 0) found = found.GetNode(ids.Pop());
+        return found;
+    }
+
+    /// <summary>
+    /// Writes that put the node and the nodes under it back to the values they hold in the writable layer now, for the replay
+    /// of an added or cloned node after Save (ModelEditSession.ReplaySaved): the stored values are set again (a clone carries
+    /// values nobody edited) and any other value is cleared (an old grid sets Index -1 on a column saved without an Index,
+    /// Codex review). Reading the children generates the ones not generated yet.
+    /// </summary>
+    /// <summary>The node and every node under it, depth first. Reading the children generates the ones not generated yet.</summary>
+    internal static IEnumerable<IModelNode> Subtree(IModelNode root) {
+        var stack = new Stack<IModelNode>();
+        stack.Push(root);
+        while (stack.Count > 0) {
+            var node = stack.Pop();
+            yield return node;
+            for (var i = 0; i < node.NodeCount; i++) stack.Push(node.GetNode(i));
+        }
+    }
+
+    internal static IReadOnlyList<(IModelNode Node, Action Write)> StoredValueWrites(IModelNode root) {
+        var writes = new List<(IModelNode, Action)>();
+        foreach (var node in Subtree(root).Cast<ModelNode>()) {
+            var stored = node.NodeInfo.ValuesInfo
+                .Where(info => !Bookkeeping.Contains(info.Name) && node.IsValueModified(info.Name))
+                .ToDictionary(info => info.Name, info => node.GetValue(info.Name));
+            writes.Add((node, () => {
+                foreach (var info in node.NodeInfo.ValuesInfo) {
+                    if (Bookkeeping.Contains(info.Name)) continue;
+                    if (stored.TryGetValue(info.Name, out var value)) node.SetValue(info.Name, value);
+                    else if (node.IsValueModified(info.Name)) node.ClearValue(info.Name);
+                }
+            }));
+        }
+        return writes;
+    }
+
+    /// <summary>The required values ([Required] or an IModelIsRequired calculator) the node has no value for.</summary>
+    /// <param name="cleared">Values cleared on the node. A warmed-up model keeps returning a cleared value from its cache
+    /// (ClearValue, ModelNode.cs 2368-2390), so these count as missing. ponytail: a required value XAF would calculate counts
+    /// too; setting it explicitly clears the error.</param>
+    public static IReadOnlyList<string> MissingRequired(IModelNode node, IEnumerable<string>? cleared = null) {
+        var modelNode = (ModelNode)node;
+        var clearedNames = cleared?.ToHashSet() ?? [];
+        return modelNode.NodeInfo.ValuesInfo
+            .Where(v => !Bookkeeping.Contains(v.Name) && Helper.IsRequired(modelNode, v.Name))
+            .Where(v => clearedNames.Contains(v.Name) || modelNode.GetValue(v.Name) is null or "")
+            .Select(v => v.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The Index changes that move the node one place up or down among its shown siblings, renumbering them as
+    /// ModelEditorControllerBase.ChangeNodeIndex does (70-93): siblings with a negative Index are not shown and keep it.
+    /// Only the indexes that change are returned; at either end nothing is.
+    /// </summary>
+    /// <param name="index">The Index to count for a node, when it is not the model's: an edit not applied yet.</param>
+    public static IReadOnlyList<(IModelNode Node, int Index)> IndexesForMove(IModelNode node, bool up, Func<IModelNode, int?>? index = null) {
+        index ??= n => n.Index;
+        // Children is in the model's order and OrderBy is stable, so siblings the index does not tell apart keep that order.
+        var shown = Children(node.Parent)
+            .Where(n => index(n) is null or >= 0)
+            .Where(n => OwnerBandId(n) == OwnerBandId(node))
+            .OrderBy(n => index(n) is null)
+            .ThenBy(n => index(n) ?? 0)
+            .ToList();
+        var position = shown.IndexOf(node);
+        var target = up ? position - 1 : position + 1;
+        if (position < 0 || target < 0 || target >= shown.Count) return [];
+        (shown[position], shown[target]) = (shown[target], shown[position]);
+        return shown.Select((n, i) => (Node: n, Index: i)).Where(p => index(p.Node) != p.Index).ToList();
+    }
+
+    // With the bands layout enabled each band numbers its own items (DxGridColumnsListEditorModelSynchronizer.cs 79-97), so a
+    // move stays among the items of one owner band, the way LayoutExporter groups them (Codex review). ponytail: top-level
+    // columns and top-level bands share one sequence in the grid but live under different parents; each moves among its own.
+    static string? OwnerBandId(IModelNode node) =>
+        node is IModelBandedLayoutItem { OwnerBand: { } band } && BandsEnabled(node) ? band.Id : null;
+
+    static bool BandsEnabled(IModelNode node) => node.Parent switch {
+        IModelBandsLayout layout => layout.Enable,
+        { Parent: IModelListView view } => view.BandsLayout.Enable,
+        _ => false,
+    };
+
+    /// <summary>The ids from below the root down to the node, joined with '/': "Views/Order_ListView".</summary>
+    public static string Path(IModelNode node) => string.Join("/", Ids(node));
+
+    /// <summary>The ids from below the root down to the node. Compare these, not paths: an id may contain '/' (Codex review).</summary>
+    internal static IReadOnlyList<string> Ids(IModelNode node) {
+        var ids = new List<string>();
+        for (var n = node; n.Parent is not null; n = n.Parent) ids.Add(Id(n));
+        ids.Reverse();
+        return ids;
     }
 
     /// <summary>
@@ -202,19 +400,41 @@ public sealed class ModelEditSession {
     /// valid edit of the same value instead of letting Save write that one (Codex re-review); then it throws.
     /// </summary>
     public void SetText(IModelNode node, string name, string text) {
+        ThrowIfUnderPendingReset(node);
+        // A node added in this session is removed again unless saved, so its values are written at once: a required value XAF
+        // calculates from another one is there only then (the gate: a new column's PropertyEditorType stayed missing while
+        // its PropertyName was pending).
         try {
             ModelEditing.Validate(node, name, text);
         }
         catch (Exception ex) {
+            // On an added node too: the invalid text blocks Save until a valid value replaces it (Codex review).
             pending[(node, name)] = (text, ex.Message);
             throw;
         }
-        pending[(node, name)] = (text, null);
+        if (IsAddedOrUnder(node)) {
+            pending.Remove((node, name));
+            ModelEditing.SetText(node, name, text);
+            // Empty text clears the value (ModelEditing.SetText).
+            if (text.Length == 0) cleared.Add((node, name));
+            else cleared.Remove((node, name));
+        }
+        else pending[(node, name)] = (text, null);
     }
 
-    public void Reset(IModelNode node, string name) => pending[(node, name)] = (null, null);
+    public void Reset(IModelNode node, string name) {
+        ThrowIfUnderPendingReset(node);
+        // ponytail: on an added node a warmed-up model shows the cleared value until the reload (ClearValue skips the cache).
+        if (IsAddedOrUnder(node)) {
+            pending.Remove((node, name));
+            ModelEditing.Reset(node, name);
+            cleared.Add((node, name));
+        }
+        else pending[(node, name)] = (null, null);
+    }
 
-    public bool HasErrors => pending.Values.Any(p => p.Error is not null);
+    // An error on a node marked for deletion does not count: the edit goes with the node (Codex review).
+    public bool HasErrors => pending.Any(p => p.Value.Error is not null && !IsDeleted(p.Key.Node));
 
     /// <param name="text">The pending text, or null for a pending reset.</param>
     /// <param name="error">Why the text is no value of that type, or null.</param>
@@ -223,6 +443,111 @@ public sealed class ModelEditSession {
         (text, error) = entry;
         return found;
     }
+
+    // MODELEDITOR-004. Nodes added or cloned exist in the live model at once, and their values are written at once; they are
+    // removed again unless saved. Deletes and node resets wait for Apply like value edits.
+    readonly List<IModelNode> added = [];
+    readonly HashSet<IModelNode> deletes = [];
+    readonly HashSet<IModelNode> nodeResets = [];
+    // Values the editor cleared on added nodes or nodes under them, which a warmed-up model still returns from its cache (Codex review).
+    readonly HashSet<(IModelNode Node, string Name)> cleared = [];
+
+    public IModelNode AddChild(IModelNode parent, Type type, string id) {
+        ThrowIfUnderPendingReset(parent);
+        var node = ModelEditing.AddChild(parent, type, id);
+        added.Add(node);
+        return node;
+    }
+
+    public IModelNode Clone(IModelNode source, string id) {
+        ThrowIfUnderPendingReset(source.Parent);
+        // The clone copies the model as it is, while the editor shows the source with its pending edits, and what a pending
+        // reset leaves is known only once the model is built again. So a source with pending edits is saved first (Codex review).
+        if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [source])) || deletes.Any(d => IsAtOrUnder(d, [source]))
+            || nodeResets.Any(r => IsAtOrUnder(r, [source])))
+            throw new InvalidOperationException($"Save the pending edits of {ModelEditing.Path(source)} before cloning it.");
+        var node = ModelEditing.Clone(source, id);
+        added.Add(node);
+        return node;
+    }
+
+    public bool IsAdded(IModelNode node) => added.Contains(node);
+
+    bool IsAddedOrUnder(IModelNode node) => IsAtOrUnder(node, added);
+
+    // By ids: the instances Parent returns are not the tree's own (ModelEditing.IsInModel), and an id may contain '/'.
+    static bool IsAtOrUnder(IModelNode node, IEnumerable<IModelNode> roots) {
+        var ids = ModelEditing.Ids(node);
+        return roots.Any(r => ModelEditing.Ids(r) is var prefix && prefix.Count <= ids.Count && prefix.SequenceEqual(ids.Take(prefix.Count)));
+    }
+
+    /// <summary>Marks the node for deletion on Apply, or takes that mark back.</summary>
+    public void Delete(IModelNode node, bool delete = true) {
+        if (delete) {
+            ThrowIfUnderPendingReset(node);
+            deletes.Add(node);
+        }
+        else deletes.Remove(node);
+    }
+
+    public bool IsPendingDelete(IModelNode node) => deletes.Contains(node);
+
+    /// <summary>Takes back every difference of the node on Apply (ModelNode.Undo, ModelNode.cs 609-637).</summary>
+    public void ResetNode(IModelNode node) {
+        if (!CanResetNode(node))
+            throw new InvalidOperationException($"{ModelEditing.Path(node)} exists only in your model differences; delete it instead of resetting it.");
+        if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [node])) || deletes.Any(d => IsAtOrUnder(d, [node]))
+            || added.Any(a => IsAtOrUnder(a, [node])))
+            throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before resetting it.");
+        nodeResets.Add(node);
+    }
+
+    // A node reset takes back the node's whole subtree (ModelNode.Undo, 609-637), on Apply and again on the replay after Save,
+    // so it does not combine with other edits in that subtree; the editor asks for a Save in between (Codex review).
+    void ThrowIfUnderPendingReset(IModelNode node) {
+        if (nodeResets.Any(r => IsAtOrUnder(node, [r])))
+            throw new InvalidOperationException($"{ModelEditing.Path(node)} is reset on save; save before editing it.");
+    }
+
+    /// <summary>
+    /// Undo clears the node's values but keeps the node (ModelNode.UndoCore, 615-637), so a node that exists only in the user's
+    /// differences, one added in the editor or under one among them, would stay without its required values (Codex review).
+    /// </summary>
+    public bool CanResetNode(IModelNode node) => !IsAddedOrUnder(node) && !((ModelNode)node).IsNewNode;
+
+    public bool IsPendingNodeReset(IModelNode node) => nodeResets.Contains(node);
+
+    /// <summary>Moves the node one place up or down among its shown siblings, as Index edits that count earlier moves (Codex review).</summary>
+    public void Move(IModelNode node, bool up) {
+        var moves = ModelEditing.IndexesForMove(node, up, EffectiveIndex);
+        // Every sibling is checked first, so a refused move leaves no partial renumbering behind (Codex review).
+        foreach (var (sibling, _) in moves) ThrowIfUnderPendingReset(sibling);
+        foreach (var (sibling, index) in moves)
+            SetText(sibling, ModelValueNames.Index, index.ToString(CultureInfo.InvariantCulture));
+    }
+
+    // The Index a node has once the pending edits are applied; ponytail: a pending reset counts the current Index.
+    int? EffectiveIndex(IModelNode node) =>
+        pending.TryGetValue((node, ModelValueNames.Index), out var p)
+        && int.TryParse(p.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) ? index : node.Index;
+
+    /// <summary>
+    /// Removes the nodes this session added: for an editor closed without Save, and before a model save the editor did not
+    /// start (ModelEditorController). Last added first, so clones of clones go too. Edits of the removed nodes go with them.
+    /// </summary>
+    public void RollbackAdded() {
+        for (var i = added.Count - 1; i >= 0; i--) {
+            if (ModelEditing.IsInModel(added[i])) added[i].Remove();
+        }
+        added.Clear();
+        cleared.Clear();
+        foreach (var key in pending.Keys.Where(k => !ModelEditing.IsInModel(k.Node)).ToList()) pending.Remove(key);
+        deletes.RemoveWhere(n => !ModelEditing.IsInModel(n));
+        nodeResets.RemoveWhere(n => !ModelEditing.IsInModel(n));
+    }
+
+    /// <summary>Set by the editor around its own model save, which keeps the nodes it added.</summary>
+    public bool Saving { get; set; }
 
     // Aspects the applied edits emptied whose stored rows have not been blanked yet (StoredAspectCleanup).
     readonly HashSet<string> emptiedAspects = [];
@@ -237,8 +562,17 @@ public sealed class ModelEditSession {
     /// </summary>
     public void Apply(ModelApplicationBase? userLayer = null) {
         // Checked before anything is written, so a refused Save leaves the model and every pending edit as they were.
-        if (pending.FirstOrDefault(p => p.Value.Error is not null) is { Value.Error: { } error } invalid)
+        if (pending.FirstOrDefault(p => p.Value.Error is not null && !IsDeleted(p.Key.Node)) is { Value.Error: { } error } invalid)
             throw new InvalidOperationException($"{ModelEditing.Path(invalid.Key.Node)}: {invalid.Key.Name} is not saved: {error}");
+        // Every node of an added or cloned subtree is saved only with its required values (MODELEDITOR-004); a clone copies its
+        // source's children (Codex review). Their values are in the model already.
+        var subtrees = added.Where(n => !IsDeleted(n) && ModelEditing.IsInModel(n)).SelectMany(ModelEditing.Subtree);
+        foreach (var node in subtrees.Where(n => !IsDeleted(n))) {
+            var ids = ModelEditing.Ids(node);
+            var missing = ModelEditing.MissingRequired(node, cleared.Where(c => ModelEditing.Ids(c.Node).SequenceEqual(ids)).Select(c => c.Name));
+            if (missing.Count > 0)
+                throw new InvalidOperationException($"{ModelEditing.Path(node)}: {string.Join(", ", missing)} required");
+        }
         if (userLayer is null) WritePending();
         else {
             emptiedAspects.UnionWith(ModelEditing.AspectsEmptiedBy(userLayer, WritePending));
@@ -247,14 +581,64 @@ public sealed class ModelEditSession {
         }
     }
 
-    /// <summary>The applied edits are saved and their emptied aspects blanked.</summary>
-    public void Saved() => emptiedAspects.Clear();
+    /// <summary>The applied edits are saved and their emptied aspects blanked; the nodes added are part of the model now.</summary>
+    public void Saved() {
+        // An added or cloned node's own values count as saved edits: a clone carries values nobody edited (Codex review).
+        foreach (var node in added) savedWrites.AddRange(ModelEditing.StoredValueWrites(node));
+        savedWrites.AddRange(writes);
+        writes.Clear();
+        emptiedAspects.Clear();
+        added.Clear();
+        cleared.Clear();
+    }
 
+    // The session's writes to the model since the last Save, and the saved ones (ReplaySaved).
+    readonly List<(IModelNode Node, Action Write)> writes = [];
+    readonly List<(IModelNode Node, Action Write)> savedWrites = [];
+
+    /// <summary>
+    /// Writes the saved edits again. A later model save of this circuit, the deferred one XAF flushes after the reload, first
+    /// lets the views built before the edits write their own state into the model; a grid hides every column it does not
+    /// show (ColumnsListEditor.cs 230-232). ModelEditorController calls this right before such a save. Nodes no longer in
+    /// the model are skipped.
+    /// </summary>
+    public void ReplaySaved() {
+        foreach (var (node, write) in savedWrites) {
+            if (!ModelEditing.IsInModel(node)) continue;
+            try {
+                write();
+            }
+            catch (Exception ex) {
+                // Thrown here it would fail XAF's own save of the user model; the value stays as the view left it.
+                DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
+            }
+        }
+    }
+
+    // A node marked for deletion, or one under such a node; by path, as IsAddedOrUnder (Codex review).
+    bool IsDeleted(IModelNode node) => IsAtOrUnder(node, deletes);
+
+    // Values first, then node resets, then deletes; nothing is written to a node that goes.
     void WritePending() {
         foreach (var ((node, name), (text, _)) in pending) {
-            if (text is null) ModelEditing.Reset(node, name);
-            else ModelEditing.SetText(node, name, text);
+            if (IsDeleted(node)) continue;
+            Action write = text is null ? () => ModelEditing.Reset(node, name) : () => ModelEditing.SetText(node, name, text);
+            write();
+            writes.Add((node, write));
         }
         pending.Clear();
+        foreach (var node in nodeResets.Where(n => !IsDeleted(n))) {
+            Action write = () => ((ModelNode)node).Undo();
+            write();
+            writes.Add((node, write));
+        }
+        nodeResets.Clear();
+        // Only the outermost deleted nodes; their children go with them.
+        foreach (var node in deletes.Where(n => n.Parent is null || !IsDeleted(n.Parent)).ToList()) {
+            node.Remove();
+            added.RemoveAll(a => IsAtOrUnder(a, [node]));
+            cleared.RemoveWhere(c => IsAtOrUnder(c.Node, [node]));
+        }
+        deletes.Clear();
     }
 }

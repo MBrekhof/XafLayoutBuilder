@@ -17,14 +17,25 @@ public sealed class ModelEditorPropertyEditor(Type objectType, IModelMemberViewI
 
     XafApplication? application;
 
+    /// <summary>
+    /// The popup's edits. Owned here rather than by the component so ModelEditorController can take back the nodes it added
+    /// when the popup closes without Save (MODELEDITOR-004); the view's Closed event runs on Cancel, OK and the close button.
+    /// </summary>
+    public ModelEditSession Session { get; } = new();
+
     void IComplexViewItem.Setup(IObjectSpace objectSpace, XafApplication application) => this.application = application;
 
-    protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel { Application = application! };
+    protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel { Application = application!, Session = Session };
 }
 
 public sealed class ModelEditorComponentModel : ComponentModelBase {
     public XafApplication Application {
         get => GetPropertyValue<XafApplication>();
+        set => SetPropertyValue(value);
+    }
+
+    public ModelEditSession Session {
+        get => GetPropertyValue<ModelEditSession>();
         set => SetPropertyValue(value);
     }
 

@@ -436,6 +436,48 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   first model's values. Hooks tried on the way: the Razor component's `Dispose` ran after the gate had reopened the
   editor; the popup view's `Closed` event does run on Cancel (`SystemModule/DialogController.cs` 146-149,
   `DevExpress.ExpressApp.Blazor/BlazorWindow.cs` 66-80, `View.cs` 286-302), but the clear it made hit the cache.
+- Node operations (MODELEDITOR-004). Creatable child types: `FastModelEditorHelper.GetChildNodeTypes` (`Model/FastModelEditorHelper.cs`
+  294-302, via `GetListChildNodeTypes` 263-288, keyed by the type's display name, "Column" for `IModelColumn`), filtered as
+  `LinksNodeHelper.FilterCreatableItems` does (`DevExpress.ExpressApp.Win/Core/ModelEditor/LinkCollection/LinksNodeHelper.cs`
+  76-134). `ModelNode.AddNode` and `AddClonedNode` return the node of the writable layer; `parent.GetNode(id)` returns the
+  merged node, the one the parent's children list holds. A new member is marked `IsCustom` and `IsCalculated` as the
+  WinForms editor's `UpdateNewNode` does (`ModelEditorViewController.cs` 881-886); Up/Down renumbers the shown siblings as
+  `ModelEditorControllerBase.ChangeNodeIndex` (70-93). Measured in the in-process model: the nodes `Parent` returns above a
+  node's own level are other instances than `GetNode` hands out (a node is the instance its parent's `GetNode(id)` returns,
+  but its parent is not the instance the grandparent's `GetNode` returns); `ModelNode` overrides `GetHashCode` (3497) but
+  not `Equals`. After `Remove()` a node keeps its `Parent`, and `GetNode(id)` there returns null. So
+  `ModelEditing.IsInModel` checks the node under its parent and resolves its path again from the root. A band's creatable
+  types include Band through `ModelVirtualTreeAddItemAttribute(typeof(IModelBandsLayout), typeof(IModelBand))`
+  (`Model/IModelBandsLayout.cs` 71; `FastModelEditorHelper.GetListChildNodeTypes` 275-288), but a band holds no children:
+  like the WinForms add action (`ModelEditorViewController.cs` 2232-2250) the editor adds the node under the nearest
+  ancestor of the attribute's `RealParentNode` type and sets `OwnerBand` (`IModelBandsLayout.cs` 63). Values reset on an
+  added node still read from a warmed-up model's cache, so the session counts those resets itself when it checks the
+  node's required values. `ModelNode.Undo()` (609-637) clears the values of the node's writable layer and resets that
+  layer's child nodes but keeps the node; a node that exists only in the user's differences (`IsNewNode`, 679) would stay
+  without its required values, so the editor offers Delete there instead of Reset node. With the bands layout enabled
+  (`IModelBandsLayout.Enable`, 56) the Blazor grid numbers each band's items separately
+  (`DevExpress.ExpressApp.Blazor/Editors/DxGridBase/DxGridColumnsListEditorModelSynchronizer.cs` 79-97; `IModelBandedColumn`
+  and `IModelBand` are `IModelBandedLayoutItem`s, `IModelBandsLayout.cs` 75, 82), so Up/Down moves an item only among the
+  items of its owner band. Clone is offered where `FastModelEditorHelper.CanAddNode(parent, node)` (312) allows a copy,
+  independently of `CanDeleteNode`: a generated member cannot be deleted but can be copied as a custom one.
+- Model saves the editor does not start. Every application registers a deferred user-model save when it loads the user
+  differences (`DevExpress.ExpressApp.Blazor/BlazorApplication.cs` 103-111); it is flushed when the same user's next
+  application loads its differences (107, 286-289) and when the circuit closes
+  (`Services/ApplicationSaveModelChangesOnCircuitClosed.cs` 64-82), and it saves the windows and calls
+  `app.SaveModelChanges()` (`BlazorApplication.cs` 112-132). Nodes the editor added live would be stored by it, with or
+  without their required values. `SaveModelChanges` raises `CreateCustomUserModelDifferenceStore` right before
+  `SaveDifference` (`XafApplication.cs` 1743-1747, 2497-2506), so the editor's controller removes the added nodes there
+  unless the save is the editor's own. The flushed save first lets the open views write their state into the model
+  (`BlazorApplication.cs` 121-127), and a columns list editor sets `Index = -1` on every model column its control does not
+  show (`Editors/ColumnsListEditor.cs` 230-232). Measured in the gate: a column added and saved in the editor was stored
+  with `Index="-1"` after the reload, because the old circuit's Order grid, built before the column existed, saved its
+  state when the new application flushed the old one's deferred save. The WinForms editor avoids this by closing every
+  window before editing and rebuilding them afterwards (`DevExpress.ExpressApp.Win/WinApplication.cs` 782-817); XAF Blazor
+  has no public counterpart, and `IUserModelSaveDispatcher` is internal (`Services/AppState/UserModelSaveDispatcher.cs`
+  50). So the same hook writes the editor's saved edits again (`ModelEditSession.ReplaySaved`), and puts an added or
+  cloned subtree back to the values it held in the writable layer at Save (`ModelNode.IsValueModified`, 899): the stored
+  ones are set again, since a clone carries values nobody edited, and any other is cleared, such as the `Index = -1` the
+  old grid writes over a column saved without an Index. A failing write there is logged, not thrown, because it would fail XAF's own save.
 
 ## Still open
 

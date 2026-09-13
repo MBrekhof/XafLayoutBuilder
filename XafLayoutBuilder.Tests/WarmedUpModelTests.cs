@@ -123,6 +123,32 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
         Assert.Empty(session.EmptiedAspects);
     });
 
+    // MODELEDITOR-004: a node added in the editor is removed again when the popup closes without Save. In the warmed-up
+    // model the removal has to show in the children list (ClearValue's cache trap must not repeat for nodes).
+    [Fact]
+    public void ANodeAddedAndRemoved_IsGoneFromTheChildren() => WithWarmedUpModels(build => {
+        var columns = ContactListView(build(ModelStoreBase.Empty)).Columns;
+        var added = ModelEditing.AddChild(columns, typeof(IModelColumn), "Transient");
+        Assert.Contains(ModelEditing.Children(columns), n => ModelEditing.Id(n) == "Transient");
+
+        added.Remove();
+        Assert.DoesNotContain(ModelEditing.Children(columns), n => ModelEditing.Id(n) == "Transient");
+    });
+
+    // Codex review: a required value reset on an added node keeps returning its cached value, so the session counts the reset
+    // itself and Save refuses the node.
+    [Fact]
+    public void Session_Apply_RefusesAnAddedNodeWhoseRequiredValueWasReset() => WithWarmedUpModels(build => {
+        var columns = ContactListView(build(ModelStoreBase.Empty)).Columns;
+        var session = new ModelEditSession();
+        var column = session.AddChild(columns, typeof(IModelColumn), "ResetOnAdded");
+        session.SetText(column, "PropertyName", nameof(ModelTestContact.Name));
+        session.Reset(column, "PropertyName");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Apply());
+        Assert.Contains("PropertyName", ex.Message);
+    });
+
     static IModelListView ContactListView(ModelApplicationBase model) =>
         ((IModelApplication)model).BOModel.GetClass(typeof(ModelTestContact))!.DefaultListView;
 

@@ -1,7 +1,8 @@
 @* The running application's model as a tree, and the selected node's values grouped by category, the way the WinForms
-   Model Editor shows them (docs/model-editor-scope.md). Edits stay pending in the session until Save, which writes them to
-   the current user's differences (the model's writable layer) and persists them through XafApplication.SaveModelChanges;
-   closing the popup without Save drops them. *@
+   Model Editor shows them (docs/model-editor-scope.md). Value edits, deletes and node resets stay pending in the session
+   until Save, which writes them to the current user's differences (the model's writable layer) and persists them through
+   XafApplication.SaveModelChanges. Added and cloned nodes exist at once so their values can be edited; closing the popup
+   without Save drops the pending edits and removes those nodes (ModelEditorController). *@
 
 @if (!allowed) {
     <p class="xlb-model-editor-denied">Your role may not edit the application model.</p>
@@ -32,16 +33,44 @@ else {
             }
         </div>
         <div class="xlb-model-values" style="flex:1; overflow:auto; display:flex; flex-direction:column">
-            @if (selected is null) {
+            @if (selected is null || !ModelEditing.IsInModel(selected)) {
                 <p>Select a node.</p>
             }
             else {
                 <div data-selected="@ModelEditing.Path(selected)" style="font-weight:600; margin-bottom:0.5rem">@ModelEditing.Path(selected)</div>
+                <div class="xlb-node-actions" style="display:flex; flex-wrap:wrap; gap:0.25rem; align-items:center; margin-bottom:0.5rem">
+                    @{ var creatable = ModelEditing.CreatableTypes(selected); }
+                    @if (creatable.Count > 0) {
+                        <select class="xlb-new-type" @bind="newNodeType">
+                            <option value="">Add a child of type</option>
+                            @foreach (var caption in creatable.Keys.Order(StringComparer.Ordinal)) {
+                                <option value="@caption">@caption</option>
+                            }
+                        </select>
+                    }
+                    <input class="xlb-new-id" placeholder="New node id" style="width:10em" @bind="newNodeId" />
+                    @if (creatable.Count > 0) {
+                        <button type="button" class="xlb-add" @onclick="AddNode">Add</button>
+                    }
+                    @if (ModelEditing.CanClone(selected)) {
+                        <button type="button" class="xlb-clone" @onclick="CloneNode">Clone</button>
+                    }
+                    @if (ModelEditing.CanDelete(selected)) {
+                        <button type="button" class="xlb-delete" @onclick="ToggleDelete">@(Session.IsPendingDelete(selected) ? "Keep" : "Delete")</button>
+                    }
+                    @if (selected.Parent is not null) {
+                        <button type="button" class="xlb-up" @onclick="() => Move(true)">Up</button>
+                        <button type="button" class="xlb-down" @onclick="() => Move(false)">Down</button>
+                    }
+                    @if (ModelEditing.IsModified(selected) && Session.CanResetNode(selected)) {
+                        <button type="button" class="xlb-reset-node" @onclick="ResetNode">@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")</button>
+                    }
+                </div>
                 <table style="width:100%; border-collapse:collapse">
                     @foreach (var group in ModelEditing.Values(selected).GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
                         <tr class="xlb-category"><td colspan="3" style="padding:6px 6px 2px; font-weight:600; opacity:0.7">@group.Key</td></tr>
                         @foreach (var row in group) {
-                            var pending = session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
+                            var pending = Session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
                             var text = pending ? pendingText ?? "" : row.Text;
                             <tr data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
                                 <td style="padding:2px 6px; white-space:nowrap">
@@ -92,7 +121,7 @@ else {
                 </div>
             }
             <div style="margin-top:0.75rem">
-                <button type="button" class="xlb-save" disabled="@session.HasErrors" @onclick="Save">Save</button>
+                <button type="button" class="xlb-save" disabled="@Session.HasErrors" @onclick="Save">Save</button>
                 <span class="xlb-model-editor-message" style="margin-left:0.5rem">@message</span>
             </div>
         </div>
@@ -103,21 +132,23 @@ else {
 
 @code {
     [Parameter] public XafApplication Application { get; set; } = null!;
+    [Parameter] public ModelEditSession Session { get; set; } = null!;
 
     readonly HashSet<IModelNode> expanded = [];
-    readonly ModelEditSession session = new();
     IModelNode? selected;
     string? focusedDescription;
     string? message;
     string searchText = "";
     IReadOnlyList<IModelNode>? searchResults;
+    string newNodeId = "";
+    string? newNodeType;
     bool allowed;
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
 
     // Captions from [DisplayProperty], modified nodes in bold as in the WinForms tree, an expand button only for node types
-    // that can have children.
+    // that can have children. Added nodes are in italics, nodes to be deleted struck through.
     RenderFragment TreeNode(IModelNode node) => @<li style="white-space:nowrap">
         @if (ModelEditing.CanHaveChildren(node)) {
             <button type="button" data-expand="@ModelEditing.Path(node)" style="width:1.5em; border:none; background:none"
@@ -127,7 +158,7 @@ else {
             <span style="display:inline-block; width:1.5em"></span>
         }
         <span data-node="@ModelEditing.Path(node)" class="@(ModelEditing.IsModified(node) ? "xlb-modified" : null)"
-              style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
+              style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); font-style:@(Session.IsAdded(node) ? "italic" : "normal"); text-decoration:@(Session.IsPendingDelete(node) ? "line-through" : "none"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
               @onclick="() => Select(node)">@ModelEditing.Caption(node)</span>
         @if (expanded.Contains(node)) {
             <ul style="list-style:none; padding-left:1.25em; margin:0">
@@ -158,9 +189,35 @@ else {
         Select(node);
     }
 
-    void Set(string name, string? text) => Run(() => session.SetText(selected!, name, text ?? ""), null);
+    void Set(string name, string? text) => Run(() => Session.SetText(selected!, name, text ?? ""), null);
 
-    void Reset(string name) => Run(() => session.Reset(selected!, name), null);
+    void Reset(string name) => Run(() => Session.Reset(selected!, name), null);
+
+    // MODELEDITOR-004: node operations.
+    void AddNode() => Run(() => {
+        var parent = selected!;
+        if (string.IsNullOrEmpty(newNodeType) || !ModelEditing.CreatableTypes(parent).TryGetValue(newNodeType, out var type))
+            throw new InvalidOperationException("Choose the type of node to add.");
+        var node = Session.AddChild(parent, type, NewId());
+        expanded.Add(parent);
+        Select(node);
+    }, null);
+
+    void CloneNode() => Run(() => Select(Session.Clone(selected!, NewId())), null);
+
+    string NewId() {
+        if (string.IsNullOrWhiteSpace(newNodeId)) throw new InvalidOperationException("Give the new node an id.");
+        var id = newNodeId.Trim();
+        newNodeId = "";
+        return id;
+    }
+
+    void ToggleDelete() => Run(() => Session.Delete(selected!, !Session.IsPendingDelete(selected!)), null);
+
+    // Up/Down becomes Index edits renumbering the shown siblings (ModelEditSession.Move).
+    void Move(bool up) => Run(() => Session.Move(selected!, up), null);
+
+    void ResetNode() => Run(() => Session.ResetNode(selected!), null);
 
     // MODELEDITOR-002: XAF Blazor's warmed-up model caches values and ClearValue does not refresh that cache, and views
     // already created keep the model they were built from. So Save reloads the page, as the WinForms editor restarts every
@@ -168,16 +225,28 @@ else {
     void Save() => Run(() => {
         // The database store keeps an aspect whose differences became empty; without the cleanup a reset localized caption
         // returns. Only the aspects these edits emptied are blanked, and the session keeps them until that succeeded.
-        session.Apply(((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model).LastLayer);
-        Application.SaveModelChanges();
-        StoredAspectCleanup.ClearEmptied(Application, session.EmptiedAspects);
-        session.Saved();
+        Session.Apply(((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model).LastLayer);
+        // Before any other model save ModelEditorController removes the nodes added here; this one keeps them.
+        Session.Saving = true;
+        try {
+            Application.SaveModelChanges();
+        }
+        finally {
+            Session.Saving = false;
+        }
+        StoredAspectCleanup.ClearEmptied(Application, Session.EmptiedAspects);
+        Session.Saved();
         Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
     }, "Saved, reloading");
 
     // Text that is no value of its type, a calculator that throws, a failed save: reported, not thrown into the circuit.
     void Run(Action action, string? done) {
         try {
+            // A save of this user's model from elsewhere removed the nodes added here (ModelEditorController).
+            if (selected is not null && !ModelEditing.IsInModel(selected)) {
+                selected = null;
+                throw new InvalidOperationException("Your model was saved elsewhere, which removed the nodes added here. Select a node.");
+            }
             action();
             message = done;
         }

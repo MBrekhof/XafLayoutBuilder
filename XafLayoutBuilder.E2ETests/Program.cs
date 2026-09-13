@@ -28,7 +28,9 @@ using Microsoft.Playwright;
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   MODELEDITOR-001 Edit Model (ModelEditor add-on): a caption edit closed with Cancel is dropped; a saved caption is stored
 //            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once;
-//            MODELEDITOR-003: the search finds the view and a value's description shows
+//            MODELEDITOR-003: the search finds the view and a value's description shows; MODELEDITOR-004: a column added
+//            in the editor shows after Save and is gone again after deleting it, and a model save from a second logon does
+//            not store a node added in the open editor but not saved
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -599,6 +601,50 @@ try
     // blanks that row, or the caption would come back on every load.
     var resetStored = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
     Assert(!resetStored.Contains(EditedCaption), "after the saved Reset no stored aspect of Admin's user model holds the caption");
+
+    // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
+    // in the editor takes it away again.
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
+    await modelEditor.Locator(".xlb-new-type").SelectOptionAsync(new SelectOptionValue { Label = "Column" });
+    // XAF generates a hidden column for every property, Notes included, so the new column gets an id of its own.
+    await modelEditor.Locator(".xlb-new-id").FillAsync("EditorNotes");
+    await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
+    await modelEditor.Locator(".xlb-add").ClickAsync();
+    await modelEditor.Locator("[data-selected='Views/Order_ListView/Columns/EditorNotes']").WaitForAsync(new() { Timeout = 10_000 });
+    foreach (var (name, value) in new[] { ("PropertyName", "Notes"), ("Index", "3") })
+    {
+        var valueInput = modelEditor.Locator($"tr[data-value='{name}'] input");
+        await valueInput.FillAsync(value);
+        await valueInput.PressAsync("Tab");
+        // The values of an added node are written at once, so the row offers Reset rather than showing "unsaved".
+        await modelEditor.Locator($"tr[data-value='{name}'] .xlb-reset").WaitForAsync(new() { Timeout = 10_000 });
+    }
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-24-model-editor-added-column.png") });
+    var addedHeaders = await GridHeaders(page);
+    Console.WriteLine("    headers after adding a column in the Model Editor: " + string.Join(" | ", addedHeaders));
+    Assert(addedHeaders.Contains("Notes"), $"the column added in the Model Editor shows after Save (got {string.Join(",", addedHeaders)})");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/EditorNotes");
+    await modelEditor.Locator(".xlb-delete").ClickAsync();
+    await modelEditor.Locator(".xlb-delete", new() { HasText = "Keep" }).WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var deletedHeaders = await GridHeaders(page);
+    Assert(!deletedHeaders.Contains("Notes"), $"the column deleted in the Model Editor is gone after Save (got {string.Join(",", deletedHeaders)})");
+    // A model save the editor did not start must not store a node added in the open editor: here the deferred save XAF flushes
+    // when the same user logs on in a second tab (BlazorApplication.LoadUserDifferences).
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
+    await modelEditor.Locator(".xlb-new-type").SelectOptionAsync(new SelectOptionValue { Label = "Column" });
+    await modelEditor.Locator(".xlb-new-id").FillAsync("EditorUnsaved");
+    await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
+    await modelEditor.Locator(".xlb-add").ClickAsync();
+    await modelEditor.Locator("[data-selected='Views/Order_ListView/Columns/EditorUnsaved']").WaitForAsync(new() { Timeout = 10_000 });
+    var secondTab = await NewPage(browser);
+    await Login(secondTab);
+    await secondTab.CloseAsync();
+    var foreignSaved = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
+    Assert(!foreignSaved.Contains("EditorUnsaved"), "a model save from a second logon does not store a node added in the open Model Editor but not saved");
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
 
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property
