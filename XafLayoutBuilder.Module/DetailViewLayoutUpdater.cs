@@ -15,6 +15,14 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
     /// <summary>Model value marking the group this updater created for <see cref="UnplacedMembers.AppendToGroup"/>.</summary>
     internal const string CatchAllMarker = "XafLayoutBuilder.UnplacedGroup";
 
+    /// <summary>
+    /// RECHECK-001: model value marking a layout this updater applied. The startup check re-checks only a view without it,
+    /// one whose updater failed, perhaps in an earlier check, and that XAF will not generate again.
+    /// </summary>
+    internal const string AppliedMarker = "XafLayoutBuilder.LayoutApplied";
+
+    internal static bool WasApplied(IModelDetailView view) => ((ModelNode)view.Layout).GetValue<bool>(AppliedMarker);
+
     public override void UpdateNode(ModelNode node) {
         // With XafLayoutBuilderModule.FailFastOnLayoutErrors off (the default) a spec that cannot be applied is logged and
         // the view keeps XAF's generated layout, which is intact because Apply checks everything before it changes anything.
@@ -27,6 +35,17 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
             DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
         }
     }
+
+    /// <summary>
+    /// XLB001 and XLB002, the checks that need the view's items, shared by <see cref="Apply"/> and the startup check
+    /// (RECHECK-001). Returns the visible editors the layout neither places nor hides, which a catch-all group collects.
+    /// </summary>
+    internal static IReadOnlyList<string> CheckAgainstView(IModelDetailView view, DetailLayoutSpec spec) =>
+        LayoutSpecChecks.CheckAgainstView(spec, view.Id,
+            view.Items.Select(item => item.Id),
+            view.Items.OfType<IModelPropertyEditor>()
+                .Where(pe => pe.ModelMember?.IsVisibleInDetailView != false)
+                .Select(pe => ((IModelViewItem)pe).Id));
 
     static void Apply(ModelNode node) {
         if (node.Parent is not IModelDetailView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
@@ -42,11 +61,7 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
         // half-applied layout behind for good. A rejected spec leaves XAF's own generated layout as it was.
         // Every visible member must be placed or hidden. The default is to fail (XLB002) so a property added to the
         // class cannot silently vanish from the form; .Unplaced(UnplacedMembers.AppendToGroup(id)) relaxes it.
-        var unplaced = LayoutSpecChecks.CheckAgainstView(spec, view.Id,
-            viewItems.Select(item => item.Id),
-            viewItems.OfType<IModelPropertyEditor>()
-                .Where(pe => pe.ModelMember?.IsVisibleInDetailView != false)
-                .Select(pe => ((IModelViewItem)pe).Id));
+        var unplaced = CheckAgainstView(view, spec);
 
         foreach (var element in layout.ToList()) element.Remove();
         var main = node.AddNode<IModelLayoutGroup>(ModelDetailViewLayoutNodesGenerator.MainLayoutGroupName);
@@ -72,6 +87,7 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
                 item.Index = i;
             }
         }
+        node.SetValue(AppliedMarker, true);
 
         void Add(IModelNode parent, LayoutNodeSpec n, int index, bool inTab) {
             switch (n) {

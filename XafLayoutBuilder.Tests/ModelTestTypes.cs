@@ -166,6 +166,18 @@ public class ModelTestServiceOrder : ModelTestOrder, ISupportViewLayoutCustomiza
             .Build();
 }
 
+// RECHECK-001, Codex review: a valid layout whose Notes editor StartupCheckTests removes afterwards, as a later layer could.
+[DomainComponent]
+public class ModelTestLaterRemoval : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    public string? Notes { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestLaterRemoval>.Create().Group("Info", g => g.Item(x => x.Name).Item(x => x.Notes)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
 // Places one member and lets the catch-all group collect the rest.
 [DomainComponent]
 public class ModelTestContact : ISupportViewLayoutCustomization {

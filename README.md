@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
 - LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
 - BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).

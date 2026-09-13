@@ -26,6 +26,11 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
     /// <summary>Model value marking a column this updater hid because the spec said Hide (EXPORT-001).</summary>
     internal const string HiddenMarker = "XafLayoutBuilder.HiddenColumn";
 
+    /// <summary>RECHECK-001: model value marking a column set this updater applied (see DetailViewLayoutUpdater.AppliedMarker).</summary>
+    internal const string AppliedMarker = "XafLayoutBuilder.ColumnsApplied";
+
+    internal static bool WasApplied(IModelListView view) => ((ModelNode)view.Columns).GetValue<bool>(AppliedMarker);
+
     public override void UpdateNode(ModelNode node) {
         // Degrades like DetailViewLayoutUpdater: logged, and the view keeps XAF's generated columns.
         try {
@@ -33,6 +38,20 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         }
         catch (Exception ex) when (!XafLayoutBuilderModule.FailFastOnLayoutErrors) {
             DevExpress.Persistent.Base.Tracing.Tracer.LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// XLB003, the check that needs the view's columns, shared by <see cref="Apply"/> and the startup check (RECHECK-001):
+    /// every member without a column must be able to have one, so it has to be a member of the type and not a collection.
+    /// </summary>
+    internal static void CheckAgainstView(IModelListView view, IModelColumns columns, ListColumnsSpec spec, Type type) {
+        foreach (var member in spec.Columns.Select(c => c.Member).Concat(spec.HiddenMembers)) {
+            if (columns[member] is not null) continue;
+            var modelMember = view.ModelClass.FindMember(member)
+                ?? throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is not a member of {type.Name}.");
+            if (modelMember.MemberInfo.MemberTypeInfo.IsListType)
+                throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is a collection and cannot be a column.");
         }
     }
 
@@ -57,8 +76,7 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         var columns = (IModelColumns)node;
         // Check first, change second (see DetailViewLayoutUpdater): every member that will need a new column has to be
         // able to have one before any existing column is reindexed.
-        foreach (var member in spec.Columns.Select(c => c.Member).Concat(spec.HiddenMembers))
-            if (columns[member] is null) RequireColumnMember(member);
+        CheckAgainstView(view, columns, spec, type);
 
         // XAF leaves the reference back to the owner out of a nested view (ModelListViewNodesGenerator.IsParentProperty); a
         // spec written for the type's own ListView that lists it must not bring it back there.
@@ -107,6 +125,7 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
             column.SortOrder = DxSort.None;
             column.SortIndex = -1;
         }
+        node.SetValue(AppliedMarker, true);
 
         static void SetGeneratedIndex(IModelColumn column, int index) {
             var n = (ModelNode)column;
@@ -119,13 +138,6 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         // hidden by attribute. A listed or hidden member gets its column the way the generator makes one:
         // AddNode<IModelColumn>(name) + PropertyName (ModelListViewNodesGenerator.cs 437-442; View_ID only matters
         // for list-property editors, which cannot be columns).
-        void RequireColumnMember(string member) {
-            var modelMember = view.ModelClass.FindMember(member)
-                ?? throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is not a member of {type.Name}.");
-            if (modelMember.MemberInfo.MemberTypeInfo.IsListType)
-                throw new LayoutSpecException($"XLB003 {view.Id}: '{member}' is a collection and cannot be a column.");
-        }
-
         IModelColumn AddColumn(string member) {
             var column = columns.AddNode<IModelColumn>(member);
             column.PropertyName = member;

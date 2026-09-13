@@ -6,6 +6,7 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
 - LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
 - BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).

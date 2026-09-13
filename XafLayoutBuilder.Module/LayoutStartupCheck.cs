@@ -29,7 +29,7 @@ public static class LayoutStartupCheck {
         lock (Gate) {
             if (Completed.Contains(key)) return;
             try {
-                Check(application);
+                Check(application.Model);
             }
             catch (Exception ex) when (!XafLayoutBuilderModule.FailFastOnLayoutErrors) {
                 // The updaters already logged and degraded what they could not apply; this catches the rest (XLB004,
@@ -47,24 +47,33 @@ public static class LayoutStartupCheck {
 
     // Every view is attempted and the failures are reported together, so one broken layout cannot hide the next one
     // behind another application start. One attempt per view, and the view's spec is resolved inside its own attempt:
-    // a broken DetailView factory must not keep the same class's ListView and lookup from being checked.
-    static void Check(XafApplication application) {
-        var views = application.Model.Views;
+    // a broken DetailView factory must not keep the same class's ListView and lookup from being checked. RECHECK-001: XAF marks a
+    // node generated even when its updater threw, so a later check that only touched the view would pass a layout that failed
+    // the first time. A view its updater did not mark applied is checked again here. An applied one is left alone: checking it
+    // against the merged model would blame the builder for an editor a module or administrator difference removed since.
+    internal static void Check(IModelApplication model) {
+        var views = model.Views;
         var failures = new List<string>();
-        foreach (var modelClass in application.Model.BOModel) {
+        foreach (var modelClass in model.BOModel) {
             if (modelClass.TypeInfo?.Type is not { } type) continue;
             Attempt(() => {
-                if (LayoutSpecResolver.Detail(type) is not null)
-                    Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout);
+                if (LayoutSpecResolver.Detail(type) is not { } spec) return;
+                var view = Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec");
+                Touch(view.Layout);
+                if (!DetailViewLayoutUpdater.WasApplied(view)) DetailViewLayoutUpdater.CheckAgainstView(view, spec);
             });
             // ponytail: nested ListViews (VIEW-001) apply this same spec with the same checks, so this attempt covers them.
             Attempt(() => {
-                if (LayoutSpecResolver.Columns(type) is not null)
-                    Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns);
+                if (LayoutSpecResolver.Columns(type) is not { } spec) return;
+                var view = Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec");
+                Touch(view.Columns);
+                if (!ListViewColumnsUpdater.WasApplied(view)) ListViewColumnsUpdater.CheckAgainstView(view, view.Columns, spec, type);
             });
             Attempt(() => {
-                if (LayoutSpecResolver.Columns(type)?.Lookup is not null)
-                    Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
+                if (LayoutSpecResolver.Columns(type)?.Lookup is not { } lookup) return;
+                var view = Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec");
+                Touch(view.Columns);
+                if (!ListViewColumnsUpdater.WasApplied(view)) ListViewColumnsUpdater.CheckAgainstView(view, view.Columns, lookup, type);
             });
         }
         // VIEW-001: every view declared in code, each in its own attempt. A missing one is XLB004: adding it failed and was logged.
@@ -96,13 +105,16 @@ public static class LayoutStartupCheck {
         if (declared.Conflict is not null) throw DeclaredViewsUpdater.ConflictError(id, declared);
         if (declared.Detail is not null) {
             var view = Marked(Required<IModelDetailView>(views, id, declared.Type, $"a declared DetailView '{id}'"), id);
-            _ = LayoutSpecResolver.DetailForView(view, declared.Type);
+            var spec = LayoutSpecResolver.DetailForView(view, declared.Type);
             Touch(view.Layout);
+            if (spec is not null && !DetailViewLayoutUpdater.WasApplied(view)) DetailViewLayoutUpdater.CheckAgainstView(view, spec);
         }
         else {
             var view = Marked(Required<IModelListView>(views, id, declared.Type, $"a declared ListView '{id}'"), id);
-            _ = LayoutSpecResolver.DeclaredColumns(view, declared.Type);
+            var spec = LayoutSpecResolver.DeclaredColumns(view, declared.Type);
             Touch(view.Columns);
+            if (spec is not null && !ListViewColumnsUpdater.WasApplied(view))
+                ListViewColumnsUpdater.CheckAgainstView(view, view.Columns, spec, declared.Type);
         }
     }
 
