@@ -27,16 +27,18 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | CACHE-001 | 9204526 | Docs only: XAF's model cache is WinForms-only (only `WinApplication` overrides `GetModulesVersionInfoFilePath`), so a Blazor host always runs the updaters and the markers issue does not arise there. README and api-notes corrected, WinForms caveats recorded. |
 | VIEW-001 | c55bb12 | Nested ListViews (`{DeclaringType}_{Collection}_ListView`) take the element type's columns spec, without the owner back-reference (owner's choice). Sample `OrderLine.Layout.cs`, E2E 1 checks the Lines tab. |
 | VIEW-001 | cdb6afa | Views declared in code: `LayoutRegistry.AddDetailView<T>`/`AddListView<T>`, added to the generated layer by `DeclaredViewsUpdater` and marked; XLB005 for blank, taken or conflicting ids. Views existing only in XAFML stay XAF's (their generators never run). Four Codex rounds; the last finding, a repeated startup check not repeating XLB001-003 (default views too), is **RECHECK-001 (1681), deferred by the owner**. |
+| E2E4-001 | 813a5a3 | E2E 4 drags Order Date in XAF's Blazor layout editor (pointer drag, saved within the session) and hides Customer with the grid header's Hide This Column; no XAFML write, no restart. Passed gate runs 2 and 3; run 1 failed at the first login (LOGIN-001). |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001).
+c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001).
 
-Next cards, in order: E2E4-001 (1674), BAND-001 (1672), HIER-001 (1670, new builder API: owner's call on
-its shape). RECHECK-001 (1681) was minted today and waits for the owner's go. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+Next cards, in order: BAND-001 (1672), HIER-001 (1670, new builder API: owner's call on its shape).
+Minted today, waiting for the owner's go: RECHECK-001 (1681), LOGIN-001 (1682, the gate's first login
+sometimes submits an empty user name; seen once in three gate runs on 2026-09-13). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
 ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).
