@@ -21,6 +21,7 @@ public sealed class XafLayoutBuilderModule : ModuleBase {
 
     public override void AddGeneratorUpdaters(ModelNodesGeneratorUpdaters updaters) {
         base.AddGeneratorUpdaters(updaters);
+        updaters.Add(new DeclaredViewsUpdater());
         updaters.Add(new DetailViewLayoutUpdater());
         updaters.Add(new ListViewColumnsUpdater());
     }

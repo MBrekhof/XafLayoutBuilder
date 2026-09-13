@@ -1,5 +1,6 @@
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Model;
+using DevExpress.ExpressApp.Model.Core;
 using XafLayoutBuilder.Core;
 
 namespace XafLayoutBuilder.Module;
@@ -66,6 +67,9 @@ public static class LayoutStartupCheck {
                     Touch(Required<IModelListView>(views, type.Name + "_LookupListView", type, "a lookup columns spec").Columns);
             });
         }
+        // VIEW-001: every view declared in code, each in its own attempt. A missing one is XLB004: adding it failed and was logged.
+        foreach (var (id, declared) in LayoutRegistry.Views)
+            Attempt(() => CheckDeclared(views, id, declared));
         // A throwing columns factory fails the ListView and the lookup attempt alike; report it once.
         var distinct = failures.Distinct().ToList();
         if (distinct.Count == 1) throw new LayoutSpecException(distinct[0]);
@@ -84,6 +88,27 @@ public static class LayoutStartupCheck {
             }
         }
     }
+
+    // VIEW-001: one declared view. Everything is checked again here rather than trusted from the updater: XAF marks a node
+    // generated even when an updater throws, so only touching the view again would let a broken factory, or a declaration
+    // rejected when the views were added, pass a later check.
+    internal static void CheckDeclared(IModelViews views, string id, DeclaredView declared) {
+        if (declared.Conflict is not null) throw DeclaredViewsUpdater.ConflictError(id, declared);
+        if (declared.Detail is not null) {
+            var view = Marked(Required<IModelDetailView>(views, id, declared.Type, $"a declared DetailView '{id}'"), id);
+            _ = LayoutSpecResolver.DetailForView(view, declared.Type);
+            Touch(view.Layout);
+        }
+        else {
+            var view = Marked(Required<IModelListView>(views, id, declared.Type, $"a declared ListView '{id}'"), id);
+            _ = LayoutSpecResolver.DeclaredColumns(view, declared.Type);
+            Touch(view.Columns);
+        }
+    }
+
+    // A view the declarations updater did not add holds the id for another reason: the declaration was rejected (XLB005).
+    static TView Marked<TView>(TView view, string id) where TView : class, IModelView =>
+        ((ModelNode)(object)view).GetValue<bool>(DeclaredViewsUpdater.Marker) ? view : throw DeclaredViewsUpdater.TakenIdError(id);
 
     static TView Required<TView>(IModelViews views, string id, Type type, string what) where TView : class, IModelView =>
         views[id] as TView ?? throw new LayoutSpecException($"XLB004 {type.Name} has {what} but the application model has no view '{id}'.");

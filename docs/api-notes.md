@@ -142,6 +142,14 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   lines 138-146, `IsParentProperty`). A view that exists only in a difference layer (module XAFML, a
   Model Editor clone) runs only `ModelNodesDefaultInterfaceGenerator`, never its own nodes generator
   or that generator's updaters (`Model/Core/ModelNode.cs` lines 2186-2206).
+- **Views declared in code (VIEW-001).** DevExpress's own modules add a view to the generated layer
+  from a `ModelNodesGeneratorUpdater<ModelViewsNodesGenerator>`: `views.AddNode<IModelDetailView>(id)`
+  and `ModelClass = …`, after which XAF generates its items and layout on demand
+  (`DevExpress.ExpressApp.Dashboards/GeneratorUpdaters/DashboardsViewsNodesGenerator.cs` lines 44-70,
+  `DevExpress.ExpressApp.ReportsV2.Blazor/Module.cs` lines 152-164). `DeclaredViewsUpdater` does the
+  same for `LayoutRegistry.AddDetailView`/`AddListView`, so the layout and columns generators, and this
+  module's updaters, run for those views. The in-process model confirms it: before the updaters looked
+  views up by id, a declared DetailView came back with XAF's stock `SimpleEditors` layout.
 
 - `IModelColumn : IModelMemberViewItem`: `int Width`, `DevExpress.Data.ColumnSortOrder SortOrder`,
   `int SortIndex`, `int GroupIndex`, `GroupInterval GroupInterval` (line 146). `Index` comes from

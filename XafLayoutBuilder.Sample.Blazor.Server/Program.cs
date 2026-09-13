@@ -28,6 +28,8 @@ public class Program : IDesignTimeApplicationFactory {
             DevExpress.ExpressApp.Blazor.Editors.LookupPropertyEditor.DefaultUseViewMode = true;
             DevExpress.ExpressApp.FrameworkSettings.DefaultSettingsCompatibilityMode = DevExpress.ExpressApp.FrameworkSettingsCompatibilityMode.Latest;
             DevExpress.ExpressApp.Security.SecurityStrategy.AutoAssociationReferencePropertyMode = DevExpress.ExpressApp.Security.ReferenceWithoutAssociationPermissionsMode.AllMembers;
+            // Sample: a second Order DetailView and ListView declared in code (VIEW-001), registered before the model is built.
+            XafLayoutBuilder.Sample.Module.SampleViews.Register();
             // E2E fixture: register a layout that fails XLB001, to prove the diagnostics fire at startup.
             if(ContainsArgument(args, "break-layout")) {
                 XafLayoutBuilder.Sample.Module.BrokenLayouts.Register();

@@ -78,6 +78,12 @@ ListView whose element type is the type (XAF marks those with `NestedViewMemberI
 view the reference back to the owner stays hidden, as the stock generator keeps it, even when the
 spec lists that column.
 
+A further DetailView or ListView of a class is declared in code with `LayoutRegistry.AddDetailView<T>`
+or `AddListView<T>`. `DeclaredViewsUpdater`, an updater of `ModelViewsNodesGenerator`, adds those
+views to the generated layer the way DevExpress's Dashboards and Reports modules add theirs, and both
+updaters apply a declared view's own spec by its id. Views defined only in XAFML cannot be served this
+way: XAF never runs their layout or columns generator, so no updater of it is called either.
+
 Unlike the DetailView, the generated columns are kept. Listed columns get their order, width,
 caption and sort. Every other column is set to index -1: not shown, still offered by the column
 chooser. Any default sort on those columns is cleared, because the stock generator sorts the

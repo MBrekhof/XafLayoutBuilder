@@ -25,6 +25,8 @@ public sealed class ApplicationModelFixture : IDisposable {
     public ApplicationModelFixture() {
         // A layout error throws where the model is read instead of going to the trace log.
         XafLayoutBuilderModule.FailFastOnLayoutErrors = true;
+        // Declared views are added when XAF generates the Views node, so they have to be registered before the model exists.
+        ModelTestDeclaredViews.Register();
         var factory = new DesignerModelFactory();
         var module = new ModelTestModule();
         Model = factory.CreateApplicationModel(module, factory.CreateModulesManager(module, AppContext.BaseDirectory), ModelStoreBase.Empty);

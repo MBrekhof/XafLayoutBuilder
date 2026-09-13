@@ -10,6 +10,8 @@ using Microsoft.Playwright;
 //           the Lines tab's nested ListView follows OrderLine's columns spec without the Order back-reference (VIEW-001)
 //   E2E 2   Order_ListView column order, OrderDate-descending sort, hidden column offered by the column chooser
 //   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
+//   VIEW-001 Order_Compact_ListView and Order_Compact_DetailView, declared in code by the sample, show their own columns
+//            and layout
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
 //   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder (it also hides the Customer column)
 //   E2E 5   Export Layout To Code prints OrderDate under Details and hides Customer, but not the never-mentioned Notes
@@ -235,6 +237,25 @@ try
     Assert(!string.Join("\n", dropdownLines).Contains("Order Date"), "lookup does not show Order Date");
     Assert(dropdownLines.Any(l => l.Contains("Acme Corp")), "lookup rows show the Customer column's values");
     await page.Keyboard.PressAsync("Escape");
+
+    Step("VIEW-001: a ListView declared in code shows its own columns");
+    await OpenListView(page, "Order_Compact_ListView", "ORD-001");
+    var compactHeaders = await GridHeaders(page);
+    Assert(string.Join(",", compactHeaders) == "Number,Order Date",
+        $"Order_Compact_ListView, declared with LayoutRegistry.AddListView, shows Number, Order Date (got {string.Join(",", compactHeaders)})");
+
+    Step("VIEW-001: a DetailView declared in code renders its own layout");
+    var ord001Key = SqlScalar("SELECT LOWER(CAST(ID AS NVARCHAR(36))) FROM Orders WHERE Number = 'ORD-001'")
+        ?? throw new Exception("ORD-001 not found in the sample database");
+    // XAF Blazor opens a DetailView at "{viewId}/{objectKey}" (dxdocs, Ways to Display a View).
+    await page.GotoAsync($"{BaseUrl}/Order_Compact_DetailView/{ord001Key}", new() { WaitUntil = WaitUntilState.NetworkIdle });
+    await page.WaitForFunctionAsync("() => [...document.querySelectorAll('input')].some(i => i.value === 'ORD-001')", null, new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09a-declared-detailview.png") });
+    var compactText = await page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First.InnerTextAsync();
+    Assert(compactText.Contains("Compact order") && compactText.Contains("Order Date"),
+        $"Order_Compact_DetailView, declared with LayoutRegistry.AddDetailView, shows its Compact order group (got {compactText.Replace('\n', ' ')})");
+    Assert(!compactText.Contains("Notes") && !compactText.Contains("Customer"), "Order_Compact_DetailView leaves out what its declared layout hides");
 
     Step("E2E 5a: exporting the untouched builder layout reproduces the source (section 6 round trip)");
     await OpenOrd001Detail(page);

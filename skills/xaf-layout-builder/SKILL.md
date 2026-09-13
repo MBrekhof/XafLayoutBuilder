@@ -82,6 +82,15 @@ one `LayoutSpecs` document (`LayoutSpecJson.Serialize(new LayoutSpecs(detail, co
 file Download Layout JSON saves). The JSON is read when a view is built, each half on its own, so
 malformed JSON or a half whose `typeName` is another type is a layout error like the others.
 
+A further DetailView or ListView of a class, with its own id, is declared in code before the
+application model is built: `LayoutRegistry.AddDetailView<Order>("Order_Compact_DetailView", () =>
+LayoutBuilder<Order>.Create()...Build())` or `AddListView<Order>(id, () => ...)`. The module adds the
+view to the generated layer, so navigation items, view variants and `ShowViewParameters` can open it
+by id, and its spec is checked at startup like the default views'. A `Lookup(...)` in a declared
+ListView's spec is ignored. Do not try to give a builder layout to a view that exists only in XAFML
+(a Model Editor clone): XAF never runs the layout or columns generator for it. The class's
+`{Type}_ListView` spec also shapes every nested ListView of the class (see the ListView surface).
+
 ## DetailView surface
 
 - `LayoutBuilder<T>.Create()`, then `.Group(id, g => ...)`, `.Tabs(id, t => ...)`, `.Hide(x => x.M)`,
@@ -157,7 +166,9 @@ layout looks like a view that silently ignores its `.Layout.cs`: check the log.
   a member needs no placing but can still be placed.
 - XLB002: a visible member is neither placed nor hidden.
 - XLB003: a column names a collection or something that is not a member.
-- XLB004: a type has a spec but no default view.
+- XLB004: a type has a spec but no default view, or a declared view could not be added.
+- XLB005: a view declared with `AddDetailView`/`AddListView` has a blank id, one another view already has, or one
+  also declared for another class or kind of view. Declaring the same view again replaces it.
 
 ## When you change a business class
 

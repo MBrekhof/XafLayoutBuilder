@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
 - VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
 - CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
 - 0.2.0 published to the local feed, with everything below.
@@ -162,7 +163,9 @@ file.
    `LayoutRegistry.Register<T>(detail, columns)` for types you do not own. Registration checks
    nothing: every rule is applied when the view is built, under `FailFastOnLayoutErrors`. Pass
    factories (`Register<T>(() => ..., () => ...)`) when building the spec could throw, or
-   `RegisterJson<T>(() => json)` for a layout kept as a `LayoutSpecs` JSON document.
+   `RegisterJson<T>(() => json)` for a layout kept as a `LayoutSpecs` JSON document. A further view
+   of a class, with its own id, is `LayoutRegistry.AddDetailView<T>(viewId, () => ...)` or
+   `AddListView<T>(viewId, () => ...)`, registered before the application model is built.
 4. Optionally set `XafLayoutBuilderModule.EnableExport` from your configuration, so administrators
    see the export action without a debugger attached. Never from an environment variable.
 5. Set `XafLayoutBuilderModule.FailFastOnLayoutErrors` from your configuration: on in development
@@ -178,7 +181,8 @@ The full surface, the rules and the checklist for changing a class are in the sk
 | XLB001 | A placed member has no view item, because it is `[Browsable(false)]` or hidden with `[HideInUI]`. `[VisibleInDetailView(false)]` keeps the view item, so such a member can still be placed. |
 | XLB002 | A visible member is neither placed nor hidden in the DetailView layout. |
 | XLB003 | A column names a collection, or something that is not a member of the type. |
-| XLB004 | A type has a spec but no default view to apply it to. |
+| XLB004 | A type has a spec but no default view to apply it to, or a declared view could not be added. |
+| XLB005 | A view declared in code has a blank id, an id another view already has, or an id also declared for another class or kind of view. Declaring the same view again replaces it. |
 
 ## How it works
 
@@ -208,8 +212,10 @@ specs, and a printer turns specs into the builder C#.
 
 - Only generated views are handled: `{Type}_DetailView`, `{Type}_ListView`, `{Type}_LookupListView`
   and every nested ListView of the type (the grid of a collection of it inside another class, which
-  takes the type's columns spec without the reference back to the owner). View variants and custom
-  views are left to XAF.
+  takes the type's columns spec without the reference back to the owner). A further DetailView or
+  ListView of a class is declared in code with `LayoutRegistry.AddDetailView<T>` or `AddListView<T>`;
+  a view that exists only in XAFML (a Model Editor clone, say) is left to XAF, because XAF never runs
+  the layout or columns generator for it.
 - Member lambdas must be simple member access, except that a column may follow references:
   `Column(x => x.Customer.City)`. A detail item stays simple; `Item(x => x.Customer.Name)` is rejected.
 - Builder changes appear after a restart. XAF's model cache plays no part in Blazor: XAF creates

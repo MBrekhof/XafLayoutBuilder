@@ -38,17 +38,21 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
 
     static void Apply(ModelNode node) {
         if (node.Parent is not IModelListView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
-        var spec = LayoutSpecResolver.Columns(type);
-        if (spec is null) return;
-
-        var isLookup = view.GetValue<bool>(ModelViewsNodesGenerator.IsLookupListView);
-        // VIEW-001: a nested ListView, the grid of a collection of this type inside another class, takes the type's spec too.
-        var nestedIn = view.GetValue<IMemberInfo>(ModelViewsNodesGenerator.NestedListViewMemberInfo);
-        if (isLookup) {
-            if (view.Id != type.Name + "_LookupListView" || spec.Lookup is null) return; // no Lookup(): XAF's default stays
-            spec = spec.Lookup;
+        // VIEW-001: a ListView declared in code has its own columns; every other view takes the type's.
+        IMemberInfo? nestedIn = null;
+        var spec = LayoutSpecResolver.DeclaredColumns(view, type);
+        if (spec is null) {
+            spec = LayoutSpecResolver.Columns(type);
+            if (spec is null) return;
+            var isLookup = view.GetValue<bool>(ModelViewsNodesGenerator.IsLookupListView);
+            // A nested ListView, the grid of a collection of this type inside another class, takes the type's spec too.
+            nestedIn = view.GetValue<IMemberInfo>(ModelViewsNodesGenerator.NestedListViewMemberInfo);
+            if (isLookup) {
+                if (view.Id != type.Name + "_LookupListView" || spec.Lookup is null) return; // no Lookup(): XAF's default stays
+                spec = spec.Lookup;
+            }
+            else if (view.Id != type.Name + "_ListView" && nestedIn is null) return; // ponytail: variants and XAFML views are XAF's
         }
-        else if (view.Id != type.Name + "_ListView" && nestedIn is null) return; // ponytail: variants and custom views are XAF's
 
         var columns = (IModelColumns)node;
         // Check first, change second (see DetailViewLayoutUpdater): every member that will need a new column has to be

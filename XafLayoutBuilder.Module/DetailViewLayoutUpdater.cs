@@ -30,8 +30,8 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
 
     static void Apply(ModelNode node) {
         if (node.Parent is not IModelDetailView view || view.ModelClass?.TypeInfo?.Type is not { } type) return;
-        if (view.Id != type.Name + "_DetailView") return; // ponytail: default DetailView only; variants/nested ids are phase 2
-        var spec = LayoutSpecResolver.Detail(type);
+        // {Type}_DetailView takes the type's layout, a view declared in code its own (VIEW-001); anything else stays XAF's.
+        var spec = LayoutSpecResolver.DetailForView(view, type);
         if (spec is null) return;
 
         var layout = (IModelViewLayout)node;

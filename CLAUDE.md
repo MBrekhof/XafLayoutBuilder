@@ -23,7 +23,8 @@ view's current layout back to the same fluent C#.
 - `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
   into the catch-all group, and columns), `Order`
   (+ `Order.Layout.cs`, the start document's section 4 example verbatim), `OrderLine` (+
-  `OrderLine.Layout.cs`, columns that also shape Order's Lines tab, VIEW-001),
+  `OrderLine.Layout.cs`, columns that also shape Order's Lines tab, VIEW-001), `SampleViews` (a compact
+  Order DetailView and ListView declared in code, registered by the host, VIEW-001),
   `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test),
   `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
 - `XafLayoutBuilder.Sample.Blazor.Server`: template host. `--break-layout` registers the broken

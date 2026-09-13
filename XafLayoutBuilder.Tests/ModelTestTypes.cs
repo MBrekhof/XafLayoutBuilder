@@ -68,6 +68,25 @@ public class ModelTestOrder : ISupportViewLayoutCustomization {
             .Build();
 }
 
+// VIEW-001: views declared in code for ModelTestOrder, registered by ApplicationModelFixture before it builds the model.
+public static class ModelTestDeclaredViews {
+    public const string DetailViewId = "ModelTestOrder_Compact_DetailView";
+    public const string ListViewId = "ModelTestOrder_Compact_ListView";
+
+    public static void Register() {
+        XafLayoutBuilder.Module.LayoutRegistry.AddDetailView<ModelTestOrder>(DetailViewId, () =>
+            LayoutBuilder<ModelTestOrder>.Create()
+                .Group("Compact", g => g.Item(x => x.Number).Item(x => x.OrderDate))
+                .Hide(x => x.Customer).Hide(x => x.Notes).Hide(x => x.SyncToken).Hide(x => x.Lines)
+                .Build());
+        XafLayoutBuilder.Module.LayoutRegistry.AddListView<ModelTestOrder>(ListViewId, () =>
+            ListViewColumnsBuilder<ModelTestOrder>.Create()
+                .Column(x => x.OrderDate)
+                .Column(x => x.Number)
+                .Build());
+    }
+}
+
 // Places one member and lets the catch-all group collect the rest.
 [DomainComponent]
 public class ModelTestContact : ISupportViewLayoutCustomization {

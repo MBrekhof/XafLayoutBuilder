@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using DevExpress.ExpressApp.Model;
+using DevExpress.ExpressApp.Model.Core;
 using XafLayoutBuilder.Core;
 
 namespace XafLayoutBuilder.Module;
@@ -71,11 +73,49 @@ public static class LayoutRegistry {
             ? spec
             : throw new LayoutSpecException($"Layout JSON registered for {typeof(T).FullName} describes {typeName(spec)}.");
 
+    /// <summary>Views declared in code (VIEW-001), by view id.</summary>
+    internal static readonly ConcurrentDictionary<string, DeclaredView> Views = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Declares a DetailView of <typeparamref name="T"/> with its own id and layout, next to the class's default one
+    /// (VIEW-001). The module adds it to the generated layer, so a navigation item, a view variant or ShowViewParameters can
+    /// open it by id, and its layout is checked at startup like any other. Register before the application model is built.
+    /// A view that exists only in XAFML cannot take a builder layout: XAF never runs the layout generator, or its updaters,
+    /// for such a view. Nothing is checked here; a blank or taken id is XLB005 when the view is added.
+    /// </summary>
+    public static void AddDetailView<T>(string viewId, Func<DetailLayoutSpec?> layout) => AddView(viewId, new(typeof(T), layout, null));
+
+    /// <summary>
+    /// Declares a ListView of <typeparamref name="T"/> with its own id and columns (VIEW-001), like
+    /// <see cref="AddDetailView{T}"/>. A <c>Lookup(...)</c> in its spec is ignored: the lookup belongs to the class.
+    /// </summary>
+    public static void AddListView<T>(string viewId, Func<ListColumnsSpec?> columns) => AddView(viewId, new(typeof(T), null, columns));
+
+    // The same view declared again (a module constructor runs once per application instance) replaces the earlier factory,
+    // like Register. The same id for another class or another kind of view is kept as a conflict and reported as XLB005
+    // when the views are added, instead of the later declaration silently winning.
+    static void AddView(string? viewId, DeclaredView view) {
+        Views.AddOrUpdate(viewId ?? "", view, (_, earlier) =>
+            earlier.Conflict is null && earlier.Type == view.Type && (earlier.Detail is null) == (view.Detail is null)
+                ? view
+                : view with { Conflict = earlier.Conflict ?? earlier.Describe });
+        Interlocked.Increment(ref version);
+    }
+
     /// <summary>Test hook. Not needed by applications.</summary>
     public static void Clear() {
         Entries.Clear();
+        Views.Clear();
         Interlocked.Increment(ref version);
     }
+}
+
+/// <summary>
+/// A view declared in code: the class it shows, and either a layout factory or a columns factory. <see cref="Conflict"/>
+/// describes an earlier declaration of the same id for another class or kind of view.
+/// </summary>
+internal sealed record DeclaredView(Type Type, Func<DetailLayoutSpec?>? Detail, Func<ListColumnsSpec?>? Columns, string? Conflict = null) {
+    public string Describe => $"a {(Detail is not null ? "DetailView" : "ListView")} of {Type.Name}";
 }
 
 /// <summary>
@@ -98,6 +138,27 @@ internal static class LayoutSpecResolver {
             ? FromRegistry(type, registered.Columns, LayoutSpecChecks.Validate, s => s.Members())
             : columnSpecs.GetOrAdd(type, static t => FromInterface<ListColumnsSpec>(
                 t, nameof(ISupportViewLayoutCustomization.BuildListViewColumns), s => s.TypeName, LayoutSpecChecks.Validate));
+
+    /// <summary>
+    /// The layout for a DetailView by its id: a declared view's own (VIEW-001), else the type's own for {Type}_DetailView,
+    /// else none (variants and views defined in XAFML keep XAF's).
+    /// </summary>
+    public static DetailLayoutSpec? DetailForView(IModelView view, Type type) =>
+        IsDeclared(view, type, out var declared)
+            ? FromRegistry(type, declared.Detail, LayoutSpecChecks.Validate, s => s.Members())
+            : view.Id == type.Name + "_DetailView" ? Detail(type) : null;
+
+    /// <summary>The columns of a ListView declared in code (VIEW-001), or null when the view is not a declared one.</summary>
+    public static ListColumnsSpec? DeclaredColumns(IModelView view, Type type) =>
+        IsDeclared(view, type, out var declared)
+            ? FromRegistry(type, declared.Columns, LayoutSpecChecks.Validate, s => s.Members())
+            : null;
+
+    // Only a view DeclaredViewsUpdater added carries its marker: a declaration rejected for a taken id (XLB005) must not hand
+    // its spec to the view that already had that id.
+    static bool IsDeclared(IModelView view, Type type, out DeclaredView declared) =>
+        LayoutRegistry.Views.TryGetValue(view.Id, out declared!) && declared.Type == type
+        && ((ModelNode)view).GetValue<bool>(DeclaredViewsUpdater.Marker);
 
     // Registration checks nothing, so everything is checked here, inside the fail-fast policy: the factory itself, the
     // structural rules, and that every member the spec names exists on the registered type.
