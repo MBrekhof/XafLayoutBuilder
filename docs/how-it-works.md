@@ -215,9 +215,10 @@ agree, and the gate asserts exactly that.
 
 ## The user layer in XAF Blazor
 
-E2E 4 to 6 needed a user difference. XAF Blazor's layout editor moves elements only by drag and
-drop, so the harness writes the difference the editor would persist. Three XAF behaviours shaped
-that:
+E2E 4 to 6 need a user difference. Since E2E4-001, E2E 4 makes it the way a user does: a pointer
+drag in XAF Blazor's layout editor, which saves into the user's model differences within the
+session. Steps that need a difference the editor cannot produce (DIFF-001's stock layout path) still
+write it directly, and three XAF behaviours shape that:
 
 - `ModelDifferenceDbStore` keys the row by the security user id and the context `Blazor`; the
   aspect with an empty name holds the XAFML.
@@ -278,7 +279,8 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
   `FreezeColumnIndices` for columns added later.
 - Sibling-only id uniqueness, frozen specs and the registry member check: Codex review of sessions
   2 and 3.
-- E2E 4 writes user XAFML instead of driving the drag-and-drop editor: session 6, for effort.
+- E2E 4 wrote user XAFML instead of driving the drag-and-drop editor (session 6, for effort) until
+  E2E4-001 showed that a stepped pointer drag works and the editor saves within the session.
 - No copy button in the export popup: session 6, platform neutrality of the module.
 - No `ModelNodesGenerator` subclasses were needed, so `BACKBURNER.md` does not exist.
 - Check before changing the model: findings from putting the POC into WLNCentral (2026-09-12),

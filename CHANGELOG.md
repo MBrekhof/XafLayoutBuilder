@@ -6,6 +6,7 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
 - VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
 - VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
 - CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.

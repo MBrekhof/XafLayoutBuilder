@@ -306,7 +306,9 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 - A user-layer XAFML that moves an item: under `<LayoutGroup Id="Header">` write
   `<LayoutItem Id="OrderDate" Removed="True" />`, under the target group
   `<LayoutItem Id="OrderDate" ViewItem="OrderDate" Index="1" IsNewNode="True" />`. Verified by
-  E2E 4-6: the layout renders, exports and resets accordingly.
+  E2E 4-6: the layout renders, exports and resets accordingly. The layout editor writes this same
+  shape, plus a `RelativeSize` on every item of the groups it touched (read from `ModelDifferenceAspects`
+  after a drag, E2E4-001), which the export then prints as `relativeSize:` arguments.
 - The user layer also stores `DocumentManagerState` (the open tabs); a fresh circuit restores the
   last active view, which can interrupt a Playwright navigation.
 - Actions in `PredefinedCategory.Tools` render as a "Tools" tab next to Home and View in the
@@ -315,7 +317,12 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `AddNonPersistent()` in the host is required (the template has it).
 - The Blazor layout editor (`Layout/LayoutEditor/LayoutEditor.razor`) moves elements only by
   drag-and-drop; its context menu offers hide/show text, rename, best fit, collapsible toggles and
-  reset. The E2E therefore writes the user-layer XAFML directly.
+  reset. Measured in the sample (E2E4-001): the form's context menu (right-click an empty area) has
+  Customize Layout and Reset Layout; the Customization window carries the class
+  `xaf-layouteditor-menu` with a Layout Tree View and Hidden Items; no element has a `draggable`
+  attribute, so the drag is pointer-event based and Playwright drives it with mouse down, stepped
+  moves and mouse up; closing the window leaves the change saved in the user's `ModelDifferences`
+  row in the same session. A grid header's context menu has Hide This Column.
 - `IModelMemberViewItem.PropertyName` is the bound member; the node `Id` is free text and only
   usually the same. Anything printed as a member lambda must come from `PropertyName`
   (`CommonInterfaces.cs` 665).

@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
 - VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
 - VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
 - CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
@@ -269,9 +270,10 @@ specs, and a printer turns specs into the builder C#.
   the catch-all group, a rejected spec leaving XAF's own layout intact, column order through the
   generated index, nested columns, the lookup, and the exporter round trip. What only a running app
   shows (rendering, the user layer, the Blazor actions, startup failure) stays in the E2E gate.
-- E2E 4 writes the user-layer XAFML that XAF's layout editor would persist, rather than driving the
-  editor's drag and drop, and restarts the host around the write because XAF Blazor saves the user
-  model through a deferred dispatcher.
+- E2E 4 drives XAF's layout editor the way a user does (right-click, Customize Layout, a pointer drag
+  of Order Date into Details) and hides a grid column from the header menu, in one session: the
+  editor saves into the user's model differences as it goes. The DIFF-001 step still writes a user
+  difference directly, because it needs one aimed at a path the editor cannot produce.
 - The startup check runs once per process for a given application type and set of registered layouts, not once per
   Blazor circuit. Registering a layout at runtime makes the next application validate again.
 - Only the combination above was tested. The sample seeds `Admin` and `User` with empty passwords

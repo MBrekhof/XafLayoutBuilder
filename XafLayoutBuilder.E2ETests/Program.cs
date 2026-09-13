@@ -13,7 +13,8 @@ using Microsoft.Playwright;
 //   VIEW-001 Order_Compact_ListView and Order_Compact_DetailView, declared in code by the sample, show their own columns
 //            and layout
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
-//   E2E 4   a user-layer difference that moves OrderDate into Details wins over the builder (it also hides the Customer column)
+//   E2E 4   Admin drags OrderDate into Details in XAF's layout editor and hides the Customer column from the grid header
+//           menu (E2E4-001); the user layer wins over the builder
 //   E2E 5   Export Layout To Code prints OrderDate under Details and hides Customer, but not the never-mentioned Notes
 //   E2E 7   Copy Layout To Clipboard (Blazor add-on, Tools tab) puts the printed class on the clipboard
 //   E2E 9   Download Layout File hands over Order.Layout.cs with that same text
@@ -288,50 +289,56 @@ try
     Assert(NormalizeCode(BuilderExpression(customerExport, "LayoutBuilder<Customer>.Create()")) == NormalizeCode(BuilderExpression(customerSource, "LayoutBuilder<Customer>.Create()")),
         "exported Customer DetailView builder equals the one in Customer.Layout.cs");
 
-    Step("E2E 4: the user layer wins: Admin moves OrderDate into Details");
-    // XAF Blazor's layout editor persists its result through Application.SaveModelChanges into the user
-    // ModelDifference store (ContextId "Blazor"). Driving its drag-and-drop with Playwright is out of proportion for
-    // the POC, so the harness writes the same difference XML the editor would. E2E 6 deletes it again.
+    Step("E2E 4: the user layer wins: Admin drags OrderDate into Details in XAF's layout editor");
+    // E2E4-001: the way a user does it. Right-click an empty area of the form, Customize Layout, drag Order Date below
+    // Notes, close the Customization window. DevExpress drags with pointer events (no draggable attribute), so the mouse
+    // moves in steps. The editor saves into Admin's user model differences within the session, so no restart is needed.
+    // E2E 6 deletes the difference again.
     var adminId = SqlScalar("SELECT LOWER(CAST(ID AS NVARCHAR(36))) FROM PermissionPolicyUser WHERE UserName = 'Admin'")
         ?? throw new Exception("Admin user not found in the sample database");
-    const string MoveOrderDateXml = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <Application>
-          <Views>
-            <DetailView Id="Order_DetailView">
-              <Layout>
-                <LayoutGroup Id="Main">
-                  <LayoutGroup Id="Header">
-                    <LayoutItem Id="OrderDate" Removed="True" />
-                  </LayoutGroup>
-                  <LayoutGroup Id="Details">
-                    <LayoutItem Id="OrderDate" ViewItem="OrderDate" Index="1" IsNewNode="True" />
-                  </LayoutGroup>
-                </LayoutGroup>
-              </Layout>
-            </DetailView>
-            <ListView Id="Order_ListView">
-              <Columns>
-                <ColumnInfo Id="Customer" Index="-1" />
-              </Columns>
-            </ListView>
-          </Views>
-        </Application>
-        """;
-    KillApp(ref app); // the running host's deferred save would otherwise flush its in-memory user model over our rows
-    ResetUserModel(adminId);
-    Sql($"""
-        DECLARE @d UNIQUEIDENTIFIER = NEWID();
-        INSERT INTO ModelDifferences (ID, UserId, ContextId, Version, GCRecord) VALUES (@d, '{adminId}', 'Blazor', 0, 0);
-        INSERT INTO ModelDifferenceAspects (ID, Name, Xml, OwnerID, GCRecord) VALUES (NEWID(), '', @xml, @d, 0);
-        """, ("@xml", MoveOrderDateXml)); // GCRecord = 0: XAF's deferred-deletion query filter hides NULL rows
-    app = await RestartApp(app, blazorProj, appOutput);
+    await OpenOrd001Detail(page);
+    await WaitForNoLoading(page);
+    var editedForm = page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First;
+    var formBox = await editedForm.BoundingBoxAsync() ?? throw new Exception("the Order form has no bounding box");
+    // The strip at the bottom of the form, under the Lines grid, is empty form area.
+    await page.Mouse.ClickAsync(formBox.X + formBox.Width / 2, formBox.Y + formBox.Height - 8, new() { Button = MouseButton.Right });
+    await page.GetByText("Customize Layout", new() { Exact = true }).First.ClickAsync();
+    var layoutEditor = page.Locator(".xaf-layouteditor-menu").First;
+    await layoutEditor.GetByText("Layout Tree View", new() { Exact = true }).WaitForAsync(new() { Timeout = 15_000 });
+    var orderDateItem = await LayoutItemBox(editedForm, "orderdate");
+    var notesItem = await LayoutItemBox(editedForm, "notes");
+    var (fromX, fromY) = (orderDateItem.X + orderDateItem.Width / 2, orderDateItem.Y + orderDateItem.Height / 2);
+    var (toX, toY) = (notesItem.X + notesItem.Width / 2, notesItem.Y + notesItem.Height + 4); // just below Notes, inside Details
+    await page.Mouse.MoveAsync(fromX, fromY);
+    await page.Mouse.DownAsync();
+    for (var step = 1; step <= 20; step++) {
+        await page.Mouse.MoveAsync(fromX + (toX - fromX) * step / 20, fromY + (toY - fromY) * step / 20);
+        await page.WaitForTimeoutAsync(40);
+    }
+    await page.Mouse.UpAsync();
+    await page.WaitForFunctionAsync("() => /Details\\s+Notes\\s+Order Date/.test(document.querySelector('.xaf-layouteditor-menu')?.innerText ?? '')",
+        null, new() { Timeout = 10_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-10a-layout-editor-after-drag.png") });
+    await layoutEditor.Locator("button").First.ClickAsync(); // the Customization window's close button
+    await layoutEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+
+    // The same user hides the Customer column from the grid header's context menu; E2E 5 checks the export (EXPORT-001).
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    await page.Locator("[role=tabpanel].dxbl-active th", new() { HasText = "Customer" }).First.ClickAsync(new() { Button = MouseButton.Right });
+    await page.GetByText("Hide This Column", new() { Exact = true }).First.ClickAsync();
+    var headersAfterHide = await GridHeaders(page);
+    for (var attempt = 0; attempt < 10 && headersAfterHide.Contains("Customer"); attempt++) {
+        await page.WaitForTimeoutAsync(300);
+        headersAfterHide = await GridHeaders(page);
+    }
+    Assert(string.Join(",", headersAfterHide) == "Number,Order Date", $"Hide This Column hid Customer (got {string.Join(",", headersAfterHide)})");
+
     await OpenOrd001Detail(page);
     Console.WriteLine("    user diff rows for Admin: " + SqlScalar($"SELECT COUNT(*) FROM ModelDifferences WHERE UserId = '{adminId}'")
         + ", aspect mentions OrderDate: " + SqlScalar($"SELECT MAX(CASE WHEN CAST(a.Xml AS NVARCHAR(MAX)) LIKE '%OrderDate%' THEN 1 ELSE 0 END) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'"));
     await WaitForNoLoading(page);
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-10-user-layer-orderdate-in-details.png") });
-    Assert(await OrderDateGroup(page) == "Details", "after reload OrderDate renders inside the Details group (user layer over builder)");
+    Assert(await OrderDateGroup(page) == "Details", "after the drag OrderDate renders inside the Details group (user layer over builder)");
 
     Step("E2E 5: Export Layout To Code shows the merged layout as builder C#");
     var exported = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-11-export-popup.png"));
@@ -339,7 +346,8 @@ try
     Console.WriteLine("    exported:\n" + string.Join("\n", exported.Split('\n').Select(l => "      " + l.TrimEnd())));
     Assert(exported.Contains("public partial class Order : ISupportViewLayoutCustomization"), "export is the Order partial class");
     var detailsBlock = exported[exported.IndexOf(".Group(\"Details\"", StringComparison.Ordinal)..exported.IndexOf(".Tabs(\"Tabs\"", StringComparison.Ordinal)];
-    Assert(detailsBlock.Contains(".Item(x => x.OrderDate)"), "exported code places OrderDate inside the Details group");
+    // The layout editor also stores a relative size on every item of the groups it touched, so match the call's start.
+    Assert(detailsBlock.Contains(".Item(x => x.OrderDate"), "exported code places OrderDate inside the Details group");
     var headerBlock = exported[exported.IndexOf(".Group(\"Header\"", StringComparison.Ordinal)..exported.IndexOf(".Group(\"Details\"", StringComparison.Ordinal)];
     Assert(!headerBlock.Contains("OrderDate"), "exported Header group no longer contains OrderDate");
     Assert(exported.Contains(".TabFor(x => x.Lines, imageName: \"BO_Order_Item\")") && exported.Contains(".Hide(x => x.SyncToken)"),
@@ -771,6 +779,11 @@ static async Task OpenOrd001Detail(IPage page)
 }
 
 // "Header" when OrderDate shares its group with Number, "Details" when it shares it with Notes, else the group's id-ish header.
+// A layout item's box in the form: the form layout item element holding the member's xaf-item label (E2E4-001's drag).
+static async Task<LocatorBoundingBoxResult> LayoutItemBox(ILocator form, string member) =>
+    await form.Locator("dxbl-form-layout-item", new() { Has = form.Page.Locator($".xaf-item-{member}") }).First.BoundingBoxAsync()
+        ?? throw new Exception($"the form has no layout item for {member}");
+
 static async Task<string> OrderDateGroup(IPage page) =>
     await page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First.EvaluateAsync<string>(@"f => {
         const g = m => f.querySelector('label.xaf-item-' + m)?.closest('[role=group]');
