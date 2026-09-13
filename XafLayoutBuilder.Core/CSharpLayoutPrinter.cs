@@ -63,6 +63,7 @@ public static class CSharpLayoutPrinter {
             sb.AppendLine().Append(Pad(depth)).Append(".Column(x => x.").Append(PathIdent(c.Member));
             if (c.Width is { } w) sb.Append(", width: ").Append(w);
             if (c.SortOrder != ColumnSortOrder.None) sb.Append(", sort: ColumnSortOrder.").Append(c.SortOrder);
+            if (c.SortIndex is { } sortIndex) sb.Append(", sortIndex: ").Append(sortIndex);
             if (c.Caption is not null) sb.Append(", caption: ").Append(Quote(c.Caption));
             sb.Append(')');
         }

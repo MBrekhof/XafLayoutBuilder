@@ -78,6 +78,17 @@ public class ListViewColumnsBuilderTests {
         Assert.Equal("Customer.Name", Assert.Single(spec.Lookup!.Columns).Member);
     }
 
+    // SORT-001: sort priority can differ from column order.
+    [Fact]
+    public void SortIndex_SetsSortPriority_IndependentlyOfColumnOrder() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending, sortIndex: 1)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, sortIndex: 0)
+            .Column(x => x.Number)
+            .Build();
+        Assert.Equal(new int?[] { 1, 0, null }, spec.Columns.Select(c => c.SortIndex));
+    }
+
     [Fact]
     public void NestedPathThroughAMethodCall_IsRejected() {
         var ex = Assert.Throws<LayoutSpecException>(() => ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Customer!.Name.Trim()));

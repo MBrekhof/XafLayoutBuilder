@@ -125,18 +125,33 @@ public static class LayoutExporter {
             lookupView is null ? null : new ListColumnsSpec(type.FullName!, Columns(lookupView), Hidden(lookupView)));
         return (spec, skipped);
 
-        List<ColumnSpec> Columns(IModelListView v) => v.Columns
-            .Where(c => c.Index is >= 0)
-            .OrderBy(c => c.Index)
-            .Select(c => new { Column = c, Member = Simple(c) })
-            .Where(x => x.Member is not null)
-            .Select(c => new ColumnSpec(
-                c.Member!,
-                Explicit(c.Column, "Width") ? c.Column.Width : null,
-                c.Column.SortOrder switch { DxSort.Ascending => ColumnSortOrder.Ascending, DxSort.Descending => ColumnSortOrder.Descending, _ => ColumnSortOrder.None },
-                // Localizable like a group caption: compare with the member caption XAF falls back to.
-                c.Column.Caption != c.Column.ModelMember?.Caption ? c.Column.Caption : null))
-            .ToList();
+        List<ColumnSpec> Columns(IModelListView v) {
+            var shown = v.Columns
+                .Where(c => c.Index is >= 0)
+                .OrderBy(c => c.Index)
+                .Select(c => (Column: c, Member: Simple(c)))
+                .Where(x => x.Member is not null)
+                .ToList();
+            // SORT-001: sort priority ranked the way the Blazor grid sorts, grouped columns first by GroupIndex, then the rest
+            // by SortIndex. A grouped column keeps its SortOrder but has SortIndex -1 (docs/api-notes.md), so the stored
+            // index cannot be exported as it is. Grouping itself has no builder form and is not exported.
+            var sorted = shown.Where(x => x.Column.SortOrder != DxSort.None).Select(x => x.Column).ToList();
+            var priority = sorted
+                .OrderByDescending(c => c.GroupIndex >= 0)
+                .ThenBy(c => c.GroupIndex >= 0 ? c.GroupIndex : c.SortIndex)
+                .Select((c, rank) => (c, rank))
+                .ToDictionary(p => p.c, p => p.rank);
+            // Printed only when it differs from column order, so a spec that sorts in column order round-trips to the same text.
+            var explicitSortPriority = sorted.Where((c, position) => priority[c] != position).Any();
+            return shown.Select(x => new ColumnSpec(
+                    x.Member!,
+                    Explicit(x.Column, "Width") ? x.Column.Width : null,
+                    x.Column.SortOrder switch { DxSort.Ascending => ColumnSortOrder.Ascending, DxSort.Descending => ColumnSortOrder.Descending, _ => ColumnSortOrder.None },
+                    // Localizable like a group caption: compare with the member caption XAF falls back to.
+                    x.Column.Caption != x.Column.ModelMember?.Caption ? x.Column.Caption : null,
+                    explicitSortPriority && priority.TryGetValue(x.Column, out var rank) ? rank : null))
+                .ToList();
+        }
 
         List<string> Hidden(IModelListView v) => v.Columns
             .Where(c => c.Index is null or < 0)

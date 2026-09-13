@@ -110,6 +110,24 @@ public class SpecValidationTests {
         Assert.Contains("Ref.Nope, Nope.City", ex.Message);
     }
 
+    // SORT-001: an explicit sort priority belongs to a sorted column, is unique and not negative in its list, and is set on
+    // every sorted column of that list or on none.
+    [Fact]
+    public void RawColumns_SortIndexRules_Throw() {
+        Assert.Contains("'Number' has a sort index but no sort order", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [new ColumnSpec("Number", SortIndex: 0)], []))).Message);
+        Assert.Contains("sort index 0 is used twice", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [
+                new ColumnSpec("Number", SortOrder: ColumnSortOrder.Ascending, SortIndex: 0),
+                new ColumnSpec("Customer", SortOrder: ColumnSortOrder.Ascending, SortIndex: 0)], []))).Message);
+        Assert.Contains("on every sorted column or on none", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [
+                new ColumnSpec("Number", SortOrder: ColumnSortOrder.Ascending, SortIndex: 0),
+                new ColumnSpec("Customer", SortOrder: ColumnSortOrder.Ascending)], []))).Message);
+        Assert.Contains("negative sort index", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [new ColumnSpec("Number", SortOrder: ColumnSortOrder.Ascending, SortIndex: -1)], []))).Message);
+    }
+
     [Fact]
     public void BuilderOutput_AndTheSection4Example_AreValid() {
         LayoutSpecChecks.Validate(LayoutBuilderTests.Section4Detail());

@@ -128,6 +128,16 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 - `IModelColumn : IModelMemberViewItem`: `int Width`, `DevExpress.Data.ColumnSortOrder SortOrder`,
   `int SortIndex`, `int GroupIndex`, `GroupInterval GroupInterval` (line 146). `Index` comes from
   `IModelNode`.
+- **A grouped column keeps its sort order but not its sort index** (SORT-001). DxGrid never lets a
+  column hold both a `SortIndex` and a `GroupIndex` (`GridUtils.cs` 289-290), clears only
+  `GroupIndex` when a grouped column's sort is cleared (`GridColumnHelper.cs` 390-394), and XAF's
+  wrapper ignores a `SortIndex` set on a grouped column (`DxGridColumnWrapperBase.cs` 147-150).
+  `ColumnsListEditor.SynchronizeModel` copies all three into the model as they are (lines 93-99), and
+  grouping leaves `VisibleIndex` alone, so a grouped, shown column reads `SortOrder` set,
+  `SortIndex = -1`, `GroupIndex >= 0`. The grid sorts grouped columns first, by `GroupIndex`, then
+  the others by `SortIndex` (`GridColumnHelper.SortedColumns`, lines 75-79); the exporter ranks
+  sort priority the same way. Paths under `Components\Sources\Blazor\DevExpress.Blazor.Grid\Grid\`
+  and `DevExpress.ExpressApp\DevExpress.ExpressApp.Blazor\Editors\DxGridBase\`.
 - Lookup ListViews are marked with the node value `ModelViewsNodesGenerator.IsLookupListView`
   (`"IsLookupView"`); the columns generator branches on it. [`ModelListViewNodesGenerator.cs` 390-396]
 - **Index handling in the first layer:** after generating, if `node.IsInFirstLayer` the generator

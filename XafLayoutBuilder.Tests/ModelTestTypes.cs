@@ -97,3 +97,37 @@ public class ModelTestDegradedBroken : ISupportViewLayoutCustomization {
 
     public static ListColumnsSpec? BuildListViewColumns() => null;
 }
+
+// SORT-001: sorted by Customer, then ShipDate, while ShipDate is shown first.
+[DomainComponent]
+public class ModelTestShipment : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public ModelTestCustomer? Customer { get; set; }
+    public DateTime ShipDate { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestShipment>.Create()
+            .Column(x => x.ShipDate, sort: ColumnSortOrder.Descending, sortIndex: 1)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, sortIndex: 0)
+            .Column(x => x.Number)
+            .Build();
+}
+
+// SORT-001: sorted in column order; LayoutExporterTests groups ShipDate the way the Blazor grid stores it.
+[DomainComponent]
+public class ModelTestParcel : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public ModelTestCustomer? Customer { get; set; }
+    public DateTime ShipDate { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestParcel>.Create()
+            .Column(x => x.Number)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending)
+            .Column(x => x.ShipDate, sort: ColumnSortOrder.Descending)
+            .Build();
+}

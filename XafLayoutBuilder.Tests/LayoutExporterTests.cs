@@ -33,4 +33,32 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
         // Hidden and unmentioned columns look the same in the model, so the export hides every column it does not list.
         Assert.Subset(exported.HiddenMembers.ToHashSet(), source.HiddenMembers.ToHashSet());
     }
+
+    // SORT-001: when sort priority differs from column order the export keeps the explicit indexes; the Order round trip
+    // above covers the default, where it follows column order and nothing is printed.
+    [Fact]
+    public void ExportColumns_KeepsExplicitSortIndexes_WhenPriorityDiffersFromColumnOrder() {
+        var (exported, skipped) = LayoutExporter.ExportColumns(fixture.Class<ModelTestShipment>().DefaultListView, null);
+        Assert.Empty(skipped);
+        Assert.Equal(ModelTestShipment.BuildListViewColumns()!.Columns, exported.Columns);
+    }
+
+    // SORT-001, Codex review: the Blazor grid stores a grouped column with its SortOrder but SortIndex -1, and sorts it
+    // before every other column (docs/api-notes.md). The export ranks it the same way instead of printing sortIndex: -1.
+    [Fact]
+    public void ExportColumns_RanksAGroupedColumnFirst_InsteadOfExportingItsSortIndex() {
+        var view = fixture.Class<ModelTestParcel>().DefaultListView;
+        var shipDate = view.Columns[nameof(ModelTestParcel.ShipDate)];
+        shipDate.GroupIndex = 0;
+        shipDate.SortIndex = -1;
+
+        var (exported, _) = LayoutExporter.ExportColumns(view, null);
+
+        LayoutSpecChecks.Validate(exported);
+        Assert.Equal(
+            [new ColumnSpec(nameof(ModelTestParcel.Number)),
+             new ColumnSpec(nameof(ModelTestParcel.Customer), SortOrder: ColumnSortOrder.Ascending, SortIndex: 1),
+             new ColumnSpec(nameof(ModelTestParcel.ShipDate), SortOrder: ColumnSortOrder.Descending, SortIndex: 0)],
+            exported.Columns);
+    }
 }

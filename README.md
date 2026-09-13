@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
 - MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
 - NEST-001: columns may follow references, `Column(x => x.Customer.City)`, and export that way.
 - JSON-001: "Export Layout To JSON", "Download Layout JSON" and `LayoutRegistry.RegisterJson<T>`.
@@ -231,7 +232,8 @@ specs, and a printer turns specs into the builder C#.
 - A class that opted into `.Unplaced(...)` exports that call again rather than the members the
   catch-all happened to hold, so adopting the exported file does not quietly restore the strict
   rule. A catch-all group holding anything other than plain editors is reported in the comment.
-- Sort priority follows column order in the export.
+- Grouping is not exported. A column grouped in the grid keeps its sort order and comes first in
+  sort priority, the way the grid sorts it.
 - A group caption XAF derived earlier can survive a user's change and is then exported as an
   explicit caption. In the sample, Details keeps the caption "Notes" after Order Date moves in.
 - The view you invoke the action from is the one exported. The other half of the class comes from

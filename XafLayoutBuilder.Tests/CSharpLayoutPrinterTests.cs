@@ -125,6 +125,19 @@ public class CSharpLayoutPrinterTests {
         Assert.Contains(".Column(x => x.Customer.@event)", CSharpLayoutPrinter.PrintColumns(raw, "TestOrder"));
     }
 
+    // SORT-001: an explicit sort priority prints after the sort order, and only when set.
+    [Fact]
+    public void SortIndex_IsPrintedAfterTheSortOrder_OnlyWhenSet() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending, sortIndex: 1)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, sortIndex: 0)
+            .Build();
+        var code = CSharpLayoutPrinter.PrintColumns(spec, "TestOrder");
+        Assert.Contains(".Column(x => x.OrderDate, sort: ColumnSortOrder.Descending, sortIndex: 1)", code);
+        Assert.Contains(".Column(x => x.Customer, sort: ColumnSortOrder.Ascending, sortIndex: 0)", code);
+        Assert.DoesNotContain("sortIndex", CSharpLayoutPrinter.PrintColumns(ListViewColumnsBuilderTests.Section4Columns(), "TestOrder"));
+    }
+
     [Fact]
     public void EmptyGroupAndEmptyTabs_PrintABlockLambda() {
         // `g => g` is an expression, not a statement, so it does not convert to Action<GroupBuilder<T>>.

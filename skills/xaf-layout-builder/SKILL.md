@@ -109,8 +109,11 @@ malformed JSON or a half whose `typeName` is another type is a layout error like
 ## ListView surface
 
 - `ListViewColumnsBuilder<T>.Create()`, then `.Column(x => x.M, width: null,
-  sort: ColumnSortOrder.None, caption: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
-- Column order is call order. Sorted columns get sort priority in call order.
+  sort: ColumnSortOrder.None, caption: null, sortIndex: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
+- Column order is call order. Sorted columns get sort priority in call order, unless they set
+  `sortIndex` (0 first), which decides independently of column order: sort by Customer, then
+  OrderDate, while OrderDate is shown first. Set it on every sorted column of a list or on none; it
+  needs a sort order, must not be negative, and must be unique.
 - `Hide` keeps the column in the column chooser, and leaving a member out does the same, as long as
   XAF generated a column for it. Lookup views generate almost none, so in a `.Lookup(...)` list a
   member you neither list nor hide has no column at all.
@@ -196,5 +199,6 @@ buttons are not in the popup itself.
   `.Column(x => x.Customer.City)`.
 - Prints `.Unplaced(...)` again for a class that opted in, instead of the members its catch-all
   group happens to hold at that moment, so the exported file keeps behaving the same way.
-- Sort priority follows column order, so a spec whose sort order differs from its column order
-  does not round-trip exactly.
+- Prints `sortIndex:` on the sorted columns only when their sort priority differs from their column
+  order, so a list that sorts in column order exports without it. Grouping is not exported: a column
+  grouped in the grid keeps its sort order and comes first in sort priority, the way the grid sorts.

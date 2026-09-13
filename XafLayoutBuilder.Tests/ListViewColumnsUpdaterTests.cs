@@ -45,4 +45,14 @@ public class ListViewColumnsUpdaterTests(ApplicationModelFixture fixture) {
     [Fact]
     public void Lookup_GetsItsOwnColumnSet() =>
         Assert.Equal(["Number", "Customer"], Shown(fixture.Class<ModelTestOrder>().DefaultLookupListView).Select(c => c.PropertyName));
+
+    // SORT-001: explicit sort indexes set the sort priority, independently of the column order.
+    [Fact]
+    public void ExplicitSortIndexes_SetSortPriority_IndependentlyOfColumnOrder() {
+        var view = fixture.Class<ModelTestShipment>().DefaultListView;
+        Assert.Equal(["ShipDate", "Customer", "Number"], Shown(view).Select(c => c.PropertyName));
+        Assert.Equal(1, view.Columns["ShipDate"].SortIndex);
+        Assert.Equal(0, view.Columns["Customer"].SortIndex);
+        Assert.Equal(-1, view.Columns["Number"].SortIndex);
+    }
 }

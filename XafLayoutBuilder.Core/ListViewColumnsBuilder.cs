@@ -13,10 +13,14 @@ public sealed class ListViewColumnsBuilder<T> {
 
     public static ListViewColumnsBuilder<T> Create() => new(isLookup: false);
 
-    /// <summary><paramref name="member"/> may follow references: <c>x => x.Customer.City</c> is the column "Customer.City".</summary>
+    /// <summary>
+    /// <paramref name="member"/> may follow references: <c>x => x.Customer.City</c> is the column "Customer.City".
+    /// <paramref name="sortIndex"/> is this sorted column's sort priority (0 first) when it should differ from column order;
+    /// set it on every sorted column or on none.
+    /// </summary>
     public ListViewColumnsBuilder<T> Column(Expression<Func<T, object?>> member, int? width = null,
-        ColumnSortOrder sort = ColumnSortOrder.None, string? caption = null) {
-        columns.Add(new ColumnSpec(MemberPath.ChainOf(member), width, sort, caption));
+        ColumnSortOrder sort = ColumnSortOrder.None, string? caption = null, int? sortIndex = null) {
+        columns.Add(new ColumnSpec(MemberPath.ChainOf(member), width, sort, caption, sortIndex));
         return this;
     }
 

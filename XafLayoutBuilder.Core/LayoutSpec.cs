@@ -85,11 +85,16 @@ public sealed record DetailLayoutSpec(
     };
 }
 
+/// <summary>
+/// A listed column. <see cref="SortIndex"/> is this sorted column's sort priority (0 first) when it differs from column
+/// order; null means sorted columns take priority in column order. Set on every sorted column of a list or on none.
+/// </summary>
 public sealed record ColumnSpec(
     string Member,
     int? Width = null,
     ColumnSortOrder SortOrder = ColumnSortOrder.None,
-    string? Caption = null);
+    string? Caption = null,
+    int? SortIndex = null);
 
 /// <summary>ListView columns for one type. Hidden columns stay available in the column chooser (applier sets Index = -1).</summary>
 public sealed record ListColumnsSpec(
@@ -188,8 +193,10 @@ public static class LayoutSpecChecks {
     }
 
     /// <summary>
-    /// The column rules, for a spec from any source: a blank member name, a column listed twice, a column both listed
-    /// and hidden, and a lookup inside a lookup. The lookup's own columns are checked the same way.
+    /// The column rules, for a spec from any source: a blank member name or an empty segment in a nested path, a column
+    /// listed twice, a column both listed and hidden, a lookup inside a lookup, and a sort index that is on an unsorted
+    /// column, negative, used twice, or given on some sorted columns but not all. The lookup's own columns are checked
+    /// the same way.
     /// </summary>
     public static void Validate(ListColumnsSpec spec) {
         var type = ShortName(spec.TypeName);
@@ -205,6 +212,21 @@ public static class LayoutSpecChecks {
             // A column may follow references ("Customer.City"); every segment of that path needs a name.
             if (s.Columns.Select(c => c.Member).Concat(s.HiddenMembers).FirstOrDefault(m => m.Split('.').Any(string.IsNullOrWhiteSpace)) is { } broken)
                 throw new LayoutSpecException($"{type}: column '{broken}' has an empty segment in its path.");
+            // SORT-001: an explicit sort priority belongs to a sorted column, is not negative and is unique, and is given on
+            // every sorted column of the list or on none.
+            foreach (var c in s.Columns.Where(c => c.SortIndex is not null)) {
+                if (c.SortOrder == ColumnSortOrder.None)
+                    throw new LayoutSpecException($"{type}: column '{c.Member}' has a sort index but no sort order.");
+                if (c.SortIndex < 0)
+                    throw new LayoutSpecException($"{type}: column '{c.Member}' has a negative sort index.");
+            }
+            var sorted = s.Columns.Where(c => c.SortOrder != ColumnSortOrder.None).ToList();
+            if (sorted.Any(c => c.SortIndex is not null)) {
+                if (sorted.Any(c => c.SortIndex is null))
+                    throw new LayoutSpecException($"{type}: set sortIndex on every sorted column or on none.");
+                if (sorted.GroupBy(c => c.SortIndex).FirstOrDefault(g => g.Count() > 1) is { } twice)
+                    throw new LayoutSpecException($"{type}: sort index {twice.Key} is used twice.");
+            }
             var hidden = s.HiddenMembers.ToHashSet(StringComparer.Ordinal);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var c in s.Columns) {

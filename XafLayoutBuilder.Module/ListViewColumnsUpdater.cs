@@ -64,7 +64,8 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
                 Core.ColumnSortOrder.Descending => DxSort.Descending,
                 _ => DxSort.None,
             };
-            column.SortIndex = c.SortOrder == Core.ColumnSortOrder.None ? -1 : sortIndex++;
+            // An explicit sort priority (SORT-001) wins; validation guarantees every sorted column has one or none does.
+            column.SortIndex = c.SortOrder == Core.ColumnSortOrder.None ? -1 : c.SortIndex ?? sortIndex++;
         }
         // Hidden members must exist as columns so the chooser can offer them, even where the generator made none.
         foreach (var hidden in spec.HiddenMembers)
