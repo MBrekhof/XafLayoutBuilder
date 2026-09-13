@@ -94,6 +94,9 @@ public class Updater : ModuleUpdater {
             adminRole.Name = "Administrators";
             adminRole.IsAdministrative = true;
         }
+        // MODELEDITOR-001: Edit Model asks ModelOperationPermissionRequest, which only CanEditModel grants
+        // (PermissionsExtractor.cs 54-55); IsAdministrative alone does not. Set on an existing role too.
+        adminRole.CanEditModel = true;
         return adminRole;
     }
     PermissionPolicyRole CreateDefaultRole() {

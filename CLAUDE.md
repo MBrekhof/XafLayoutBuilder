@@ -20,6 +20,9 @@ view's current layout back to the same fluent C#.
 - `XafLayoutBuilder.Blazor`: optional add-on, `XafLayoutBuilderBlazorModule` +
   `CopyLayoutCodeController` (clipboard through `IXafJSRuntime`). Everything browser-specific goes
   here so the Module stays platform neutral.
+- `XafLayoutBuilder.ModelEditor`: MODELEDITOR-001 spike, a runtime Model Editor for XAF Blazor ("Edit Model",
+  gated by `ModelOperationPermissionRequest`, so the role needs `CanEditModel`). No dependency on the builder;
+  `ModelEditing` holds the testable node and value logic, `ModelEditorComponent.razor` the UI.
 - `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
   into the catch-all group, and columns), `Order`
   (+ `Order.Layout.cs`, the start document's section 4 example verbatim), `OrderLine` (+

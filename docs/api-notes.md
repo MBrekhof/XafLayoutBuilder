@@ -342,6 +342,57 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   id. The startup check uses that instead of `IModelClass.DefaultDetailView` and friends
   (`CommonInterfaces.cs` 250-258), which a model difference can repoint to another view.
 
+## Runtime Model Editor (MODELEDITOR-001 spike)
+
+Paths under `DevExpress.ExpressApp\` unless another assembly is named.
+
+- XAF Blazor 26.1 has no runtime Model Editor. The WinForms Edit Model action is gated by
+  `IRequestSecurity.IsGranted(new ModelOperationPermissionRequest())`
+  (`DevExpress.ExpressApp.Win/SystemModule/EditModelController.cs` 67-71, 79-81). That request is
+  answered by `ModelPermissionRequestProcessor`, which looks only for a `ModelOperationPermission`
+  (`DevExpress.ExpressApp.Security/SecurityStrategy/ModelPermissionRequestProcessor.cs` 56-57);
+  `PermissionsExtractor` adds one only for a role with `CanEditModel`, and `IsAdministrative` adds
+  `IsAdministratorPermission` instead (`PermissionPolicy/PermissionsExtractor.cs` 51-56). So an
+  administrator without `CanEditModel` may not edit the model; the sample's Administrators role sets it.
+- Values: `ModelNode.GetValue(string)` reads through every layer (`Model/Core/ModelNode.cs` 2450-2453);
+  `SetValue(string, object)` (2598-2601) and `ClearValue(string)` (2368-2383) write the writable
+  layer, the running application's user differences; `IsValueModified(string)` (899-903, public,
+  `EditorBrowsable(Never)`) says whether the writable layer holds the value.
+- Value list: `ModelNode.NodeInfo.ValuesInfo` (`Model/Core/ModelNodeInfo.cs` 411) always carries `Id`,
+  `Index`, `IsNewNode` and `IsRemovedNode` (175-181). `ModelValueInfo` gives `Name`, `PropertyType`,
+  `IsReadOnly` (`Model/Core/ModelValueInfo.cs` 76-80). Visibility and read-only rules come from the
+  public `FastModelEditorHelper` (`Model/FastModelEditorHelper.cs` 114-140 `IsPropertyModelBrowsableVisible`,
+  185-211 `IsReadOnly`).
+- Hosting a Razor component: a `BlazorPropertyEditorBase` whose `CreateComponentModel` returns a
+  `ComponentModelBase` with properties named like the component's parameters (dxdocs 405922;
+  `DevExpress.ExpressApp.Blazor/Editors/BlazorPropertyEditorBase.cs` 156-168), registered with
+  `[PropertyEditor(typeof(string), alias, false)]` and picked by `[EditorAlias]`; `IComplexViewItem.Setup`
+  supplies the `XafApplication`.
+- Saving: `XafApplication.SaveModelChanges()` (`XafApplication.cs` 2497-2506) saves the last layer when it
+  is the user differences, the same call the Blazor layout editor makes
+  (`DevExpress.ExpressApp.Blazor/Layout/LayoutEditor/LayoutEditor.razor.cs` 278).
+- Observed in the gate (MODELEDITOR-001): the save is written at once. A localizable value such as a
+  view `Caption` lands in the user's `ModelDifferenceAspects` row of the current culture (`Name`
+  `en-US`), not in the default aspect (`Name` empty), so a check of the stored model must read every
+  aspect. A new circuit shows the edit: `BlazorApplication.LoadUserDifferences` flushes the user's
+  deferred save before it loads (`DevExpress.ExpressApp.Blazor/BlazorApplication.cs` 103-111,
+  `Services/AppState/UserModelSaveDispatcher.cs` 76-98).
+- XAF Blazor 26.1 warms the application up by default (`Optimization.WarmUpApplication`,
+  `DevExpress.ExpressApp.Blazor/Services/StartupExtensions.cs` 222), and each application's model is then
+  collapsed (`XafApplication.cs` 495-500, `Model/Core/ModelApplication.cs` 699-724) and cached: `GetValue`
+  answers from the root master's value cache (`ModelNode.cs` 2503-2524, `IsCached` 3694-3701). `SetValue`
+  updates that cache (`UpdateCachedValue`, 2668), `ClearValue` does not (2368-2390): after a clear the writable
+  layer no longer holds the value (`IsValueModified` false) but `GetValue` still returns it, until the model
+  is built again (the next circuit). Measured in the gate with trace output, MODELEDITOR-001. `Undo()` does
+  refresh the cache (`UpdateCache`, 609-637) but takes back every modification of the node. The in-process
+  test model is not warmed up, so a unit test cannot see this.
+- Consequence for the editor: an unsaved edit cannot be rolled back by clearing it. Edits stay pending in
+  the editor and are written to the model only on Save, so closing the popup simply drops them. A saved
+  Reset shows its old value in the running application until the next page load; the stored model is
+  right. Hooks tried on the way: the Razor component's `Dispose` ran after the gate had reopened the
+  editor; the popup view's `Closed` event does run on Cancel (`SystemModule/DialogController.cs` 146-149,
+  `DevExpress.ExpressApp.Blazor/BlazorWindow.cs` 66-80, `View.cs` 286-302), but the clear it made hit the cache.
+
 ## Still open
 
 - Bands (`IModelListView.BandsLayout`, `IModelBandsLayout` is added as a child node at

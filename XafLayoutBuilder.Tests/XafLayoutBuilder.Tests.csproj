@@ -16,5 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\XafLayoutBuilder.Core\XafLayoutBuilder.Core.csproj" />
     <ProjectReference Include="..\XafLayoutBuilder.Module\XafLayoutBuilder.Module.csproj" />
+    <ProjectReference Include="..\XafLayoutBuilder.ModelEditor\XafLayoutBuilder.ModelEditor.csproj" />
   </ItemGroup>
 </Project>

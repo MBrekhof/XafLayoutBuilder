@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- MODELEDITOR-001 (spike): `XafLayoutBuilder.ModelEditor` add-on, "Edit Model" in XAF Blazor: model tree, value grid, saved to the user's differences.
 - RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
 - LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
@@ -291,6 +292,7 @@ specs, and a printer turns specs into the builder C#.
 XafLayoutBuilder.Core/                  builder, LayoutSpec records, JSON, C# printer (no DevExpress reference)
 XafLayoutBuilder.Module/                generator updaters, registry, startup check, exporter, export action
 XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
+XafLayoutBuilder.ModelEditor/           spike (MODELEDITOR-001): runtime Model Editor for XAF Blazor, Edit Model
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template
 XafLayoutBuilder.Tests/                 xUnit tests for Core and the Module's resolver and registry

@@ -26,6 +26,8 @@ using Microsoft.Playwright;
 //   DIFF-001 a user difference aimed at the stock path Main/SimpleEditors is not rendered and is gone from the stored
 //            user model after the next save, while the same difference's caption on a builder group applies and is kept
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
+//   MODELEDITOR-001 Edit Model (ModelEditor add-on) sets Order_ListView's caption in the running model; Save stores it in
+//            Admin's user model and a fresh page shows it
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -539,6 +541,41 @@ try
     }");
     Assert(cityInOther, "City, which the layout never mentions, sits in the Other group");
 
+    Step("MODELEDITOR-001: Edit Model changes a view caption in the running model and saves it to the user model");
+    // The add-on's tree and value grid over Application.Model. The edit lands in Admin's own differences and Save calls
+    // XafApplication.SaveModelChanges, so a fresh page load, a new circuit reading the user model from the database, shows
+    // it. FREEZE-001, next, resets the user model.
+    const string EditedCaption = "Orders edited at runtime";
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    // Codex review: an edit closed without Save never reaches the model, so it cannot ride along with a later model save.
+    var modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    var captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    var originalCaption = await captionInput.InputValueAsync();
+    await captionInput.FillAsync("Cancelled edit");
+    await captionInput.PressAsync("Tab"); // the input posts its change on blur
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await ClosePopup(page);
+    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    var reopenedCaption = await captionInput.InputValueAsync();
+    Assert(reopenedCaption == originalCaption, $"a caption edit closed with Cancel is taken back (expected '{originalCaption}', got '{reopenedCaption}')");
+    await captionInput.FillAsync(EditedCaption);
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-save").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Saved" }).WaitForAsync(new() { Timeout = 10_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-21-model-editor.png") });
+    await ClosePopup(page);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    await WaitForNoLoading(page);
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-22-model-editor-caption.png") });
+    // A caption is localizable: XAF stores it in the aspect row of the current culture (Name 'en-US'), not in the default
+    // aspect (Name ''), so every aspect of Admin's user model is read.
+    var editedStored = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
+    Assert(editedStored.Contains(EditedCaption), "the saved user model holds the caption set in the Model Editor");
+    Assert((await page.InnerTextAsync("body")).Contains(EditedCaption), "after a fresh page load Order_ListView shows the edited caption");
+
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property
     // added to the class later. --extra-column lists Notes, which Order.Layout.cs leaves out; --freeze-order-columns
@@ -908,6 +945,24 @@ static async Task ClosePopup(IPage page)
     var cancel = page.Locator(".dxbl-popup, .dxbl-modal").GetByRole(AriaRole.Button, new() { Name = "Cancel" });
     if (await cancel.CountAsync() > 0) await cancel.First.ClickAsync();
     else await page.Keyboard.PressAsync("Escape");
+}
+
+// Tools tab -> Edit Model (ModelEditor add-on); expands the tree down to the node and selects it.
+static async Task<ILocator> OpenModelEditorAt(IPage page, string nodePath)
+{
+    // Running an action or closing a popup can drop the toolbar back to the Home tab, so select Tools every time.
+    await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
+    var editModel = page.GetByText("Edit Model", new() { Exact = true }).First;
+    await editModel.WaitForAsync(new() { Timeout = 10_000 });
+    await editModel.ClickAsync();
+    var editor = page.Locator(".xlb-model-editor");
+    await editor.WaitForAsync(new() { Timeout = 15_000 });
+    var ids = nodePath.Split('/');
+    for (var i = 1; i < ids.Length; i++)
+        await editor.Locator($"[data-expand='{string.Join("/", ids[..i])}']").ClickAsync();
+    await editor.Locator($"[data-node='{nodePath}']").ClickAsync();
+    await editor.Locator($"[data-selected='{nodePath}']").WaitForAsync(new() { Timeout = 10_000 });
+    return editor;
 }
 
 // Round-trip helpers: cut one builder expression out of C# text and compare modulo whitespace.
