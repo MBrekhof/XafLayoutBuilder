@@ -28,8 +28,7 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
-**Nothing is pushed.** Local commits since the last push: 5291bbb, fabc233, 49382a1, 0eb1349, 9323f72,
-b2bca44, 87824e1, 1ed98ac, 5122e01, 09caaaa, fbc0f33, 85be610, 6df25b9.
+**Pushed 2026-09-13:** everything up to and including this handoff is on origin/master.
 
 Next cards, in order: HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
 E2E4-001 (1674). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
