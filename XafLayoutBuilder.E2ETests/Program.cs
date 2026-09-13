@@ -744,17 +744,35 @@ static async Task Login(IPage page)
     // Blazor Server circuit-connect race: DOMContentLoaded fires on the static shell before
     // the SignalR circuit attaches handlers, so an early Fill() can be dropped server-side.
     // Wait for NetworkIdle and verify the value actually bound before submitting.
-    await page.GotoAsync($"{BaseUrl}/LoginPage", new() { WaitUntil = WaitUntilState.NetworkIdle });
-    var userField = page.Locator("input[type='text'], input[name*='sername']").First;
-    await userField.WaitForAsync(new() { Timeout = 20_000 });
-    for (var i = 0; i < 10; i++)
+    // LOGIN-001: the DOM value is not the server's. XAF's text editor sends its value only when it loses focus
+    // (DxTextBoxAdapter sets BindValueMode.OnLostFocus unless ImmediatePostData; dxdocs, DxTextBox.BindValueMode), so a
+    // click straight after the fill could reach the server first and log on with an empty user name. Tab commits the value
+    // before the click, and a login that still stays on the login page is tried once more, logged, instead of ending the gate.
+    for (var attempt = 1; ; attempt++)
     {
-        await userField.FillAsync("Admin");
-        if (await userField.InputValueAsync() == "Admin") break;
-        await Task.Delay(300);
+        await page.GotoAsync($"{BaseUrl}/LoginPage", new() { WaitUntil = WaitUntilState.NetworkIdle });
+        var userField = page.Locator("input[type='text'], input[name*='sername']").First;
+        await userField.WaitForAsync(new() { Timeout = 20_000 });
+        for (var i = 0; i < 10; i++)
+        {
+            await userField.FillAsync("Admin");
+            if (await userField.InputValueAsync() == "Admin") break;
+            await Task.Delay(300);
+        }
+        await userField.PressAsync("Tab");
+        await page.WaitForTimeoutAsync(500);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Log In" }).ClickAsync();
+        try
+        {
+            await page.WaitForURLAsync(url => !url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase),
+                new() { Timeout = attempt == 1 ? 10_000 : 20_000 });
+            break;
+        }
+        catch (TimeoutException) when (attempt == 1)
+        {
+            Console.WriteLine("    login stayed on the login page; trying once more (LOGIN-001)");
+        }
     }
-    await page.GetByRole(AriaRole.Button, new() { Name = "Log In" }).ClickAsync();
-    await page.WaitForURLAsync(url => !url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase), new() { Timeout = 20_000 });
     await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 20_000 });
 }
 
