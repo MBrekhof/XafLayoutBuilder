@@ -35,20 +35,22 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | MODELEDITOR-001 | d88b30b | Spike, verdict on the card: a reduced runtime Model Editor for XAF Blazor is feasible on public API. New add-on `XafLayoutBuilder.ModelEditor` (not packaged): "Edit Model" (Tools) opens a tree plus value grid; edits stay pending until Save, which writes the user's differences and calls `SaveModelChanges`; gated by `ModelOperationPermissionRequest`, so the sample's Administrators role now sets `CanEditModel`. Found in the gate: 26.1's warmed-up model caches values and `ClearValue` does not update that cache, so unsaved edits cannot be rolled back (two attempts failed) and a saved Reset shows the old value until the next page load. Three Codex rounds, two findings fixed. |
 | MODELEDITOR-002 | 5bf9061 | Warmed-up (collapsed, cached) model built in-process like XAF Blazor's (`WarmedUpModelTests`; needs `BlazorModelMultipleMasterStore`, a cleared shared values cache per warm-up). Save reloads the page: `ClearValue` leaves the value cache stale and no public call refreshes it. The gate found a second DevExpress defect: `ModelDifferenceDbStore` keeps an aspect row whose XML became empty, so a reset localized caption came back; `StoredAspectCleanup` blanks such rows with public API, keeping the store's version guard, only for aspects this save emptied, retried after a failed save while still empty. Five Codex rounds, four findings fixed. |
 | MODELEDITOR-003 | 849e0a3 | Tree in the WinForms order (DevExpress's `ModelNodeComparerBase`), captions from `[DisplayProperty]`, modified nodes bold, expand buttons only for node types with children, a bounded breadth-first search; values grouped by category with required/localizable cues, read-only messages and an HTML-encoded description panel. Cosmetics batched to MODELEDITOR-012. Two Codex rounds, one finding fixed. |
+| MODELEDITOR-004 | d573de4 | Node operations: add (creatable types as WinForms offers them; a band under a band goes into the bands layout, owned by that band), clone (wherever `CanAddNode` allows), delete, Up/Down (within the owner band) and Reset node. Deletes, moves and node resets pend until Save; added nodes are live with their values written at once, and Save checks required values across every added or cloned subtree. The gate found two framework behaviours: XAF's deferred user-model save (circuit close, the same user's next logon) stores whatever the running model holds, and it first lets the old circuit's views write their state, so the Order grid hid a saved added column (`Index -1`). The controller handles both in `CreateCustomUserModelDifferenceStore`, right before every save: unsaved added nodes are removed, saved edits replayed. Combinations the running model cannot resolve are refused with "save first". Nine Codex rounds, 19 findings fixed, the last round clean. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003).
-149 unit tests pass.
+c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003), 2beb758, d573de4 (MODELEDITOR-004).
+181 unit tests pass.
 
 **Model Editor all the way (owner, 2026-09-13: "the whole 100 yards", plus which DevExpress source changes would help,
 possibly as a support call).** Scope: `docs/model-editor-scope.md` (what the WinForms Model Editor does). Cards:
 MODELEDITOR-003 (#1695, tree and property grid parity, research notes on the card) through MODELEDITOR-012 (#1704,
 packaging and the RUNTIME-001 hook); DXSUPPORT-001 (#1693): `docs/devexpress-support-request.md` is drafted and
-**uncommitted** (seven items so far, ClearValue cache and the empty-aspect store row the most important); it is the
+**uncommitted** (nine items so far, ClearValue cache and the empty-aspect store row the most important; MODELEDITOR-004
+added the deferred save that stores unsaved state and the old views that overwrite saved edits); it is the
 owner's to send. RUNTIME-001 default taken meanwhile: the editor may change builder-owned views in a user's own
 differences, as XAF's layout editor can. RUNTIME-001 (1688): the facts are on the card (no
 runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); allow or restrict stays the
