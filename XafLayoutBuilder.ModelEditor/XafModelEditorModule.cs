@@ -13,6 +13,12 @@ public sealed class XafModelEditorModule : ModuleBase {
     public XafModelEditorModule() {
         AdditionalExportedTypes.Add(typeof(ModelEditorWindow));
     }
+
+    public override void Setup(XafApplication application) {
+        base.Setup(application);
+        // After every module's Setup, so the handler sees the user-differences store the host's module set.
+        application.SetupComplete += (_, _) => StoredAspectCleanup.Track(application);
+    }
 }
 
 /// <summary>What the popup shows. The one property exists to host <see cref="ModelEditorPropertyEditor"/>.</summary>

@@ -111,7 +111,7 @@ public class ModelEditingTests(ApplicationModelFixture fixture) {
             Assert.NotNull(error);
             Assert.True(session.HasErrors);
 
-            Assert.Throws<InvalidOperationException>(session.Apply);
+            Assert.Throws<InvalidOperationException>(() => session.Apply());
             Assert.Equal(original, View.TopReturnedObjects);
 
             session.SetText(View, "TopReturnedObjects", "25");

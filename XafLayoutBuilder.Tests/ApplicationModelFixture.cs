@@ -58,7 +58,7 @@ public sealed class ApplicationModelFixture : IDisposable {
 
     public void Dispose() => XafLayoutBuilderModule.FailFastOnLayoutErrors = failFast;
 
-    sealed class ModelTestModule : ModuleBase {
+    internal sealed class ModelTestModule : ModuleBase {
         public ModelTestModule() {
             RequiredModuleTypes.Add(typeof(SystemModule));
             RequiredModuleTypes.Add(typeof(XafLayoutBuilderModule));

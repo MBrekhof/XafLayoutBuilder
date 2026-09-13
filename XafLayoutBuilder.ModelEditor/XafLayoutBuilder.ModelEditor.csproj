@@ -9,4 +9,7 @@
   <ItemGroup>
     <PackageReference Include="DevExpress.ExpressApp.Blazor" Version="$(DevExpressPackageRange)" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XafLayoutBuilder.Tests" />
+  </ItemGroup>
 </Project>

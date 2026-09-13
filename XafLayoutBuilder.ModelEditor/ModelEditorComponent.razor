@@ -63,6 +63,8 @@ else {
     </div>
 }
 
+@inject NavigationManager Navigation
+
 @code {
     [Parameter] public XafApplication Application { get; set; } = null!;
 
@@ -103,10 +105,18 @@ else {
 
     void Reset(string name) => Run(() => session.Reset(selected!, name), null);
 
+    // MODELEDITOR-002: XAF Blazor's warmed-up model caches values and ClearValue does not refresh that cache, and views
+    // already created keep the model they were built from. So Save reloads the page, as the WinForms editor restarts every
+    // window (WinApplication.EditModel): the new circuit builds its model again from the differences just saved.
     void Save() => Run(() => {
-        session.Apply();
+        // The database store keeps an aspect whose differences became empty; without the cleanup a reset localized caption
+        // returns. Only the aspects these edits emptied are blanked, and the session keeps them until that succeeded.
+        session.Apply(((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model).LastLayer);
         Application.SaveModelChanges();
-    }, "Saved");
+        StoredAspectCleanup.ClearEmptied(Application, session.EmptiedAspects);
+        session.Saved();
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }, "Saved, reloading");
 
     // Text that is no value of its type, a calculator that throws, a failed save: reported, not thrown into the circuit.
     void Run(Action action, string? done) {

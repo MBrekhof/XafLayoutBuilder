@@ -51,6 +51,28 @@ public static class ModelEditing {
 
     public static void Reset(IModelNode node, string name) => ((ModelNode)node).ClearValue(name);
 
+    /// <summary>
+    /// The aspects of a differences layer whose XML is empty, written the way ModelDifferenceDbStore.SaveDifference writes
+    /// each aspect (ModelXmlWriter.WriteToString(model, aspectIndex), ModelDifferenceDbStore.cs 194-198).
+    /// </summary>
+    public static IReadOnlyList<string> EmptyAspects(ModelApplicationBase layer) {
+        var writer = new ModelXmlWriter();
+        return Enumerable.Range(0, layer.AspectCount)
+            .Where(i => string.IsNullOrEmpty(writer.WriteToString(layer, i)))
+            .Select(layer.GetAspect)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The aspects a change empties: empty afterwards and not before. Only these may be blanked in the store, since an aspect
+    /// already empty in this circuit's model may hold what another tab saved since (Codex re-review).
+    /// </summary>
+    public static IReadOnlyList<string> AspectsEmptiedBy(ModelApplicationBase layer, Action change) {
+        var before = EmptyAspects(layer);
+        change();
+        return EmptyAspects(layer).Except(before).ToList();
+    }
+
     /// <summary>Throws when the text is no value of the named value's type; changes nothing.</summary>
     internal static void Validate(IModelNode node, string name, string text) => Parse((ModelNode)node, name, text);
 
@@ -126,15 +148,33 @@ public sealed class ModelEditSession {
         return found;
     }
 
+    // Aspects the applied edits emptied whose stored rows have not been blanked yet (StoredAspectCleanup).
+    readonly HashSet<string> emptiedAspects = [];
+
+    /// <summary>The aspects applied edits emptied, kept until <see cref="Saved"/> so a save that throws can be retried (Codex review 3).</summary>
+    public IReadOnlyCollection<string> EmptiedAspects => emptiedAspects;
+
     /// <summary>
-    /// Writes the pending edits to the model's writable layer. ponytail: in a warmed-up model a reset keeps showing the old
-    /// value until the model is built again (the next page load), because ClearValue skips the value cache; what Save stores
-    /// is right. Undo() would refresh the cache but takes back every other modification of the node.
+    /// Writes the pending edits to the model's writable layer. Given the user differences layer, the aspects this empties are
+    /// added to <see cref="EmptiedAspects"/>. In a warmed-up model a reset keeps showing the old value until the model is built
+    /// again, because ClearValue skips the value cache; the editor reloads the page after Save.
     /// </summary>
-    public void Apply() {
+    public void Apply(ModelApplicationBase? userLayer = null) {
         // Checked before anything is written, so a refused Save leaves the model and every pending edit as they were.
         if (pending.FirstOrDefault(p => p.Value.Error is not null) is { Value.Error: { } error } invalid)
             throw new InvalidOperationException($"{ModelEditing.Path(invalid.Key.Node)}: {invalid.Key.Name} is not saved: {error}");
+        if (userLayer is null) WritePending();
+        else {
+            emptiedAspects.UnionWith(ModelEditing.AspectsEmptiedBy(userLayer, WritePending));
+            // An aspect a later edit filled again holds that edit now; blanking its row would lose it (Codex review 4).
+            emptiedAspects.IntersectWith(ModelEditing.EmptyAspects(userLayer));
+        }
+    }
+
+    /// <summary>The applied edits are saved and their emptied aspects blanked.</summary>
+    public void Saved() => emptiedAspects.Clear();
+
+    void WritePending() {
         foreach (var ((node, name), (text, _)) in pending) {
             if (text is null) ModelEditing.Reset(node, name);
             else ModelEditing.SetText(node, name, text);

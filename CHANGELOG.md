@@ -6,6 +6,7 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- MODELEDITOR-002: Model Editor Save reloads the page and blanks emptied stored aspects, so a saved Reset shows at once and stays; warmed-up model testable in-process.
 - MODELEDITOR-001 (spike): `XafLayoutBuilder.ModelEditor` add-on, "Edit Model" in XAF Blazor: model tree, value grid, saved to the user's differences.
 - RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.

@@ -26,8 +26,8 @@ using Microsoft.Playwright;
 //   DIFF-001 a user difference aimed at the stock path Main/SimpleEditors is not rendered and is gone from the stored
 //            user model after the next save, while the same difference's caption on a builder group applies and is kept
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
-//   MODELEDITOR-001 Edit Model (ModelEditor add-on) sets Order_ListView's caption in the running model; Save stores it in
-//            Admin's user model and a fresh page shows it
+//   MODELEDITOR-001 Edit Model (ModelEditor add-on): a caption edit closed with Cancel is dropped; a saved caption is stored
+//            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -563,18 +563,27 @@ try
     await captionInput.FillAsync(EditedCaption);
     await captionInput.PressAsync("Tab");
     await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
-    await modelEditor.Locator(".xlb-save").ClickAsync();
-    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Saved" }).WaitForAsync(new() { Timeout = 10_000 });
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-21-model-editor.png") });
-    await ClosePopup(page);
-    await OpenListView(page, "Order_ListView", "ORD-001");
-    await WaitForNoLoading(page);
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-22-model-editor-caption.png") });
     // A caption is localizable: XAF stores it in the aspect row of the current culture (Name 'en-US'), not in the default
     // aspect (Name ''), so every aspect of Admin's user model is read.
     var editedStored = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
     Assert(editedStored.Contains(EditedCaption), "the saved user model holds the caption set in the Model Editor");
-    Assert((await page.InnerTextAsync("body")).Contains(EditedCaption), "after a fresh page load Order_ListView shows the edited caption");
+    Assert((await page.InnerTextAsync("body")).Contains(EditedCaption), "Save reloads the application and Order_ListView shows the edited caption");
+
+    // MODELEDITOR-002: in the warmed-up model a cleared value keeps its cached value, so without the reload Save does a
+    // saved Reset would leave the edited caption on screen.
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-23-model-editor-reset.png") });
+    Assert(!(await page.InnerTextAsync("body")).Contains(EditedCaption), "a saved Reset takes the edited caption away at once");
+    // The database store keeps an aspect whose differences became empty (the en-US row held only this caption); the editor
+    // blanks that row, or the caption would come back on every load.
+    var resetStored = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
+    Assert(!resetStored.Contains(EditedCaption), "after the saved Reset no stored aspect of Admin's user model holds the caption");
 
     Step("FREEZE-001: an administrator's frozen column set keeps a column added to the spec later hidden");
     // The case the freeze exists for is a column that did not exist when the column set was frozen, such as a property
@@ -963,6 +972,15 @@ static async Task<ILocator> OpenModelEditorAt(IPage page, string nodePath)
     await editor.Locator($"[data-node='{nodePath}']").ClickAsync();
     await editor.Locator($"[data-selected='{nodePath}']").WaitForAsync(new() { Timeout = 10_000 });
     return editor;
+}
+
+// The Model Editor's Save reloads the page (MODELEDITOR-002). Waits for that navigation itself, so a Save that did not
+// reload fails here instead of being covered by a page load of the gate's own.
+static async Task SaveModelEditorAndWaitForReload(IPage page, ILocator editor, string seededText)
+{
+    await page.RunAndWaitForNavigationAsync(() => editor.Locator(".xlb-save").ClickAsync(), new() { Timeout = 30_000 });
+    await page.GetByText(seededText, new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
 }
 
 // Round-trip helpers: cut one builder expression out of C# text and compare modulo whitespace.

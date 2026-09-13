@@ -1,0 +1,176 @@
+using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.Model;
+using DevExpress.ExpressApp.Model.Core;
+using DevExpress.ExpressApp.Utils;
+using XafLayoutBuilder.Module;
+using XafLayoutBuilder.ModelEditor;
+
+namespace XafLayoutBuilder.Tests;
+
+// MODELEDITOR-002: XAF Blazor 26.1 warms the application up by default and collapses each application's model, which then
+// answers GetValue from a value cache (docs/api-notes.md, "Runtime Model Editor"). ApplicationModelFixture's model is not
+// warmed up, so these tests build their own the way the running application does. The switches are process-wide, hence
+// this collection (its tests never run in parallel) and the try/finally, as DevExpress's ModelApplicationTestHelper does
+// (Model/ModelApplicationTestHelper.cs 153-164).
+[Collection(ApplicationModelCollection.Name)]
+public class WarmedUpModelTests(ApplicationModelFixture fixture) {
+    [Fact]
+    public void TheModel_IsCollapsedLikeXafBlazors() =>
+        WithWarmedUpModels(build => Assert.True(build(ModelStoreBase.Empty).IsCollapsed));
+
+    // What the editor has to live with (DXSUPPORT-001): ClearValue leaves the cached value, and no public call refreshes it.
+    [Fact]
+    public void ClearValue_LeavesTheCachedValue_UntilTheModelIsBuiltAgain() => WithWarmedUpModels(build => {
+        var view = ContactListView(build(ModelStoreBase.Empty));
+        ModelEditing.SetText(view, "Caption", "Saved earlier");
+
+        ModelEditing.Reset(view, "Caption");
+        Assert.False(((ModelNode)view).IsValueModified("Caption"));
+        Assert.Equal("Saved earlier", view.Caption);
+    });
+
+    // Hence Save reloads the page: the new circuit builds the model again from the saved differences, where a reset is right.
+    [Fact]
+    public void AModelBuiltFromTheSavedDifferences_ShowsASavedReset() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        var original = ContactListView(model).Caption;
+        ModelEditing.SetText(ContactListView(model), "Caption", "Saved earlier");
+        var saved = build(new StringModelStore(model.LastLayer.Xml));
+        Assert.Equal("Saved earlier", ContactListView(saved).Caption);
+
+        ModelEditing.Reset(ContactListView(saved), "Caption");
+        Assert.Equal(original, ContactListView(build(new StringModelStore(saved.LastLayer.Xml))).Caption);
+    });
+
+    // DXSUPPORT-001 item 7: the database store skips an aspect whose differences are gone and keeps its old row, so the editor
+    // finds those aspects and blanks their stored rows after it saves (StoredAspectCleanup).
+    [Fact]
+    // The default aspect keeps the node structure an edit created, so the aspect that empties is a culture's: in the gate the
+    // en-US row, which held only the localized caption.
+    public void EmptyAspects_NameTheAspectsWhoseDifferencesAreGone() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect("de");
+        model.SetCurrentAspect("de");
+        var view = ContactListView(model);
+        ModelEditing.SetText(view, "Caption", "Kontakte");
+        Assert.DoesNotContain("de", ModelEditing.EmptyAspects(model.LastLayer));
+
+        ModelEditing.Reset(view, "Caption");
+        Assert.Contains("de", ModelEditing.EmptyAspects(model.LastLayer));
+        Assert.DoesNotContain("", ModelEditing.EmptyAspects(model.LastLayer));
+    });
+
+    // Codex re-review: the circuit's model can be stale (another tab saved a localized caption since), so the cleanup blanks
+    // only the aspects this save emptied, never every aspect that happens to be empty in this circuit's model.
+    [Fact]
+    public void AspectsEmptiedBy_AChangeThatEmptiesNothing_IsEmpty() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect("de");
+        model.SetCurrentAspect("de");
+        Assert.Contains("de", ModelEditing.EmptyAspects(model.LastLayer));
+
+        Assert.Empty(ModelEditing.AspectsEmptiedBy(model.LastLayer, () => { }));
+    });
+
+    [Fact]
+    public void AspectsEmptiedBy_AResetOfTheLastValueOfAnAspect_NamesThatAspect() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect("de");
+        model.SetCurrentAspect("de");
+        var view = ContactListView(model);
+        ModelEditing.SetText(view, "Caption", "Kontakte");
+
+        Assert.Equal(["de"], ModelEditing.AspectsEmptiedBy(model.LastLayer, () => ModelEditing.Reset(view, "Caption")));
+    });
+
+    // Codex review 3: a save or cleanup that throws must not lose the aspects the applied edits emptied; a retried Save has
+    // no pending edits left, so only the session can still say which stored rows to blank. They stay until Saved().
+    [Fact]
+    public void Session_KeepsTheAspectsItsEditsEmptied_UntilSaved() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect("de");
+        model.SetCurrentAspect("de");
+        var view = ContactListView(model);
+        ModelEditing.SetText(view, "Caption", "Kontakte");
+        var session = new ModelEditSession();
+        session.Reset(view, "Caption");
+
+        session.Apply(model.LastLayer);
+        Assert.Equal(["de"], session.EmptiedAspects);
+        session.Apply(model.LastLayer); // a retry after the save threw: nothing pending, the aspect is already empty
+        Assert.Equal(["de"], session.EmptiedAspects);
+
+        session.Saved();
+        Assert.Empty(session.EmptiedAspects);
+    });
+
+    // Codex review 4: after a failed save the user can fill the emptied aspect again before retrying; the retried save must
+    // not then blank the stored row that now holds the replacement.
+    [Fact]
+    public void Session_ForgetsAnEmptiedAspect_ThatALaterEditFillsAgain() => WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect("de");
+        model.SetCurrentAspect("de");
+        var view = ContactListView(model);
+        ModelEditing.SetText(view, "Caption", "Kontakte");
+        var session = new ModelEditSession();
+        session.Reset(view, "Caption");
+        session.Apply(model.LastLayer);
+        Assert.Equal(["de"], session.EmptiedAspects);
+
+        session.SetText(view, "Caption", "Ansprechpartner"); // the save threw; a replacement before the retry
+        session.Apply(model.LastLayer);
+        Assert.Empty(session.EmptiedAspects);
+    });
+
+    static IModelListView ContactListView(ModelApplicationBase model) =>
+        ((IModelApplication)model).BOModel.GetClass(typeof(ModelTestContact))!.DefaultListView;
+
+    // The running application's steps (ApplicationWarmUpService.RunWarmUpWithModel, AspNetCore/Services/Utils/
+    // ApplicationWarmUpService.cs 121-179): the fast lock helper and the calculators cache on, a shared model warmed up;
+    // then each application's own model built from the same manager over its user layer (XafApplication.LoadUserDifferences
+    // 1485-1519, ApplicationModelsManager.CreateModelApplication 418-429) and collapsed. `build` makes such a model over
+    // the given user differences.
+    static void WithWarmedUpModels(Action<Func<ModelStoreBase, ModelApplicationBase>> test) {
+        var optimization = new ApplicationOptions().Optimization;
+        var warmUp = optimization.WarmUpApplication;
+        var lockHelper = ModelNodeLockHelper.Instance;
+        var masterStore = ModelMultipleMasterStore.Instance;
+        var calculatorsCache = ModelEditorHelper.ModelCalculatorsCacheEnabled;
+        var failFast = XafLayoutBuilderModule.FailFastOnLayoutErrors;
+        try {
+            optimization.WarmUpApplication = true;
+            // The shared values cache is process-wide and WarmUp() fills it only while it is empty (ModelApplication.cs 519-526),
+            // so a second warm-up in the same process would use the first model's values. ApplicationWarmUpService.PrepareForWarmUp
+            // clears it the same way (AspNetCore/Services/Utils/ApplicationWarmUpService.cs 104-110).
+            ModelNodeSharedValuesCache.Instance.Clear();
+            DevExpress.ExpressApp.Model.NodeGenerators.ModelNodeGenerationRegistry.ClearNotGeneratedModelNodeDescriptors();
+            // Collapse() starts with ModelMultipleMasterStore.Instance, which only BlazorApplication's constructor sets
+            // (BlazorApplication.cs 82); without it Collapse throws a NullReferenceException.
+            ModelMultipleMasterStore.Instance = new DevExpress.ExpressApp.Blazor.Model.BlazorModelMultipleMasterStore();
+            ModelNodeLockHelper.Instance = new DevExpress.ExpressApp.AspNetCore.FastModelNodeLockHelper();
+            ModelEditorHelper.ModelCalculatorsCacheEnabled = true;
+            // Warming up and collapsing read every node, the broken fixture layouts included; they degrade instead of throwing.
+            XafLayoutBuilderModule.FailFastOnLayoutErrors = false;
+            var factory = new DesignerModelFactory();
+            var module = new ApplicationModelFixture.ModelTestModule { DiffsStore = ModelStoreBase.Empty };
+            var manager = factory.CreateApplicationModelManager(module, factory.CreateModulesManager(module, AppContext.BaseDirectory));
+            manager.CreateModelApplication([manager.CreateLayer("AfterSetup")]).WarmUp();
+            ModelEditorHelper.ModelCalculatorsCacheEnabled = calculatorsCache;
+
+            test(userDifferences => {
+                var model = manager.CreateModelApplication([manager.CreateLayerByStore("UserDiff", userDifferences)]);
+                model.Collapse();
+                return model;
+            });
+        }
+        finally {
+            ModelNodeSharedValuesCache.Instance.Clear();
+            XafLayoutBuilderModule.FailFastOnLayoutErrors = failFast;
+            ModelEditorHelper.ModelCalculatorsCacheEnabled = calculatorsCache;
+            ModelNodeLockHelper.Instance = lockHelper;
+            ModelMultipleMasterStore.Instance = masterStore;
+            optimization.WarmUpApplication = warmUp;
+        }
+    }
+}

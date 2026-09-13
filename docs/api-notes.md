@@ -387,9 +387,41 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   refresh the cache (`UpdateCache`, 609-637) but takes back every modification of the node. The in-process
   test model is not warmed up, so a unit test cannot see this.
 - Consequence for the editor: an unsaved edit cannot be rolled back by clearing it. Edits stay pending in
-  the editor and are written to the model only on Save, so closing the popup simply drops them. A saved
-  Reset shows its old value in the running application until the next page load; the stored model is
-  right. Hooks tried on the way: the Razor component's `Dispose` ran after the gate had reopened the
+  the editor and are written to the model only on Save, so closing the popup simply drops them. No public
+  call refreshes a node's cached values: `UpdateCache`, `UpdateLocalCacheRecursive` and `CacheAllNodeValues`
+  are internal (`ModelNode.cs` 518-538, 3607-3635), the public dependency updaters need the root's internal
+  `localCache` (`ModelNodeValuesCache.cs` 371-387), and `Undo()` takes back the node's other modifications.
+  So Save reloads the page (MODELEDITOR-002): the new circuit builds the model again from the saved
+  differences, which is right after a reset, as the WinForms editor restarts every window after editing
+  (`WinApplication.EditModel` 782-817).
+- The database store keeps an aspect whose differences became empty: `ModelDifferenceDbStore.SaveDifference` writes
+  one `ModelDifferenceAspect` row per aspect but skips an aspect whose XML is empty (`ModelDifferenceDbStore.cs`
+  194-213). Measured in the gate (MODELEDITOR-002): after a saved reset of a view caption the `en-US` row, which held
+  only that caption, still held it, and the reload brought it back. The default aspect does not empty this way; it
+  keeps the node structure an edit created. The editor blanks such rows after its save with public API only
+  (`StoredAspectCleanup`): it captures the host's `ModelDifferenceDbStore` from `CreateCustomUserModelDifferenceStore`
+  (subscribed on `SetupComplete`, after the template's module set it), finds the row with `FindModelDifference` /
+  `FindModelDifferenceAspect` (`ModelDifferenceDbStore.cs` 262-297) through the store's `CreateObjectSpaceHandler`
+  (83), and writes `EmptyXafml` (80). The store's `ModelDifferenceType` is internal (87); the application's single
+  persistent `IModelDifference` class stands in for it. It keeps the store's own version guard: `SaveDifference`
+  writes only when the stored difference's `Version` is not newer than the saved layer's (`ModelDifferenceDbStore.cs`
+  181), so a difference an administrator copied to the user meanwhile is left alone. It blanks only the aspects this
+  save emptied (`ModelEditing.AspectsEmptiedBy`, empty after the pending edits are applied and not before): an ordinary
+  save does not bump `Version`, and an aspect already empty in a circuit's model may hold what another tab of the same
+  user saved since. The editor's session keeps those aspects until the save and the cleanup succeeded, so a failed
+  save that is retried (no pending edits left, the aspect already empty) still blanks them, but only while they are
+  still empty: an aspect the user filled again before the retry is dropped from the set. The XAF Blazor template creates the user store itself
+  (`new ModelDifferenceDbStore(app, typeof(ModelDifference), false, "Blazor")` in its Blazor module).
+- A warmed-up model can be built in-process (`WarmedUpModelTests`): `ApplicationOptions().Optimization.WarmUpApplication`
+  sets the process-wide flag (`Services/Core/Internal/ApplicationOptions.cs` 67-88); `Collapse()` needs
+  `ModelMultipleMasterStore.Instance`, which only `BlazorApplication`'s constructor sets (`BlazorApplication.cs` 82;
+  without it `Collapse` throws a NullReferenceException); the running application uses `FastModelNodeLockHelper`,
+  warms a shared model up and collapses each application's own model built from the same manager
+  (`ApplicationWarmUpService.cs` 121-179, `ApplicationModelsManager.CreateModelApplication` 418-429). The shared
+  values cache (`ModelNodeSharedValuesCache.Instance`, `Model/Core/ModelNodeValuesCache.cs` 143-177) is process-wide
+  and `WarmUp()` fills it only while it is empty (`ModelApplication.cs` 519-526); clear it before each warm-up, as
+  `ApplicationWarmUpService.PrepareForWarmUp` does (104-110), or a second warm-up in the same process reads the
+  first model's values. Hooks tried on the way: the Razor component's `Dispose` ran after the gate had reopened the
   editor; the popup view's `Closed` event does run on Cancel (`SystemModule/DialogController.cs` 146-149,
   `DevExpress.ExpressApp.Blazor/BlazorWindow.cs` 66-80, `View.cs` 286-302), but the clear it made hit the cache.
 
