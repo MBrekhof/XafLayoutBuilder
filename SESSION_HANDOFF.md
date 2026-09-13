@@ -38,23 +38,24 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | MODELEDITOR-004 | d573de4 | Node operations: add (creatable types as WinForms offers them; a band under a band goes into the bands layout, owned by that band), clone (wherever `CanAddNode` allows), delete, Up/Down (within the owner band) and Reset node. Deletes, moves and node resets pend until Save; added nodes are live with their values written at once, and Save checks required values across every added or cloned subtree. The gate found two framework behaviours: XAF's deferred user-model save (circuit close, the same user's next logon) stores whatever the running model holds, and it first lets the old circuit's views write their state, so the Order grid hid a saved added column (`Index -1`). The controller handles both in `CreateCustomUserModelDifferenceStore`, right before every save: unsaved added nodes are removed, saved edits replayed. Combinations the running model cannot resolve are refused with "save first". Nine Codex rounds, 19 findings fixed, the last round clean. |
 | MODELEDITOR-005 | e36049f | Drop-downs for reference and type values built as the WinForms editor builds them ([DataSourceProperty] path, [DataSourceCriteria] via `CriteriaWrapper`, views by class inheritance), field and language suggestions, Go to, Source, Back/Forward, View in Model. The gate sets Order_ListView's DetailView to the compact form through the lookup. DevExpress defect found: a reference loaded from differences lives under its `{Name}_ID` helper value, which `ClearValue` misses; Reset clears it too (support request item 10). Six Codex rounds, every finding fixed with a red-proven test: a lookup edit is the only edit until Save, either order, also on added nodes; the empty choice of an optional reference stores none (`ModelNode.cs` 3115-3126) instead of a reset; a refused move renumbers nothing; a refused edit re-renders its control (value rows keyed by a refusal count). Round 6 clean. |
 | MODELEDITOR-006 | ec94400 | Special editors, recognised by the `[Editor]` type name the WinForms Model Editor reads, with no WinForms reference. Criteria values open in `DxFilterBuilder`, the component XAF Blazor's own `CriteriaPropertyEditor` uses, over the `[CriteriaOptions]` type's fields (the public `DxFilterBuilderHelper.GetMembers`, nested by XAF's rule); expressions and multiline strings are text areas, since DevExpress Blazor has no expression editor; ImageName suggests the image names every `ImageSource` offers, with a preview. Masks need nothing: `EditMask` and `EditMaskType` are plain values. Three Codex rounds, every finding fixed with a red-proven test: Apply refuses while the builder's text is invalid (the builder keeps its last valid criteria), EF Core references get nested fields (persistent, not domain components), and the builder is recreated per opening so a draft never carries over to another value. Round 3 clean. The Codex broker was stopped after every review (`~/.claude/scripts/stop-codex-broker.mjs`). |
+| MODELEDITOR-007 | f8c1f0d | Validation as the WinForms `ModelValidator` does it (47-93): required and key values checked against pending edits on node change, add and Save; Save lists the missing values per node and warns once about unusable stored differences (`CalculateUnusableModel`). Review P1 fixed: a required reset (or empty required reference) on a node a user created in an earlier session, found through the persisted `IsNewNode`, counts as missing, so a custom DetailView no longer loses its `ClassName`. Six warmed-model tests, four proven red first; gate exit 0; final review clean. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
-**Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001), d97dced, bad4952 (RECHECK-001), dd7822b, d88b30b (MODELEDITOR-001), a8d3023, 5bf9061 (MODELEDITOR-002), 8655ba6, 849e0a3 (MODELEDITOR-003), 2beb758, d573de4 (MODELEDITOR-004), fe1f282, e36049f (MODELEDITOR-005), 2d9cc32, ec94400 (MODELEDITOR-006).
+**Pushed 2026-09-13:** everything up to and including this handoff commit (after f8c1f0d, MODELEDITOR-007).
 211 unit tests pass.
 
-**Next (2026-09-13):** MODELEDITOR-005 (e36049f) and MODELEDITOR-006 (ec94400) are committed, both cards in Review.
-MODELEDITOR-007 (#1699, validation), including the review fix below, is included in this commit at the owner's request
-to commit all changes. No board status was changed by this session (ContextBoard tools were unavailable). The remaining
-Model Editor cards start at MODELEDITOR-008 and continue through MODELEDITOR-012 (#1704), same loop: test
-first, gate, Codex review, stop the broker, commit with exact files. A gate step that needs a DevExpress component's DOM
-(MODELEDITOR-006's filter builder) was read from the running sample first rather than guessed. This commit also includes
-`docs/devexpress-support-request.md` (ten items, still a draft for the owner to send) and `extras.jpg`.
-Nothing since 7b388b8 has been pushed.
+**Next (2026-09-13):** MODELEDITOR-003 to -007 are committed and in Review, waiting for the owner's Confirm Done
+(MODELEDITOR-007 was moved there from Doing afterwards, its conclusion citing f8c1f0d). MODELEDITOR-008 (#1700,
+localization) is next and unclaimed in Todo; its scope is `docs/model-editor-scope.md` "Localization" (language combo
+through `CurrentAspectProvider.CurrentAspect`, `AddAspect`, the localizable values grid). Open question there first:
+whether switching the aspect in XAF Blazor is per circuit or changes the process-wide provider. The cards continue
+through MODELEDITOR-012 (#1704), same loop: test first, gate, Codex review, stop the broker, commit with exact files.
+A gate step that needs a DevExpress component's DOM (MODELEDITOR-006's filter builder) was read from the running sample
+first rather than guessed. `docs/devexpress-support-request.md` (ten items, still a draft for the owner to send) and
+`extras.jpg` are tracked and now public.
 
 **MODELEDITOR-007 review fix (2026-09-13, user delegated implementation):** the first review reproduced a P1: resetting
 `ModelClass` on a custom DetailView saved in an earlier session passed validation, removed `ClassName` from its differences,

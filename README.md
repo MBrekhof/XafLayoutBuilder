@@ -78,7 +78,12 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
-- MODELEDITOR-007: required-value validation also blocks resets on saved user-created nodes, preventing custom views from losing their class on reload.
+- MODELEDITOR-007: Model Editor validation: required and key values are checked against pending edits, including required resets on saved user-created nodes; Save lists missing values and warns about unusable stored differences.
+- MODELEDITOR-006: Model Editor special editors: a filter builder for criteria values, text areas for expressions and multiline strings, image names with a preview.
+- MODELEDITOR-005: Model Editor drop-downs for references and types, field and language suggestions, Go to, Source, Back/Forward and View in Model.
+- MODELEDITOR-004: Model Editor adds, clones, deletes, moves and resets nodes; added nodes need their required values and are removed again unless saved.
+- MODELEDITOR-003: Model Editor tree in the WinForms order with captions, modified marks and search; values grouped by category with descriptions.
+- MODELEDITOR-002: Model Editor Save reloads the page and blanks emptied stored aspects, so a saved Reset shows at once and stays; warmed-up model testable in-process.
 - MODELEDITOR-001 (spike): `XafLayoutBuilder.ModelEditor` add-on, "Edit Model" in XAF Blazor: model tree, value grid, saved to the user's differences.
 - RECHECK-001: a repeated startup check still reports a layout that failed XLB001-003 the first time.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
