@@ -1,0 +1,99 @@
+using System.ComponentModel;
+using DevExpress.ExpressApp.DC;
+using XafLayoutBuilder.Core;
+
+namespace XafLayoutBuilder.Tests;
+
+// Business classes for the in-process Application Model (ApplicationModelFixture). Top level and public on purpose: XAF
+// gives a type a BOModel class and views only when Type.IsPublic, which is false for every nested type. Non-persistent
+// [DomainComponent] classes need no EF Core types info source. This file imports only XafLayoutBuilder.Core, so
+// FlowDirection and ColumnSortOrder are not ambiguous with DevExpress's own.
+
+[DomainComponent]
+public class ModelTestCustomer {
+    public string? Name { get; set; }
+    public string? City { get; set; }
+}
+
+[DomainComponent]
+public class ModelTestLine {
+    public string? Product { get; set; }
+}
+
+[DomainComponent]
+public class ModelTestOrder : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public ModelTestCustomer? Customer { get; set; }
+    public DateTime OrderDate { get; set; }
+    public string? Notes { get; set; }
+    public string? SyncToken { get; set; }
+    public IList<ModelTestLine> Lines { get; } = new List<ModelTestLine>();
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestOrder>.Create()
+            .Group("Header", g => g
+                .Caption("Order")
+                .Flow(FlowDirection.Horizontal)
+                .Item(x => x.Number)
+                .Item(x => x.Customer)
+                .Item(x => x.OrderDate))
+            .Group("Details", g => g
+                .Collapsible()
+                .Item(x => x.Notes, relativeSize: 100))
+            .Tabs("Tabs", t => t
+                .TabFor(x => x.Lines))
+            .Hide(x => x.SyncToken)
+            .Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestOrder>.Create()
+            .Column(x => x.Number, width: 90)
+            .Column(x => x.Customer)
+            .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+            .Column(x => x.Customer!.City)
+            .Hide(x => x.SyncToken)
+            .Lookup(l => l
+                .Column(x => x.Number)
+                .Column(x => x.Customer))
+            .Build();
+}
+
+// Places one member and lets the catch-all group collect the rest.
+[DomainComponent]
+public class ModelTestContact : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestContact>.Create()
+            .Group("Identification", g => g.Item(x => x.Name))
+            .Unplaced(UnplacedMembers.AppendToGroup("Other"))
+            .Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
+// Both place a member XAF generates no editor for (XLB001). Two identical types because a view's layout is generated
+// once, on first read: one is read with FailFastOnLayoutErrors on, the other with it off.
+[DomainComponent]
+public class ModelTestStrictBroken : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    [Browsable(false)] public string? InternalCode { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestStrictBroken>.Create().Group("Broken", g => g.Item(x => x.Name).Item(x => x.InternalCode)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
+[DomainComponent]
+public class ModelTestDegradedBroken : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    [Browsable(false)] public string? InternalCode { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestDegradedBroken>.Create().Group("Broken", g => g.Item(x => x.Name).Item(x => x.InternalCode)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}

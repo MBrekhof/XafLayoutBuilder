@@ -242,9 +242,17 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 
 - **Unit tests** cover Core (every builder rule, the same rules on hand-built specs,
   `CheckAgainstView`, immutability through every construction path, JSON round trips and the
-  printer) and the Module's resolver and registry (unwrapped factory exceptions, independent detail
-  and columns resolution, deferred registration). The model changes themselves and the exporter need
-  a live Application Model, so they are tested only through the E2E gate.
+  printer), the Module's resolver and registry (unwrapped factory exceptions, independent detail
+  and columns resolution, deferred registration), and the updaters and exporter against a real
+  Application Model. `ApplicationModelFixture` builds that model in-process with
+  `DesignerModelFactory`, the Model Editor's own path, from a test module that requires
+  `SystemModule` and `XafLayoutBuilderModule` and exports top-level `[DomainComponent]` classes
+  (a nested type gets no views: XAF requires `Type.IsPublic`). The model is built once per test
+  run, because `XafTypesInfo.Instance` is process-wide and a view's layout is generated once. For
+  the same reason the fixture reads the two deliberately broken views before any test runs:
+  anything that walks the model generates layouts on the way, and xUnit's failure message for an
+  assertion over model nodes prints them property by property, which once generated a broken view
+  inside the formatter and swallowed the exception another test was waiting for.
 - **The E2E gate** is a console app with C# Playwright. It builds and starts the sample on port
   5100, refuses to run if something already serves there, and walks E2E 1 to 6 from the start
   document plus the round-trip and startup checks. The `--break-layout` fixture runs twice: with

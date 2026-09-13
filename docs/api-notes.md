@@ -197,6 +197,18 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   application instance, so the generated layer, and with it the updaters, runs once per process
   rather than once per circuit. [source `DevExpress.ExpressApp.AspNetCore/Services/Shared/SharedApplicationModelManagerContainer.cs`
   lines 42-67]
+- **An Application Model can be built in a unit test, the way the Model Editor builds one** (MODEL-001).
+  `DesignerModelFactory.CreateModulesManager(module, assembliesPath)` creates an `ApplicationModulesManager`, adds the
+  module's `RequiredModuleTypes` and the module, and loads them into `XafTypesInfo.Instance`;
+  `CreateApplicationModel(module, modulesManager, ModelStoreBase.Empty)` sets up an `ApplicationModelManager` with the
+  modules' generator updaters and returns the model, with no `XafApplication`, host or database. Nodes are generated on
+  first access, so reading a view's `Layout` or `Columns` runs the stock generators and this module's updaters. A test
+  module that requires `SystemModule` and `XafLayoutBuilderModule` and exports `[DomainComponent]` classes needs no
+  EF Core types info source. Those classes must be top-level public types: a type is visible, and so gets a BOModel
+  class and views, only when `Type.IsPublic`, which is false for every nested type. `XafTypesInfo.Instance` is
+  process-wide. [source `Utils/DesignerModelFactory.cs` lines 374-391 and 399-430; `ApplicationModelsManager.cs`
+  lines 360-429; `DC/BaseTypeInfoSource.cs` lines 137-144; `DC/NonPersistentTypeInfoSource.cs` lines 85-100;
+  observed in `XafLayoutBuilder.Tests/ModelSpikeTests.cs`]
 - **Where `Tracing` writes.** `Tracing.Tracer.LogError(Exception)` writes the exception's type,
   message and stack trace to `eXpressAppFramework.log` in the executable's folder, through a
   `TextWriterTraceListener`; not to the console or `ILogger`. The degraded path of

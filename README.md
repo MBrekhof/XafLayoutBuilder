@@ -232,10 +232,11 @@ specs, and a printer turns specs into the builder C#.
   column order in E2E 2. The frozen-columns behaviour itself is tested in the gate: a column added to
   the spec after an administrator froze the column set (in Model.xafml or module XAFML) stays hidden.
   In XAF Blazor a freeze stored in a user's own differences has no effect at all, builder or not.
-- The updaters' checks (XLB001, XLB002, the structural rules) and the spec resolver are unit tested;
-  the model changes themselves and the exporter need a live Application Model and are tested only
-  through the E2E gate. The start document asked for an exporter unit test; the round trip is
-  asserted in the gate instead (E2E 5a).
+- The updaters and the exporter are unit tested against an Application Model built in-process, the
+  way the Model Editor builds one, with no host or database: the layout nodes and group settings,
+  the catch-all group, a rejected spec leaving XAF's own layout intact, column order through the
+  generated index, nested columns, the lookup, and the exporter round trip. What only a running app
+  shows (rendering, the user layer, the Blazor actions, startup failure) stays in the E2E gate.
 - E2E 4 writes the user-layer XAFML that XAF's layout editor would persist, rather than driving the
   editor's drag and drop, and restarts the host around the write because XAF Blazor saves the user
   model through a deferred dispatcher.

@@ -27,8 +27,11 @@ view's current layout back to the same fluent C#.
   `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
 - `XafLayoutBuilder.Sample.Blazor.Server`: template host. `--break-layout` registers the broken
   fixture; `XafLayoutBuilder:EnableExport` in appsettings.Development.json enables the export.
-- `XafLayoutBuilder.Tests`: xUnit against Core, plus the Module's resolver and registry (the Module
-  grants `InternalsVisibleTo`). Anything needing a live Application Model is covered by the E2E gate.
+- `XafLayoutBuilder.Tests`: xUnit against Core, the Module's resolver and registry (the Module grants
+  `InternalsVisibleTo`), and the updaters and exporter against an Application Model built in-process
+  (`ApplicationModelFixture`, the Model Editor's `DesignerModelFactory` path, no host or database). Test
+  business classes there must be top-level public `[DomainComponent]` classes, or XAF gives them no views.
+  Rendering, the user layer and the Blazor actions are covered by the E2E gate.
 - `XafLayoutBuilder.E2ETests`: console app, C# Playwright, the phase gate. Its file header lists
   every assertion.
 
