@@ -21,20 +21,14 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | JSON-001 | b2bca44 | `LayoutSpecs` JSON document per type, "Export Layout To JSON" and "Download Layout JSON", `LayoutRegistry.RegisterJson<T>` (each half read on its own). |
 | NEST-001 | 87824e1 | Columns may follow references: `Column(x => x.Customer.City)`; exporter and printer handle them. |
 | MODEL-001 | 1ed98ac | The updaters and the exporter are unit tested against an Application Model built in-process with `DesignerModelFactory` (`ApplicationModelFixture`). Test types must be top-level public `[DomainComponent]` classes. |
+| SORT-001 | fbc0f33 | `Column(..., sortIndex:)` sets sort priority independently of column order; exported only when it differs. Codex found a column grouped in the Blazor grid exported `sortIndex: -1` (the grid keeps its SortOrder, SortIndex -1); the exporter now ranks priority the way DxGrid sorts, grouped columns first. Grouping itself is not exported. |
+
+**Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
+line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
+session. The rules are in CLAUDE.md.
 
 **Nothing is pushed.** Local commits since the last push: 5291bbb, fabc233, 49382a1, 0eb1349, 9323f72,
-b2bca44, 87824e1, 1ed98ac.
-
-**In progress, uncommitted in the working tree: SORT-001** (card 1668): `Column(..., sortIndex:)` sets
-sort priority independently of column order; validation, updater, exporter (prints it only when priority
-differs from column order), printer, README and SKILL.md. Unit tests (98) and the E2E gate are green and
-both model-level tests were red-checked. **Only the Codex working-tree review is missing**, then commit
-exactly these files: `README.md`, `skills/xaf-layout-builder/SKILL.md`, `XafLayoutBuilder.Core/LayoutSpec.cs`,
-`XafLayoutBuilder.Core/ListViewColumnsBuilder.cs`, `XafLayoutBuilder.Core/CSharpLayoutPrinter.cs`,
-`XafLayoutBuilder.Module/ListViewColumnsUpdater.cs`, `XafLayoutBuilder.Module/LayoutExporter.cs`, and in
-`XafLayoutBuilder.Tests`: `ListViewColumnsBuilderTests.cs`, `SpecValidationTests.cs`,
-`CSharpLayoutPrinterTests.cs`, `ModelTestTypes.cs`, `ApplicationModelFixture.cs`,
-`ListViewColumnsUpdaterTests.cs`, `LayoutExporterTests.cs`. Then complete card 1668 with the SHA.
+b2bca44, 87824e1, 1ed98ac, 5122e01, 09caaaa, fbc0f33.
 
 Next cards, in order: EXPORT-001 (1669), HIER-001 (1670), VIEW-001 (1671), BAND-001 (1672), CACHE-001 (1673),
 E2E4-001 (1674). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
