@@ -25,15 +25,18 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | EXPORT-001 | 6df25b9 | The updater stamps columns the spec hides; the exporter leaves out only generated leftovers (unstamped, `GeneratedIndex` -1), so never-mentioned columns are no longer printed as `.Hide`. Codex: a later-layer-added hidden column must stay (fixed); both bool markers are lost with XAF's model cache on, **deferred to CACHE-001 by the owner** (card body updated). |
 | release | a246ad3 | 0.2.0 packed and pushed to `C:\Projects\local-nuget` (Core, Module, Blazor); gate exit 0. |
 | CACHE-001 | 9204526 | Docs only: XAF's model cache is WinForms-only (only `WinApplication` overrides `GetModulesVersionInfoFilePath`), so a Blazor host always runs the updaters and the markers issue does not arise there. README and api-notes corrected, WinForms caveats recorded. |
+| VIEW-001 | c55bb12 | Nested ListViews (`{DeclaringType}_{Collection}_ListView`) take the element type's columns spec, without the owner back-reference (owner's choice). Sample `OrderLine.Layout.cs`, E2E 1 checks the Lines tab. |
+| VIEW-001 | cdb6afa | Views declared in code: `LayoutRegistry.AddDetailView<T>`/`AddListView<T>`, added to the generated layer by `DeclaredViewsUpdater` and marked; XLB005 for blank, taken or conflicting ids. Views existing only in XAFML stay XAF's (their generators never run). Four Codex rounds; the last finding, a repeated startup check not repeating XLB001-003 (default views too), is **RECHECK-001 (1681), deferred by the owner**. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
-**Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001).
+**Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
+c55bb12 and cdb6afa (VIEW-001).
 
-Next cards, in order: VIEW-001 (1671), HIER-001 (1670, new builder API: owner's call on its shape),
-E2E4-001 (1674), BAND-001 (1672). Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+Next cards, in order: E2E4-001 (1674), BAND-001 (1672), HIER-001 (1670, new builder API: owner's call on
+its shape). RECHECK-001 (1681) was minted today and waits for the owner's go. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
 ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).
