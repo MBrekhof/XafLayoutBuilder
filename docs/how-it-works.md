@@ -73,7 +73,10 @@ group holding one leftover member after that member instead.
 ## ListView: `ListViewColumnsUpdater`
 
 It is a `ModelNodesGeneratorUpdater<ModelListViewColumnsNodesGenerator>` and handles
-`{Type}_ListView`, plus `{Type}_LookupListView` when the spec has a `Lookup(...)`.
+`{Type}_ListView`, plus `{Type}_LookupListView` when the spec has a `Lookup(...)`, plus every nested
+ListView whose element type is the type (XAF marks those with `NestedViewMemberInfo`). In a nested
+view the reference back to the owner stays hidden, as the stock generator keeps it, even when the
+spec lists that column.
 
 Unlike the DetailView, the generated columns are kept. Listed columns get their order, width,
 caption and sort. Every other column is set to index -1: not shown, still offered by the column

@@ -42,6 +42,14 @@ public class ListViewColumnsUpdaterTests(ApplicationModelFixture fixture) {
         Assert.Equal("City", column.ModelMember?.Name);
     }
 
+    // VIEW-001: a nested ListView (a collection of the type inside another class) takes the element type's columns spec.
+    [Fact]
+    public void NestedListView_TakesTheElementTypesColumnsSpec() {
+        var nested = fixture.Model.Views["ModelTestOrder_Lines_ListView"] as IModelListView;
+        Assert.NotNull(nested);
+        Assert.Equal(["Quantity", "Product"], Shown(nested).Select(c => c.PropertyName));
+    }
+
     [Fact]
     public void Lookup_GetsItsOwnColumnSet() =>
         Assert.Equal(["Number", "Customer"], Shown(fixture.Class<ModelTestOrder>().DefaultLookupListView).Select(c => c.PropertyName));

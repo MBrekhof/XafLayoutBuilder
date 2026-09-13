@@ -15,9 +15,19 @@ public class ModelTestCustomer {
     public string? City { get; set; }
 }
 
+// VIEW-001: its columns spec reverses XAF's order, so ModelTestOrder_Lines_ListView shows whether the spec reached it.
 [DomainComponent]
-public class ModelTestLine {
+public class ModelTestLine : ISupportViewLayoutCustomization {
     public string? Product { get; set; }
+    public int Quantity { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestLine>.Create()
+            .Column(x => x.Quantity)
+            .Column(x => x.Product)
+            .Build();
 }
 
 [DomainComponent]

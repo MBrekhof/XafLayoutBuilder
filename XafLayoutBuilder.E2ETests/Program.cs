@@ -6,7 +6,8 @@ using Microsoft.Playwright;
 // Exit codes: 0 pass, 1 fail, 2 Playwright browser missing.
 //
 // Builds and starts the sample on :5100, logs in as Admin, then:
-//   E2E 1   Order_DetailView renders the builder layout (hidden member absent, group and tab order, collapsible group)
+//   E2E 1   Order_DetailView renders the builder layout (hidden member absent, group and tab order, collapsible group);
+//           the Lines tab's nested ListView follows OrderLine's columns spec without the Order back-reference (VIEW-001)
 //   E2E 2   Order_ListView column order, OrderDate-descending sort, hidden column offered by the column chooser
 //   E2E 3   Order_LookupListView (via ServiceOrder.OriginalOrder) shows only Number, Customer
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
@@ -128,6 +129,13 @@ try
     Assert(string.Join(",", topLevel) == "Order,Notes,tabs", $"top-level layout nodes are Header, Details, Tabs in that order (got {string.Join(",", topLevel)})");
     var tabTitles = await form.EvaluateAsync<string[]>("f => [...f.querySelectorAll('.dxbl-fl-gt .dxbl-tabs-item')].map(t => t.innerText.trim())");
     Assert(string.Join(",", tabTitles) == "Lines,Attachments", $"tabbed group has exactly the tabs Lines, Attachments in that order (got {string.Join(",", tabTitles)})");
+    // VIEW-001: the Lines tab's nested ListView (Order_Lines_ListView) takes OrderLine's columns spec, without the Order
+    // back-reference that spec lists: XAF keeps it hidden in a nested view.
+    await form.GetByText("Widget", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 15_000 });
+    var lineHeaders = await form.Locator(".dxbl-grid").First.EvaluateAsync<string[]>(
+        @"g => [...g.querySelectorAll('th.dxbl-grid-header')].map(h => h.textContent.replace(/No filter applied/g,'').trim().replace(/\s+/g,' ')).filter(t => t && t !== 'Selection')");
+    Assert(string.Join(",", lineHeaders) == "Unit Price,Quantity,Product",
+        $"the Lines tab's nested ListView shows OrderLine's columns spec without the back-reference (got {string.Join(",", lineHeaders)})");
     var iNumber = detailText.IndexOf("Number", StringComparison.Ordinal);
     var iNotes = detailText.IndexOf("Notes", StringComparison.Ordinal);
     var iLines = detailText.IndexOf("Lines", StringComparison.Ordinal);

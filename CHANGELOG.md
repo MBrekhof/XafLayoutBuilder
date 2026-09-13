@@ -6,6 +6,7 @@ version the packages on the local feed carry. Ids are ContextBoard cards; the de
 
 ## Unreleased
 
+- VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
 - CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
 
 ## 0.2.0 (2026-09-13)

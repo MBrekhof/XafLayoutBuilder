@@ -56,6 +56,7 @@ public static class LayoutStartupCheck {
                 if (LayoutSpecResolver.Detail(type) is not null)
                     Touch(Required<IModelDetailView>(views, type.Name + "_DetailView", type, "a DetailView layout spec").Layout);
             });
+            // ponytail: nested ListViews (VIEW-001) apply this same spec with the same checks, so this attempt covers them.
             Attempt(() => {
                 if (LayoutSpecResolver.Columns(type) is not null)
                     Touch(Required<IModelListView>(views, type.Name + "_ListView", type, "a ListView columns spec").Columns);

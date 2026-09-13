@@ -78,6 +78,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-13. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
 - CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
 - 0.2.0 published to the local feed, with everything below.
 - EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
@@ -205,8 +206,10 @@ specs, and a printer turns specs into the builder C#.
 
 **Scope limits of this proof of concept:**
 
-- Only the default views are handled: `{Type}_DetailView`, `{Type}_ListView` and
-  `{Type}_LookupListView`. View variants, nested ListViews and custom views are left to XAF.
+- Only generated views are handled: `{Type}_DetailView`, `{Type}_ListView`, `{Type}_LookupListView`
+  and every nested ListView of the type (the grid of a collection of it inside another class, which
+  takes the type's columns spec without the reference back to the owner). View variants and custom
+  views are left to XAF.
 - Member lambdas must be simple member access, except that a column may follow references:
   `Column(x => x.Customer.City)`. A detail item stays simple; `Item(x => x.Customer.Name)` is rejected.
 - Builder changes appear after a restart. XAF's model cache plays no part in Blazor: XAF creates

@@ -1,4 +1,5 @@
 using DxSort = DevExpress.Data.ColumnSortOrder;
+using DevExpress.ExpressApp.DC;
 using DevExpress.ExpressApp.Model;
 using DevExpress.ExpressApp.Model.Core;
 using DevExpress.ExpressApp.Model.NodeGenerators;
@@ -41,11 +42,13 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         if (spec is null) return;
 
         var isLookup = view.GetValue<bool>(ModelViewsNodesGenerator.IsLookupListView);
+        // VIEW-001: a nested ListView, the grid of a collection of this type inside another class, takes the type's spec too.
+        var nestedIn = view.GetValue<IMemberInfo>(ModelViewsNodesGenerator.NestedListViewMemberInfo);
         if (isLookup) {
             if (view.Id != type.Name + "_LookupListView" || spec.Lookup is null) return; // no Lookup(): XAF's default stays
             spec = spec.Lookup;
         }
-        else if (view.Id != type.Name + "_ListView") return; // ponytail: default ListView only; nested/variants are phase 2
+        else if (view.Id != type.Name + "_ListView" && nestedIn is null) return; // ponytail: variants and custom views are XAF's
 
         var columns = (IModelColumns)node;
         // Check first, change second (see DetailViewLayoutUpdater): every member that will need a new column has to be
@@ -53,10 +56,14 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
         foreach (var member in spec.Columns.Select(c => c.Member).Concat(spec.HiddenMembers))
             if (columns[member] is null) RequireColumnMember(member);
 
+        // XAF leaves the reference back to the owner out of a nested view (ModelListViewNodesGenerator.IsParentProperty); a
+        // spec written for the type's own ListView that lists it must not bring it back there.
+        var backReference = nestedIn is { IsAssociation: true } ? nestedIn.AssociatedMemberInfo?.Name : null;
+        var shownColumns = spec.Columns.Where(c => c.Member != backReference).ToList();
         var listed = new HashSet<string>(StringComparer.Ordinal);
         var sortIndex = 0;
-        for (var i = 0; i < spec.Columns.Count; i++) {
-            var c = spec.Columns[i];
+        for (var i = 0; i < shownColumns.Count; i++) {
+            var c = shownColumns[i];
             var column = columns[c.Member] ?? AddColumn(c.Member);
             listed.Add(c.Member);
             SetGeneratedIndex(column, i);

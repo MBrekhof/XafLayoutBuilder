@@ -5,7 +5,7 @@ using DevExpress.Persistent.BaseImpl.EF;
 namespace XafLayoutBuilder.Sample.Module.BusinessObjects;
 
 [DefaultProperty(nameof(Product))]
-public class OrderLine : BaseObject {
+public partial class OrderLine : BaseObject {
     public virtual Order? Order { get; set; }
     public virtual string Product { get; set; } = "";
     public virtual int Quantity { get; set; }

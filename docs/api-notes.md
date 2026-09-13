@@ -132,6 +132,17 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
 
 ## Columns model (`Model/IModelListView.cs`)
 
+- **Nested ListViews (VIEW-001).** `ModelViewsNodesGenerator` generates `{DeclaringType}_{Collection}_ListView`
+  for every list-editor-compatible collection, in the generated layer, with `ModelClass` set to the
+  element type and the collection's `IMemberInfo` stored as the helper value
+  `ModelViewsNodesGenerator.NestedListViewMemberInfo` (`Model/NodeGenerators/ModelNestedListViewNodesGenerator.cs`
+  lines 46-60). Its Columns node therefore runs the columns generator and `ListViewColumnsUpdater`.
+  The stock generator hides the back-reference: the column whose member is the collection's
+  `AssociatedMemberInfo` when the collection is an association (`ModelListViewNodesGenerator.cs`
+  lines 138-146, `IsParentProperty`). A view that exists only in a difference layer (module XAFML, a
+  Model Editor clone) runs only `ModelNodesDefaultInterfaceGenerator`, never its own nodes generator
+  or that generator's updaters (`Model/Core/ModelNode.cs` lines 2186-2206).
+
 - `IModelColumn : IModelMemberViewItem`: `int Width`, `DevExpress.Data.ColumnSortOrder SortOrder`,
   `int SortIndex`, `int GroupIndex`, `GroupInterval GroupInterval` (line 146). `Index` comes from
   `IModelNode`.

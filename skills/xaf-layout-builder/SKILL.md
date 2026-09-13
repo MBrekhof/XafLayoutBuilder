@@ -120,6 +120,9 @@ malformed JSON or a half whose `typeName` is another type is a layout error like
 - A column XAF sorted by default is unsorted unless the spec sorts it, and a hidden column does not
   keep a sort order.
 - `.Lookup(...)` describes `{Type}_LookupListView`. Without it XAF's default lookup stays.
+- The same spec shapes every nested ListView of `T`, the grid of a `T` collection inside another
+  class (`Order_Lines_ListView` for `Order.Lines`). A column for the reference back to the owner is
+  left out there, as XAF does, even when the spec lists it.
 
 ## Rules that throw at Build()
 
