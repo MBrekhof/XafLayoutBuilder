@@ -29,19 +29,20 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | VIEW-001 | cdb6afa | Views declared in code: `LayoutRegistry.AddDetailView<T>`/`AddListView<T>`, added to the generated layer by `DeclaredViewsUpdater` and marked; XLB005 for blank, taken or conflicting ids. Views existing only in XAFML stay XAF's (their generators never run). Four Codex rounds; the last finding, a repeated startup check not repeating XLB001-003 (default views too), is **RECHECK-001 (1681), deferred by the owner**. |
 | E2E4-001 | 813a5a3 | E2E 4 drags Order Date in XAF's Blazor layout editor (pointer drag, saved within the session) and hides Customer with the grid header's Hide This Column; no XAFML write, no restart. Passed gate runs 2 and 3; run 1 failed at the first login (LOGIN-001). |
 | BAND-001 | 4a63431 | `.Band(id, b => ..., caption:)`; flat additive spec (owner's choice): `ColumnSpec.Band` + `ListColumnsSpec.Bands`. Updater enables `BandsLayout`, adds bands, sets `OwnerBand`; export follows the grid's display order (per-band indexes, XAF's comparer), drops lookup bands and flattens nested bands with notes. Three Codex rounds, all findings fixed. |
+| LOGIN-001 | 08f1f0e | The gate's Login presses Tab after filling the user name (XAF's text editor posts on lost focus, `DxTextBoxAdapter.cs` 82) and retries once with a log line if it stays on LoginPage. Two gate runs passed with no retry. |
+| HIER-001 | 55ba749 | `LayoutBuilder<Derived>.Extend<Base>()`, `Extend(spec)`, `InGroup(id, ...)`; the same `Extend` for columns (owner's choice). Sample `ServiceOrder.Layout.cs`; E2E 3 checks SRV-001's groups. |
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
 session. The rules are in CLAUDE.md.
 
 **Pushed 2026-09-13** up to 7b388b8. Local since: a246ad3 (0.2.0 release), 9204526 (CACHE-001), 2b9c7ae,
-c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001).
+c55bb12 and cdb6afa (VIEW-001), cb73e34, 813a5a3 (E2E4-001), a82ed0b, 4a63431 (BAND-001), 054347d, 08f1f0e (LOGIN-001), 55ba749 (HIER-001).
 
-Order with the owner's go (2026-09-13): LOGIN-001 (1682, the gate's first login sometimes submits an
-empty user name, 2 of 7 gate runs; first because it costs gate reruns), HIER-001 (1670, owner chose
-`LayoutBuilder<Derived>.Extend<Base>(...)`, export prints the flattened result), RECHECK-001 (1681),
-RUNTIME-001 (1688, the fact-finding only; allow or restrict stays the owner's call), and last
-MODELEDITOR-001 (1689, try building a runtime Model Editor for XAF Blazor). `extras.jpg` in the repo root is the owner's screenshot for
+Remaining with the owner's go (2026-09-13): RECHECK-001 (1681, in progress), then MODELEDITOR-001 (1689,
+try building a runtime Model Editor for XAF Blazor). RUNTIME-001 (1688): the facts are on the card (no
+runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); allow or restrict stays the
+owner's call. `extras.jpg` in the repo root is the owner's screenshot for
 RUNTIME-001, untracked on purpose. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
