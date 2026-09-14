@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-14 (MODELEDITOR-013 tree icons, GROUP-001 grouping and APPEAR-001 appearance rules, all in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-14 (MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
@@ -43,6 +43,7 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | GROUP-001 | 5203919 | 2026-09-14, owner: keep it simple, the builder sets how the view opens, then normal XAF. `Column(..., groupIndex:)` and `.GroupPanel()`; a grouped column is written as DxGrid stores it (`GroupIndex`, `SortIndex -1`) and takes no `sortIndex`; export, printer, JSON and `Extend` carry both. Sample `Order_Grouped_ListView`, gate step read from the running sample's DOM. `GroupInterval` left out. |
 
 | APPEAR-001 | 6ea85a3 | 2026-09-14, owner: worth building, in a separate add-on, through its own `ISupportAppearanceRules` method, an id clash with an `[Appearance]` rule a startup error, attribute rules left out of the export. New `XafLayoutBuilder.Appearance` (requires `ConditionalAppearanceModule`): `AppearanceBuilder<T>`, `AppearanceRegistry`, an updater on `AppearanceRulesModelNodesGenerator` that checks XLB006 and XLB008 before it adds anything and keeps spec order as `Index`, a startup check (XLB007 against the builder's layout specs, not the merged model) and the export through the Module's `LayoutCodePrinter.AppearanceExport` hook. Sample Order: bold DarkRed Globex order numbers, DarkBlue Header caption, both read from the running sample before the gate step. |
+| MODELEDITOR-003 (review) | 9635c2f | 2026-09-14, owner rejected 003: the grey native buttons did not match XAF. Every native control is a DevExpress Blazor component now (DxButton in primary, outline and text styles; DxSearchBox, DxTextBox, DxMemo; DxComboBox for choices and for suggested values with free text), no "Model" caption (`IsCaptionVisible` override, nothing written to the model). A live check found a value table wider than the panel on column nodes (a long node path; now a fixed layout that wraps) and View in Model opening with focus in the last value editor, scrolled to the bottom (the start node is now selected after the first render); the node header is sticky. The gate picks from the combo box list, which renders in a body-level popup. Gate exit 0, Codex review clean. |
 
 MODELEDITOR-013 and GROUP-001: tests proven red first, 219 unit tests, gate exit 0 after each, one Codex review of
 3dbc2a3..5203919 with no findings (so no re-review), broker stopped. Pushed in 71981ae.
