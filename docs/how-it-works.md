@@ -304,3 +304,6 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 - Canary captions in the broken-layout fixture: the same review showed the gate accepted a partially
   applied layout; proven by running the gate against the old order.
 - BPG references the packages rather than re-implementing the technique: the owner, 2026-09-13.
+- With fail-fast on, a spec factory that throws anything other than a layout error stops the startup check at once
+  instead of joining the aggregated report: the owner, 2026-09-14. That exception is a bug in spec code, so it keeps
+  its own type and stack trace; the price is a second start when a crash and later layout errors coincide.

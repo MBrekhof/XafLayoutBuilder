@@ -84,8 +84,9 @@ runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); a
 owner's call. `extras.jpg` in the repo root is the owner's screenshot for
 RUNTIME-001, now tracked at the owner's request. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
-Open question for the owner: with `FailFastOnLayoutErrors` on, a non-layout exception from a spec factory
-ends the startup check at once instead of joining its aggregated report (TEST-001 pins that behaviour).
+Decided by the owner 2026-09-14 (was an open question from TEST-001): with `FailFastOnLayoutErrors` on, a
+non-layout exception from a spec factory keeps ending the startup check at once instead of joining its aggregated
+report. It is a bug in spec code, not a layout error, so it surfaces with its own type and stack trace.
 
 The two "no test"/"not established" items further down are resolved: TEST-001 (49382a1) and DIFF-001
 (9323f72).
