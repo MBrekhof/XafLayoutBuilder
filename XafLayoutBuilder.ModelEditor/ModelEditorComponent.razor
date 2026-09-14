@@ -10,8 +10,11 @@
 else {
     <div class="xlb-model-editor" style="display:flex; gap:1rem; height:65vh; font-size:0.875rem">
         <div style="flex:0 0 40%; display:flex; flex-direction:column; min-width:0">
-            <input class="xlb-model-search" placeholder="Search the model" style="width:100%; margin-bottom:0.5rem"
-                   @bind="searchText" @bind:after="RunSearch" />
+            @* MODELEDITOR-003 review: DevExpress Blazor editors and buttons throughout, so the editor looks like the rest of XAF.
+               The search runs as you type; the class stays on the input, where the gate fills it. *@
+            <DxSearchBox InputCssClass="xlb-model-search" NullText="Search the model" style="margin-bottom:0.5rem"
+                         Text="@searchText" TextChanged="@((string value) => SearchTextChanged(value))"
+                         BindValueMode="BindValueMode.OnDelayedInput" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             @if (searchResults is not null) {
                 <ul class="xlb-model-search-results" style="overflow:auto; list-style:none; padding-left:0; margin:0">
                     @if (searchResults.Count == 0) {
@@ -37,39 +40,47 @@ else {
                 <p>Select a node.</p>
             }
             else {
+                @* The node's path and actions stay at the top of the panel while its values scroll (MODELEDITOR-003 review). *@
+                <div class="xlb-node-header" style="position:sticky; top:0; z-index:2; background:Canvas; padding-bottom:0.25rem">
                 <div data-selected="@ModelEditing.Path(selected)" style="font-weight:600; margin-bottom:0.5rem">@ModelEditing.Path(selected)</div>
                 <div class="xlb-node-actions" style="display:flex; flex-wrap:wrap; gap:0.25rem; align-items:center; margin-bottom:0.5rem">
-                    <button type="button" class="xlb-back" disabled="@(historyAt <= 0)" @onclick="() => StepHistory(-1)">Back</button>
-                    <button type="button" class="xlb-forward" disabled="@(historyAt >= history.Count - 1)" @onclick="() => StepHistory(1)">Forward</button>
+                    <DxButton CssClass="xlb-back" Text="Back" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Enabled="@(historyAt > 0)" Click="() => StepHistory(-1)" />
+                    <DxButton CssClass="xlb-forward" Text="Forward" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Enabled="@(historyAt < history.Count - 1)" Click="() => StepHistory(1)" />
                     @{ var creatable = ModelEditing.CreatableTypes(selected); }
                     @if (creatable.Count > 0) {
-                        <select class="xlb-new-type" @bind="newNodeType">
-                            <option value="">Add a child of type</option>
-                            @foreach (var caption in creatable.Keys.Order(StringComparer.Ordinal)) {
-                                <option value="@caption">@caption</option>
-                            }
-                        </select>
+                        <span class="xlb-new-type">
+                            <DxComboBox TData="string" TValue="string" Data="@creatable.Keys.Order(StringComparer.Ordinal).ToList()"
+                                        @bind-Value="newNodeType" NullText="Add a child of type" style="width:13em" />
+                        </span>
                     }
-                    <input class="xlb-new-id" placeholder="New node id" style="width:10em" @bind="newNodeId" />
+                    <DxTextBox InputCssClass="xlb-new-id" NullText="New node id" style="width:10em" @bind-Text="newNodeId" />
                     @if (creatable.Count > 0) {
-                        <button type="button" class="xlb-add" @onclick="AddNode">Add</button>
+                        <DxButton CssClass="xlb-add" Text="Add" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="AddNode" />
                     }
                     @if (ModelEditing.CanClone(selected)) {
-                        <button type="button" class="xlb-clone" @onclick="CloneNode">Clone</button>
+                        <DxButton CssClass="xlb-clone" Text="Clone" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="CloneNode" />
                     }
                     @if (ModelEditing.CanDelete(selected)) {
-                        <button type="button" class="xlb-delete" @onclick="ToggleDelete">@(Session.IsPendingDelete(selected) ? "Keep" : "Delete")</button>
+                        <DxButton CssClass="xlb-delete" Text="@(Session.IsPendingDelete(selected) ? "Keep" : "Delete")"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ToggleDelete" />
                     }
                     @if (selected.Parent is not null) {
-                        <button type="button" class="xlb-up" @onclick="() => Move(true)">Up</button>
-                        <button type="button" class="xlb-down" @onclick="() => Move(false)">Down</button>
+                        <DxButton CssClass="xlb-up" Text="Up" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="() => Move(true)" />
+                        <DxButton CssClass="xlb-down" Text="Down" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="() => Move(false)" />
                     }
                     @if (ModelEditing.IsModified(selected) && Session.CanResetNode(selected)) {
-                        <button type="button" class="xlb-reset-node" @onclick="ResetNode">@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")</button>
+                        <DxButton CssClass="xlb-reset-node" Text="@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ResetNode" />
                     }
                 </div>
+                </div>
                 var missingRequired = Session.MissingRequired(selected);
-                <table style="width:100%; border-collapse:collapse">
+                @* Fixed layout: a long read-only value, such as a node path, wraps instead of widening the table past the panel, where
+                   the editors were clipped (MODELEDITOR-003 review). *@
+                <table style="width:100%; border-collapse:collapse; table-layout:fixed">
+                    <colgroup><col style="width:38%" /><col /><col style="width:7.5em" /></colgroup>
                     @foreach (var group in ModelEditing.Values(selected).GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
                         <tr class="xlb-category"><td colspan="3" style="padding:6px 6px 2px; font-weight:600; opacity:0.7">@group.Key</td></tr>
                         @foreach (var row in group) {
@@ -78,7 +89,7 @@ else {
                             @* Keyed with the refusal count: the controls are not bound, so a refused edit recreates them from the
                                session and the model instead of leaving the refused text on screen (Codex review 5). *@
                             <tr @key="(row.Name, refusals)" data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
-                                <td style="padding:2px 6px; white-space:nowrap">
+                                <td style="padding:2px 6px; overflow-wrap:anywhere">
                                     <span class="xlb-value-name" style="cursor:pointer; font-weight:@(row.IsModified ? "600" : "normal")"
                                           @onclick="() => focusedDescription = row.Description">@row.Name</span>
                                     @if (row.IsRequired) {
@@ -88,51 +99,49 @@ else {
                                         <span title="Localizable: stored per language" style="opacity:0.6">(L)</span>
                                     }
                                     @if (typeof(IModelNode).IsAssignableFrom(row.Type) && Session.Referenced(selected, row.Name) is { } target) {
-                                        <button type="button" class="xlb-goto" title="Open the node this value refers to" @onclick="() => Reveal(target)">Go to</button>
+                                        <DxButton CssClass="xlb-goto" Text="Go to" title="Open the node this value refers to"
+                                                  RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Text" Click="() => Reveal(target)" />
                                     }
                                     @if (ModelEditing.ValueSource(selected, row.Name) is { } source) {
-                                        <button type="button" class="xlb-source" title="Open the value this one is calculated from"
-                                                @onclick="() => GoToSource(source.Node, source.Name)">Source</button>
+                                        <DxButton CssClass="xlb-source" Text="Source" title="Open the value this one is calculated from"
+                                                  RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                  Click="() => GoToSource(source.Node, source.Name)" />
                                     }
                                 </td>
-                                <td style="padding:2px 6px; width:100%">
+                                <td style="padding:2px 6px; overflow-wrap:anywhere">
                                     @if (!row.CanEdit) {
                                         <span title="@row.ReadOnlyMessage">@row.Text</span>
                                     }
                                     else if (row.Choices is { } choices) {
-                                        <select style="width:100%" @onchange="e => Set(row.Name, e.Value as string)">
-                                            @if (!row.IsRequired || text.Length == 0) {
-                                                <option value="" selected="@(text.Length == 0)"></option>
-                                            }
-                                            @foreach (var choice in choices) {
-                                                <option value="@choice" selected="@(choice == text)">@choice</option>
-                                            }
-                                        </select>
+                                        @* An optional value clears with the clear button, which stores none, as the old empty option did. *@
+                                        <DxComboBox TData="string" TValue="string" Data="@choices" Value="@(text.Length == 0 ? null : text)"
+                                                    ValueChanged="@((string? value) => Set(row.Name, value))" style="width:100%"
+                                                    ClearButtonDisplayMode="@(row.IsRequired ? DataEditorClearButtonDisplayMode.Never : DataEditorClearButtonDisplayMode.Auto)" />
                                     }
                                     else if (row.Editor is ModelValueEditor.Multiline or ModelValueEditor.Expression) {
                                         @* MODELEDITOR-006: multiline strings and expressions. DevExpress Blazor has no expression editor; the text is free. *@
-                                        <textarea rows="3" style="width:100%" value="@text" @onchange="e => Set(row.Name, e.Value as string)"></textarea>
+                                        <DxMemo Text="@text" TextChanged="@((string value) => Set(row.Name, value))" Rows="3" style="width:100%" />
                                     }
                                     else {
-                                        @* Field names, languages and image names are offered as suggestions, other text is still accepted. *@
                                         <div style="display:flex; gap:0.25rem; align-items:center">
-                                            <input style="flex:1; min-width:0" value="@text" list="@(row.Suggestions is null ? null : "xlb-suggest-" + row.Name)"
-                                                   @onchange="e => Set(row.Name, e.Value as string)" />
+                                            @if (row.Suggestions is { } suggestions) {
+                                                @* Field names, languages and image names are offered, other text is still accepted: typed text that is no
+                                                   item arrives through TextChanged. Virtual, because image names run into the thousands. *@
+                                                <DxComboBox TData="string" TValue="string" Data="@suggestions" AllowUserInput="true" ListRenderMode="ListRenderMode.Virtual"
+                                                            Text="@text" TextChanged="@((string value) => Set(row.Name, value))" style="flex:1; min-width:0" />
+                                            }
+                                            else {
+                                                <DxTextBox Text="@text" TextChanged="@((string value) => Set(row.Name, value))" style="flex:1; min-width:0" />
+                                            }
                                             @if (row.Editor == ModelValueEditor.Criteria) {
-                                                <button type="button" class="xlb-criteria-builder" title="Edit the criteria in the filter builder"
-                                                        @onclick="() => OpenCriteria(row.Name, text)">Filter builder</button>
+                                                <DxButton CssClass="xlb-criteria-builder" Text="Filter builder" title="Edit the criteria in the filter builder"
+                                                          RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                          Click="() => OpenCriteria(row.Name, text)" />
                                             }
                                             @if (row.Editor == ModelValueEditor.Image && ImageUrl(text) is { } imageUrl) {
                                                 <img class="xlb-image-preview" src="@imageUrl" alt="" style="height:1.25em" />
                                             }
                                         </div>
-                                        @if (row.Suggestions is { } suggestions) {
-                                            <datalist id="xlb-suggest-@row.Name">
-                                                @foreach (var suggestion in suggestions) {
-                                                    <option value="@suggestion"></option>
-                                                }
-                                            </datalist>
-                                        }
                                     }
                                 </td>
                                 <td style="padding:2px 6px; white-space:nowrap">
@@ -147,7 +156,8 @@ else {
                                         <span class="xlb-pending">@(pendingText is null ? "reset on save" : "unsaved")</span>
                                     }
                                     else if (row.IsModified) {
-                                        <button type="button" class="xlb-reset" @onclick="() => Reset(row.Name)">Reset</button>
+                                        <DxButton CssClass="xlb-reset" Text="Reset" RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                  Click="() => Reset(row.Name)" />
                                     }
                                 </td>
                             </tr>
@@ -164,8 +174,9 @@ else {
                         <DxFilterBuilder @ref="filterBuilderRef" @bind-FilterCriteria="criteria" ViewMode="FilterBuilderViewMode.VisualAndText"
                                          Fields="@FilterFieldsFragment(ModelEditing.FilterFields(criteriaType))" />
                         <div style="margin-top:0.25rem">
-                            <button type="button" class="xlb-criteria-apply" @onclick="ApplyCriteria">Apply</button>
-                            <button type="button" class="xlb-criteria-cancel" @onclick="() => criteriaName = null">Cancel</button>
+                            <DxButton CssClass="xlb-criteria-apply" Text="Apply" RenderStyle="ButtonRenderStyle.Primary" Click="ApplyCriteria" />
+                            <DxButton CssClass="xlb-criteria-cancel" Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      Click="() => criteriaName = null" />
                         </div>
                     </div>
                 }
@@ -176,7 +187,7 @@ else {
                 </div>
             }
             <div style="margin-top:0.75rem">
-                <button type="button" class="xlb-save" disabled="@Session.HasErrors" @onclick="Save">Save</button>
+                <DxButton CssClass="xlb-save" Text="Save" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!Session.HasErrors)" Click="Save" />
                 <span class="xlb-model-editor-message" style="margin-left:0.5rem">@message</span>
             </div>
         </div>
@@ -216,20 +227,25 @@ else {
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);
 
-    // View in Model: open on the node of the view the action ran in.
-    protected override void OnInitialized() {
-        if (StartViewId is not null && Application.Model.Views[StartViewId] is { } view) Reveal(view);
+    // View in Model: open on the node of the view the action ran in. After the first render, not in OnInitialized: with the
+    // node's values already rendered as the popup opened, focus ended up in the last value editor and the panel scrolled to
+    // the bottom, while selecting a node later leaves focus in the search box (MODELEDITOR-003 review, measured in the sample).
+    protected override void OnAfterRender(bool firstRender) {
+        if (!firstRender || StartViewId is null || Application.Model.Views[StartViewId] is not { } view) return;
+        Reveal(view);
+        StateHasChanged();
     }
 
     // Captions from [DisplayProperty], modified nodes in bold as in the WinForms tree, an expand button only for node types
     // that can have children. Added nodes are in italics, nodes to be deleted struck through.
     RenderFragment TreeNode(IModelNode node) => @<li style="white-space:nowrap">
         @if (ModelEditing.CanHaveChildren(node)) {
-            <button type="button" data-expand="@ModelEditing.Path(node)" style="width:1.5em; border:none; background:none"
-                    @onclick="() => Toggle(node)">@(expanded.Contains(ModelEditing.Path(node)) ? "-" : "+")</button>
+            <DxButton data-expand="@ModelEditing.Path(node)" Text="@(expanded.Contains(ModelEditing.Path(node)) ? "-" : "+")"
+                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text" style="min-width:1.75em; padding:0 0.25em"
+                      Click="() => Toggle(node)" />
         }
         else {
-            <span style="display:inline-block; width:1.5em"></span>
+            <span style="display:inline-block; width:1.75em"></span>
         }
         <span data-node="@ModelEditing.Path(node)" class="@(ModelEditing.IsModified(node) ? "xlb-modified" : null)"
               style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); font-style:@(Session.IsAdded(node) ? "italic" : "normal"); text-decoration:@(Session.IsPendingDelete(node) ? "line-through" : "none"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
@@ -284,6 +300,11 @@ else {
     }
 
     void RunSearch() => Run(() => searchResults = string.IsNullOrWhiteSpace(searchText) ? null : ModelEditing.Search(Application.Model, searchText), null);
+
+    void SearchTextChanged(string text) {
+        searchText = text;
+        RunSearch();
+    }
 
     // Picking a search result opens the tree down to it and selects it.
     void Reveal(IModelNode node) {

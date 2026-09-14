@@ -570,6 +570,22 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   DevExpress.Images (`Win/DevExpress.Images/SvgImages/XAF/ModelEditor_*.svg`). `IImageUrlService.GetImageUrl` returns an
   empty string, not an exception, for a name no image source has (`DevExpress.ExpressApp.Blazor/Services/IImageUrlService.cs`
   58-78).
+- Editor styling (MODELEDITOR-003 review). The popup's layout item shows the hosting property's caption ("Model") unless
+  the layout item's `ShowCaption` says otherwise; with no value there XAF Blazor asks the view item's virtual
+  `IsCaptionVisible` (`DevExpress.ExpressApp.Blazor/Layout/LayoutComponent.razor.cs` 206; `ViewItem.cs` 164, `true` in
+  `PropertyEditor.cs` 371, `false` in `DetailPropertyEditor.cs` 233). The property editor overrides it to `false`, so no
+  layout value is written to the user's model.
+  The buttons and inputs are DevExpress Blazor components (paths under `Components\Sources\Blazor\DevExpress.Blazor\`).
+  `DxButton` renders the `<button>` itself, with `CssClass`, `disabled` and unmatched attributes such as `title` and
+  `data-*` on it (`Buttons\Internal\DxButtonInternal.razor.cs` 264-333); it has no `Tooltip` parameter. `DxTextBox` and
+  `DxSearchBox` put `CssClass` on a `dxbl-input-editor` root and `InputCssClass` on the inner `<input>`
+  (`Editors\Base\Models\InputDataEditorModel.cs` 93-99), committing on lost focus by default (`BindValueMode`).
+  `DxComboBox` with `AllowUserInput` reports typed text that matches no item through `TextChanged`, with `Value` null
+  (`Editors\ComboBox\Internal\ComboBoxModel.cs` 95-113); it renders no empty item (`ListBoxRenderHelperBase.cs` 247), so an
+  optional value clears with the clear button; and its list renders in a popup attached to the page body
+  (`Popup\Components\DropDown\DxDropDown.razor` 12, `Scripts\popup\portal.ts` 69-73), items as `li[role=option]`. The gate
+  opens it from `.dxbl-edit-btn-dropdown` and picks the option from the page by role. No `SizeMode` is set: XAF cascades its
+  size switcher to popup content (`DevExpress.ExpressApp.Blazor\Components\SizeModeContainer.razor` 6).
 
 ## Conditional appearance (APPEAR-001)
 

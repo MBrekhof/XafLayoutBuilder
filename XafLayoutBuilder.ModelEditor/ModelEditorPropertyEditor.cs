@@ -25,6 +25,10 @@ public sealed class ModelEditorPropertyEditor(Type objectType, IModelMemberViewI
 
     void IComplexViewItem.Setup(IObjectSpace objectSpace, XafApplication application) => this.application = application;
 
+    // MODELEDITOR-003 review: no "Model" caption beside the editor. XAF Blazor asks the view item when the layout item sets no
+    // ShowCaption (LayoutComponent.razor.cs 206), so nothing is written to the user's model; DetailPropertyEditor does the same.
+    public override bool IsCaptionVisible => false;
+
     protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel {
         Application = application!,
         Session = Session,

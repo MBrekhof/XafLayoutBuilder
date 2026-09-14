@@ -683,7 +683,7 @@ try
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
-    await modelEditor.Locator(".xlb-new-type").SelectOptionAsync(new SelectOptionValue { Label = "Column" });
+    await PickComboItem(page, modelEditor.Locator(".xlb-new-type"), "Column");
     // XAF generates a hidden column for every property, Notes included, so the new column gets an id of its own.
     await modelEditor.Locator(".xlb-new-id").FillAsync("EditorNotes");
     await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
@@ -728,7 +728,7 @@ try
     // A model save the editor did not start must not store a node added in the open editor: here the deferred save XAF flushes
     // when the same user logs on in a second tab (BlazorApplication.LoadUserDifferences).
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
-    await modelEditor.Locator(".xlb-new-type").SelectOptionAsync(new SelectOptionValue { Label = "Column" });
+    await PickComboItem(page, modelEditor.Locator(".xlb-new-type"), "Column");
     await modelEditor.Locator(".xlb-new-id").FillAsync("EditorUnsaved");
     await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
     await modelEditor.Locator(".xlb-add").ClickAsync();
@@ -746,7 +746,7 @@ try
     // opens the compact form the builder declared (SampleViews, group "Compact order").
     await OpenListView(page, "Order_ListView", "ORD-001");
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
-    await modelEditor.Locator("tr[data-value='DetailView'] select").SelectOptionAsync(new SelectOptionValue { Label = "Views/Order_Compact_DetailView" });
+    await PickComboItem(page, modelEditor.Locator("tr[data-value='DetailView']"), "Views/Order_Compact_DetailView");
     await modelEditor.Locator("tr[data-value='DetailView'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
     // A lookup edit is the only pending edit until Save, so another edit is refused; the refused text must not stay in the
     // input, or it would look saved (Codex review 5).
@@ -830,7 +830,11 @@ try
     var appliedCriteria = await modelEditor.Locator("tr[data-value='Criteria'] input").InputValueAsync();
     Assert(appliedCriteria == "[Number] = 'ORD-001'", $"Apply writes the filter builder's criteria back as text (got '{appliedCriteria}')");
     // ImageName offers the application's image names ([Editor] ImageGalleryModelEditorControl, IModelView.cs 59).
-    var imageNameOptions = await modelEditor.Locator("tr[data-value='ImageName'] datalist option").CountAsync();
+    // MODELEDITOR-003 review: a DevExpress combo box renders its items only while its list is open.
+    var imageNameRow = modelEditor.Locator("tr[data-value='ImageName']");
+    await OpenComboList(imageNameRow);
+    var imageNameOptions = await page.GetByRole(AriaRole.Option).CountAsync();
+    await imageNameRow.Locator(".dxbl-edit-btn-dropdown").First.ClickAsync(); // closes the list again; Escape could close the popup
     Assert(imageNameOptions > 0, $"Order_ListView's ImageName offers the application's image names (got {imageNameOptions})");
     await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-26-model-editor-criteria.png") });
@@ -1128,6 +1132,26 @@ static async Task OpenListView(IPage page, string viewId, string seededText)
         if (page.Url.Contains(viewId, StringComparison.OrdinalIgnoreCase)) break;
     }
     await page.GetByText(seededText, new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+}
+
+// MODELEDITOR-003 review: the Model Editor's drop-downs are DevExpress combo boxes, not native selects. The list opens from the
+// combo's drop-down button (with free text allowed, clicking the input does not open it) and renders in a popup attached to the
+// page body, so the option is picked from the page by its role (DxComboBox research, docs/api-notes.md).
+static async Task OpenComboList(ILocator scope) {
+    await scope.Locator(".dxbl-edit-btn-dropdown").First.ClickAsync();
+    await scope.Locator("input[role=combobox]").First.EvaluateAsync(@"i => new Promise((resolve, reject) => {
+        const start = Date.now();
+        (function poll() {
+            if (i.getAttribute('aria-expanded') === 'true') resolve();
+            else if (Date.now() - start > 10000) reject(new Error('the combo box list did not open'));
+            else setTimeout(poll, 100);
+        })();
+    })");
+}
+
+static async Task PickComboItem(IPage page, ILocator scope, string text) {
+    await OpenComboList(scope);
+    await page.GetByRole(AriaRole.Option, new() { Name = text, Exact = true }).First.ClickAsync();
 }
 
 // Header captions of the grid on the active tab, without the filter button's accessibility text or the selection column.
