@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-14 (MODELEDITOR-013 tree icons and GROUP-001 grouping, both in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-14 (MODELEDITOR-013 tree icons, GROUP-001 grouping and APPEAR-001 appearance rules, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
@@ -42,8 +42,18 @@ first, red-checked, build, unit tests, E2E gate, Codex working-tree review, comm
 | MODELEDITOR-013 | 1764257 | 2026-09-14, owner's ask after comparing the Blazor editor with Visual Studio's: tree nodes show the VS Model Editor's icon (first `[ImageName]` on the node's interfaces, else `ModelEditor_Default`) through `IImageUrlService`. XAF Blazor serves monochrome themed variants, so the icons are greyer than in VS. An unknown image name gives an empty URL, now treated as no image (also fixes the image editor's broken preview). |
 | GROUP-001 | 5203919 | 2026-09-14, owner: keep it simple, the builder sets how the view opens, then normal XAF. `Column(..., groupIndex:)` and `.GroupPanel()`; a grouped column is written as DxGrid stores it (`GroupIndex`, `SortIndex -1`) and takes no `sortIndex`; export, printer, JSON and `Extend` carry both. Sample `Order_Grouped_ListView`, gate step read from the running sample's DOM. `GroupInterval` left out. |
 
-Both cards: tests proven red first, 219 unit tests, gate exit 0 after each, one Codex review of 3dbc2a3..5203919 with no
-findings (so no re-review), broker stopped. Not pushed.
+| APPEAR-001 | 6ea85a3 | 2026-09-14, owner: worth building, in a separate add-on, through its own `ISupportAppearanceRules` method, an id clash with an `[Appearance]` rule a startup error, attribute rules left out of the export. New `XafLayoutBuilder.Appearance` (requires `ConditionalAppearanceModule`): `AppearanceBuilder<T>`, `AppearanceRegistry`, an updater on `AppearanceRulesModelNodesGenerator` that checks XLB006 and XLB008 before it adds anything and keeps spec order as `Index`, a startup check (XLB007 against the builder's layout specs, not the merged model) and the export through the Module's `LayoutCodePrinter.AppearanceExport` hook. Sample Order: bold DarkRed Globex order numbers, DarkBlue Header caption, both read from the running sample before the gate step. |
+
+MODELEDITOR-013 and GROUP-001: tests proven red first, 219 unit tests, gate exit 0 after each, one Codex review of
+3dbc2a3..5203919 with no findings (so no re-review), broker stopped. Pushed in 71981ae.
+
+APPEAR-001: 26 unit tests proven red first, 244 in total, gate exit 0. The gate found two things first: Playwright 1.49
+returns an empty Dictionary from `EvaluateAsync` (see Gotchas), and the appearance check reading Order's broken layout under
+`--break-layout` reported that layout error itself, ending the startup before XLB001. Four Codex rounds, seven findings, each
+fixed test first: criteria parsed before the updater mutates; XLB007 against layout specs; export skips non-member view items,
+inert rules, rules with no targets, and models without Conditional Appearance; the startup memory keyed on LayoutRegistry too.
+Round 4 clean, broker stopped after every round. Not pushed. `PackageVersion` stays 0.2.0: the next feed push adds the
+`XafLayoutBuilder.Appearance` package and bumps it.
 
 **Versioning (09caaaa):** `PackageVersion` is the version (0.1.0 on the feed), `CHANGELOG.md` holds one
 line per change under `Unreleased` until the next feed push, README's "Latest changes" lists the latest
@@ -560,4 +570,7 @@ and invariant number formatting.
   a ProjectReference to the Module, `find_references` missed the test-project callers until
   `reload_workspace` was run (Tests went from 1 to 2 project references and from 11 to 14 documents).
   Reported to the mcpRoslyn maintainers. Run `reload_workspace` after any project-file change.
+- Playwright 1.49 for .NET returns an empty `Dictionary<string, string>` from `EvaluateAsync` for a JS object (probed
+  with a scratch console app on 2026-09-14, after APPEAR-001's first gate run died on a missing key); return `string[]`
+  pairs instead, as the rest of the gate does.
 - Everything else XAF-specific is in `docs/api-notes.md` with file and line references.
