@@ -125,11 +125,16 @@ ListView's spec is ignored. Do not try to give a builder layout to a view that e
 ## ListView surface
 
 - `ListViewColumnsBuilder<T>.Create()`, then `.Column(x => x.M, width: null,
-  sort: ColumnSortOrder.None, caption: null, sortIndex: null)`, `.Hide(x => x.M)`, `.Lookup(l => ...)`, `.Build()`.
+  sort: ColumnSortOrder.None, caption: null, sortIndex: null, groupIndex: null)`, `.Hide(x => x.M)`,
+  `.GroupPanel()`, `.Lookup(l => ...)`, `.Build()`.
 - Column order is call order. Sorted columns get sort priority in call order, unless they set
   `sortIndex` (0 first), which decides independently of column order: sort by Customer, then
-  OrderDate, while OrderDate is shown first. Set it on every sorted column of a list or on none; it
-  needs a sort order, must not be negative, and must be unique.
+  OrderDate, while OrderDate is shown first. Set it on every sorted ungrouped column of a list or on
+  none; it needs a sort order, must not be negative, and must be unique.
+- `groupIndex: 0` groups the list by that column when it opens (0 outermost; not negative, unique),
+  and `.GroupPanel()` shows the grid's group panel. Both only set how the view starts: users regroup
+  or hide the panel in their own layout, as in any XAF app. A grouped column is sorted by its group
+  first, so it takes no `sortIndex`.
 - `.Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")` puts a
   band header over the columns declared inside it; they keep their place in the column order, and a
   null caption shows the id. One level only (no `Band` inside `Band`, which XAF Blazor would not
@@ -225,7 +230,7 @@ buttons are not in the popup itself.
 - Prints `.Unplaced(...)` again for a class that opted in, instead of the members its catch-all
   group happens to hold at that moment, so the exported file keeps behaving the same way.
 - Prints `sortIndex:` on the sorted columns only when their sort priority differs from their column
-  order, so a list that sorts in column order exports without it. Grouping is not exported: a column
-  grouped in the grid keeps its sort order and comes first in sort priority, the way the grid sorts.
+  order, so a list that sorts in column order exports without it. A column grouped in the grid exports
+  with `groupIndex:` and no `sortIndex:`, and a shown group panel as `.GroupPanel()`.
 - Prints `.Band(...)` around each band's columns, with `caption:` only when the caption is not the
   band id.

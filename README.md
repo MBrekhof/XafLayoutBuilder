@@ -266,8 +266,6 @@ specs, and a printer turns specs into the builder C#.
 - A class that opted into `.Unplaced(...)` exports that call again rather than the members the
   catch-all happened to hold, so adopting the exported file does not quietly restore the strict
   rule. A catch-all group holding anything other than plain editors is reported in the comment.
-- Grouping is not exported. A column grouped in the grid keeps its sort order and comes first in
-  sort priority, the way the grid sorts it.
 - A group caption XAF derived earlier can survive a user's change and is then exported as an
   explicit caption. In the sample, Details keeps the caption "Notes" after Order Date moves in.
 - The view you invoke the action from is the one exported. The other half of the class comes from

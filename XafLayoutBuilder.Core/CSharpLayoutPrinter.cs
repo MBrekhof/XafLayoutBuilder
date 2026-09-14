@@ -71,11 +71,13 @@ public static class CSharpLayoutPrinter {
             if (c.Width is { } w) sb.Append(", width: ").Append(w);
             if (c.SortOrder != ColumnSortOrder.None) sb.Append(", sort: ColumnSortOrder.").Append(c.SortOrder);
             if (c.SortIndex is { } sortIndex) sb.Append(", sortIndex: ").Append(sortIndex);
+            if (c.GroupIndex is { } groupIndex) sb.Append(", groupIndex: ").Append(groupIndex);
             if (c.Caption is not null) sb.Append(", caption: ").Append(Quote(c.Caption));
             sb.Append(')');
         }
         CloseBand();
         foreach (var hidden in spec.HiddenMembers) sb.AppendLine().Append(Pad(depth)).Append(".Hide(x => x.").Append(PathIdent(hidden)).Append(')');
+        if (spec.ShowGroupPanel) sb.AppendLine().Append(Pad(depth)).Append(".GroupPanel()");
 
         void CloseBand() {
             if (openBand is null) return;

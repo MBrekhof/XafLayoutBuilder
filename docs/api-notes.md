@@ -176,6 +176,13 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   the others by `SortIndex` (`GridColumnHelper.SortedColumns`, lines 75-79); the exporter ranks
   sort priority the same way. Paths under `Components\Sources\Blazor\DevExpress.Blazor.Grid\Grid\`
   and `DevExpress.ExpressApp\DevExpress.ExpressApp.Blazor\Editors\DxGridBase\`.
+- **Grouping (GROUP-001).** `IModelListView.IsGroupPanelVisible` (bool, default false, `Model/IModelListView.cs` 81-83)
+  maps both ways to `DxGrid.ShowGroupPanel` (`DevExpress.ExpressApp.Blazor/Editors/DxGrid/DxGridModelSynchronizer.cs` 71,
+  77). `IModelColumn.GroupIndex` (default -1, lines 155-157) and `GroupInterval` (158-160) map to the grid column
+  (`DxGrid/DxGridColumnWrapper.cs` 103-113), and a grouped column counts as visible even with `VisibleIndex` -1 (line 96).
+  The updater writes a grouped column the way the grid stores one, `GroupIndex` with `SortIndex = -1`, and ranks the other
+  sorted columns from 0. `IsGroupPanelVisible`, written from the columns updater, lands in the generated layer as
+  `BandsLayout` does.
 - Lookup ListViews are marked with the node value `ModelViewsNodesGenerator.IsLookupListView`
   (`"IsLookupView"`); the columns generator branches on it. [`ModelListViewNodesGenerator.cs` 390-396]
 - **Index handling in the first layer:** after generating, if `node.IsInFirstLayer` the generator

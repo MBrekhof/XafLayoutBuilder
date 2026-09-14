@@ -138,6 +138,21 @@ public class CSharpLayoutPrinterTests {
         Assert.DoesNotContain("sortIndex", CSharpLayoutPrinter.PrintColumns(ListViewColumnsBuilderTests.Section4Columns(), "TestOrder"));
     }
 
+    // GROUP-001: a group index prints with its column, the group panel after the columns, each only when set.
+    [Fact]
+    public void GroupIndex_AndGroupPanel_ArePrintedOnlyWhenSet() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)
+            .GroupPanel()
+            .Build();
+        var code = CSharpLayoutPrinter.PrintColumns(spec, "TestOrder");
+        Assert.Contains(".Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)", code);
+        Assert.Contains(".GroupPanel()", code);
+        var plain = CSharpLayoutPrinter.PrintColumns(ListViewColumnsBuilderTests.Section4Columns(), "TestOrder");
+        Assert.DoesNotContain("groupIndex", plain);
+        Assert.DoesNotContain("GroupPanel", plain);
+    }
+
     // BAND-001: consecutive columns of one band print inside its .Band(...) call, with the caption only when it is set.
     [Fact]
     public void Bands_PrintAroundTheirColumns() {

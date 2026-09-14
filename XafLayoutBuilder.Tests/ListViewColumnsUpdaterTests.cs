@@ -77,4 +77,18 @@ public class ListViewColumnsUpdaterTests(ApplicationModelFixture fixture) {
         Assert.Equal(0, view.Columns["Customer"].SortIndex);
         Assert.Equal(-1, view.Columns["Number"].SortIndex);
     }
+
+    // GROUP-001: the group panel and the grouping are generated-layer defaults. The grouped column keeps its sort order but
+    // no sort index, as DxGrid stores a grouped column (docs/api-notes.md), so the other sorted column is first by index.
+    [Fact]
+    public void GroupPanel_AndGroupIndex_AreApplied() {
+        var view = fixture.Class<ModelTestGrouped>().DefaultListView;
+        Assert.True(view.IsGroupPanelVisible);
+        Assert.Equal(0, view.Columns["Customer"].GroupIndex);
+        Assert.Equal(DxSort.Ascending, view.Columns["Customer"].SortOrder);
+        Assert.Equal(-1, view.Columns["Customer"].SortIndex);
+        Assert.Equal(0, view.Columns["ShipDate"].SortIndex);
+        Assert.Equal(-1, view.Columns["Number"].GroupIndex);
+        Assert.False(fixture.Class<ModelTestShipment>().DefaultListView.IsGroupPanelVisible);
+    }
 }

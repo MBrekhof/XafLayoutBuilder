@@ -126,8 +126,9 @@ public static class LayoutExporter {
         if (view.BandsLayout is { Enable: true } bandsLayout && bandsLayout.Any(b => b.OwnerBand is not null))
             skipped.Add("note: nested bands were flattened into their outermost band; the builder has one band level");
         var spec = new ListColumnsSpec(type.FullName!, listed, Hidden(view),
-            lookupView is null ? null : new ListColumnsSpec(type.FullName!, Columns(lookupView, withBands: false), Hidden(lookupView)),
-            Bands(view, listed));
+            lookupView is null ? null : new ListColumnsSpec(type.FullName!, Columns(lookupView, withBands: false), Hidden(lookupView),
+                ShowGroupPanel: lookupView.IsGroupPanelVisible),
+            Bands(view, listed), view.IsGroupPanelVisible);
         return (spec, skipped);
 
         // BAND-001: the order the grid shows. Without bands that is the column Index. With bands, XAF Blazor numbers the root
@@ -172,13 +173,12 @@ public static class LayoutExporter {
                 .Select(c => (Column: c, Member: Simple(c)))
                 .Where(x => x.Member is not null)
                 .ToList();
-            // SORT-001: sort priority ranked the way the Blazor grid sorts, grouped columns first by GroupIndex, then the rest
-            // by SortIndex. A grouped column keeps its SortOrder but has SortIndex -1 (docs/api-notes.md), so the stored
-            // index cannot be exported as it is. Grouping itself has no builder form and is not exported.
-            var sorted = shown.Where(x => x.Column.SortOrder != DxSort.None).Select(x => x.Column).ToList();
+            // SORT-001: sort priority ranked by SortIndex. GROUP-001: the grid sorts grouped columns first, by GroupIndex; such a
+            // column exports its group index, and keeps its SortOrder but has SortIndex -1 (docs/api-notes.md), so only the
+            // columns sorted without grouping are ranked.
+            var sorted = shown.Where(x => x.Column.SortOrder != DxSort.None && x.Column.GroupIndex < 0).Select(x => x.Column).ToList();
             var priority = sorted
-                .OrderByDescending(c => c.GroupIndex >= 0)
-                .ThenBy(c => c.GroupIndex >= 0 ? c.GroupIndex : c.SortIndex)
+                .OrderBy(c => c.SortIndex)
                 .Select((c, rank) => (c, rank))
                 .ToDictionary(p => p.c, p => p.rank);
             // Printed only when it differs from column order, so a spec that sorts in column order round-trips to the same text.
@@ -190,7 +190,8 @@ public static class LayoutExporter {
                     // Localizable like a group caption: compare with the member caption XAF falls back to.
                     x.Column.Caption != x.Column.ModelMember?.Caption ? x.Column.Caption : null,
                     explicitSortPriority && priority.TryGetValue(x.Column, out var rank) ? rank : null,
-                    withBands && v.BandsLayout.Enable ? Outermost(((IModelBandedColumn)x.Column).OwnerBand)?.Id : null))
+                    withBands && v.BandsLayout.Enable ? Outermost(((IModelBandedColumn)x.Column).OwnerBand)?.Id : null,
+                    x.Column.GroupIndex >= 0 ? x.Column.GroupIndex : null))
                 .ToList();
         }
 

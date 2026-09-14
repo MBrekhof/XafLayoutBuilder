@@ -64,4 +64,22 @@ public class LayoutSpecJsonTests {
         Assert.Equal([new BandSpec("Identity", "Order")], back.Bands!);
         Assert.DoesNotContain("band", LayoutSpecJson.Serialize(ListViewColumnsBuilderTests.Section4Columns()));
     }
+
+    // GROUP-001: the group panel and a group index round-trip; a list without grouping gets neither field.
+    [Fact]
+    public void Grouping_RoundTrips() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)
+            .GroupPanel()
+            .Build();
+        var json = LayoutSpecJson.Serialize(spec);
+        var back = LayoutSpecJson.Deserialize<ListColumnsSpec>(json);
+
+        Assert.Equal(json, LayoutSpecJson.Serialize(back));
+        Assert.True(back.ShowGroupPanel);
+        Assert.Equal(0, back.Columns[0].GroupIndex);
+        var plain = LayoutSpecJson.Serialize(ListViewColumnsBuilderTests.Section4Columns());
+        Assert.DoesNotContain("groupIndex", plain);
+        Assert.DoesNotContain("showGroupPanel", plain);
+    }
 }

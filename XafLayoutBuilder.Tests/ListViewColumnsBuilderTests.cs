@@ -89,6 +89,20 @@ public class ListViewColumnsBuilderTests {
         Assert.Equal(new int?[] { 1, 0, null }, spec.Columns.Select(c => c.SortIndex));
     }
 
+    // GROUP-001: the group panel and the default grouping are part of the spec, and Extend keeps them.
+    [Fact]
+    public void GroupPanel_AndGroupIndex_LandInTheSpec() {
+        var spec = ListViewColumnsBuilder<TestOrder>.Create()
+            .Column(x => x.Number)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)
+            .GroupPanel()
+            .Build();
+        Assert.True(spec.ShowGroupPanel);
+        Assert.Equal(new int?[] { null, 0 }, spec.Columns.Select(c => c.GroupIndex));
+        Assert.True(ListViewColumnsBuilder<TestServiceOrder>.Extend(spec).Build().ShowGroupPanel);
+        Assert.False(ListViewColumnsBuilder<TestOrder>.Create().Column(x => x.Number).Build().ShowGroupPanel);
+    }
+
     // BAND-001: a band groups the columns declared inside it; they keep their place in the column order.
     [Fact]
     public void Band_SetsTheBandOnItsColumns_AndDeclaresTheBand() {

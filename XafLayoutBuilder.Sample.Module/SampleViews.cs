@@ -12,6 +12,7 @@ public static class SampleViews {
     public const string CompactDetailViewId = "Order_Compact_DetailView";
     public const string CompactListViewId = "Order_Compact_ListView";
     public const string BandedListViewId = "Order_Banded_ListView";
+    public const string GroupedListViewId = "Order_Grouped_ListView";
 
     public static void Register() {
         LayoutRegistry.AddDetailView<Order>(CompactDetailViewId, () =>
@@ -29,6 +30,14 @@ public static class SampleViews {
             ListViewColumnsBuilder<Order>.Create()
                 .Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")
                 .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+                .Build());
+        // GROUP-001: grouped by Customer when it opens, with the group panel shown.
+        LayoutRegistry.AddListView<Order>(GroupedListViewId, () =>
+            ListViewColumnsBuilder<Order>.Create()
+                .Column(x => x.Number)
+                .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)
+                .Column(x => x.OrderDate, sort: ColumnSortOrder.Descending)
+                .GroupPanel()
                 .Build());
     }
 }

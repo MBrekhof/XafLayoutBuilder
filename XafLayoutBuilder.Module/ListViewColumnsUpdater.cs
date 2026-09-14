@@ -96,9 +96,13 @@ public sealed class ListViewColumnsUpdater : ModelNodesGeneratorUpdater<ModelLis
                 Core.ColumnSortOrder.Descending => DxSort.Descending,
                 _ => DxSort.None,
             };
-            // An explicit sort priority (SORT-001) wins; validation guarantees every sorted column has one or none does.
-            column.SortIndex = c.SortOrder == Core.ColumnSortOrder.None ? -1 : c.SortIndex ?? sortIndex++;
+            // An explicit sort priority (SORT-001) wins; validation guarantees every sorted column has one or none does. A grouped
+            // column (GROUP-001) is sorted by its group index before the others and has no sort index, as DxGrid stores it.
+            column.SortIndex = c.SortOrder == Core.ColumnSortOrder.None || c.GroupIndex is not null ? -1 : c.SortIndex ?? sortIndex++;
+            if (c.GroupIndex is { } groupIndex) column.GroupIndex = groupIndex;
         }
+        // GROUP-001: like the columns, a generated-layer default the user's own layout can change.
+        if (spec.ShowGroupPanel) view.IsGroupPanelVisible = true;
         // Hidden members must exist as columns so the chooser can offer them, even where the generator made none. Stamped,
         // because the model cannot otherwise tell a column the spec hid from one it never mentioned (EXPORT-001).
         foreach (var hidden in spec.HiddenMembers)

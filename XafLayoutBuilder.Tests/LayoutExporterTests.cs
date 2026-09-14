@@ -142,10 +142,11 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
         Assert.Equal(ModelTestShipment.BuildListViewColumns()!.Columns, exported.Columns);
     }
 
-    // SORT-001, Codex review: the Blazor grid stores a grouped column with its SortOrder but SortIndex -1, and sorts it
-    // before every other column (docs/api-notes.md). The export ranks it the same way instead of printing sortIndex: -1.
+    // SORT-001, Codex review: the Blazor grid stores a grouped column with its SortOrder but SortIndex -1 (docs/api-notes.md),
+    // which must not export as sortIndex: -1. GROUP-001: it exports as grouped, and the column still sorted by index follows
+    // column order, so it prints no sort index either.
     [Fact]
-    public void ExportColumns_RanksAGroupedColumnFirst_InsteadOfExportingItsSortIndex() {
+    public void ExportColumns_ExportsAColumnGroupedInTheGrid_AsGrouped_WithoutASortIndex() {
         var view = fixture.Class<ModelTestParcel>().DefaultListView;
         var shipDate = view.Columns[nameof(ModelTestParcel.ShipDate)];
         shipDate.GroupIndex = 0;
@@ -156,8 +157,17 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
         LayoutSpecChecks.Validate(exported);
         Assert.Equal(
             [new ColumnSpec(nameof(ModelTestParcel.Number)),
-             new ColumnSpec(nameof(ModelTestParcel.Customer), SortOrder: ColumnSortOrder.Ascending, SortIndex: 1),
-             new ColumnSpec(nameof(ModelTestParcel.ShipDate), SortOrder: ColumnSortOrder.Descending, SortIndex: 0)],
+             new ColumnSpec(nameof(ModelTestParcel.Customer), SortOrder: ColumnSortOrder.Ascending),
+             new ColumnSpec(nameof(ModelTestParcel.ShipDate), SortOrder: ColumnSortOrder.Descending, GroupIndex: 0)],
             exported.Columns);
+    }
+
+    // GROUP-001: the group panel and the grouping round-trip.
+    [Fact]
+    public void ExportColumns_KeepsTheGroupPanelAndTheGrouping() {
+        var (exported, skipped) = LayoutExporter.ExportColumns(fixture.Class<ModelTestGrouped>().DefaultListView, null);
+        Assert.Empty(skipped);
+        Assert.Equal(ModelTestGrouped.BuildListViewColumns()!.Columns, exported.Columns);
+        Assert.True(exported.ShowGroupPanel);
     }
 }

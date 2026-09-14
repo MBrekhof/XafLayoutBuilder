@@ -14,6 +14,8 @@ using Microsoft.Playwright;
 //   VIEW-001 Order_Compact_ListView and Order_Compact_DetailView, declared in code by the sample, show their own columns
 //            and layout
 //   BAND-001 Order_Banded_ListView's band header Order spans Number and Customer
+//   GROUP-001 Order_Grouped_ListView opens grouped by Customer (a group row per customer, Customer no data header) with
+//            the group panel holding Customer
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
 //   E2E 4   Admin drags OrderDate into Details in XAF's layout editor and hides the Customer column from the grid header
 //           menu (E2E4-001); the user layer wins over the builder
@@ -292,6 +294,20 @@ try
     Assert(bandSpan == 2, $"the band header Order spans Number and Customer (colspan {bandSpan}; headers {string.Join(",", bandedHeaders)})");
     Assert(new[] { "Number", "Customer", "Order Date" }.All(bandedHeaders.Contains),
         $"the banded ListView still shows Number, Customer and Order Date (got {string.Join(",", bandedHeaders)})");
+
+    Step("GROUP-001: a ListView grouped by Customer when it opens, with the group panel shown");
+    await OpenListView(page, "Order_Grouped_ListView", "Order Date");
+    var groupedGrid = page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First;
+    // Read from the running sample: groups start collapsed, one row "Customer: Acme Corp (Count: 2)" per customer and no
+    // order rows; the group panel above the header row holds Customer, which leaves the data headers.
+    await groupedGrid.GetByText("Customer: Acme Corp").First.WaitForAsync(new() { Timeout = 30_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09g-grouped-listview.png") });
+    var groupedText = System.Text.RegularExpressions.Regex.Replace(await groupedGrid.InnerTextAsync(), @"\s+", " ");
+    Assert(groupedText.Contains("Customer: Acme Corp (Count: 2)") && groupedText.Contains("Customer: Globex (Count: 2)"),
+        $"Order_Grouped_ListView opens grouped by Customer, one group row per customer (got {groupedText})");
+    var groupedHeaders = await GridHeaders(page);
+    Assert(string.Join(",", groupedHeaders) == "Number,Order Date", $"the grouped Customer column is no data header (got {string.Join(",", groupedHeaders)})");
+    Assert(groupedText.Split("Selection")[0].Contains("Customer"), $"the group panel above the header row holds Customer (got {groupedText})");
 
     Step("E2E 5a: exporting the untouched builder layout reproduces the source (section 6 round trip)");
     await OpenOrd001Detail(page);

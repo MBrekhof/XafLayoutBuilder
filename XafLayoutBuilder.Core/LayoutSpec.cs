@@ -88,6 +88,7 @@ public sealed record DetailLayoutSpec(
 /// <summary>
 /// A listed column. <see cref="SortIndex"/> is this sorted column's sort priority (0 first) when it differs from column
 /// order; null means sorted columns take priority in column order. Set on every sorted column of a list or on none.
+/// <see cref="GroupIndex"/> (GROUP-001) groups the list by this column when it opens, 0 outermost; a grouped column takes no sort index.
 /// </summary>
 public sealed record ColumnSpec(
     string Member,
@@ -95,7 +96,8 @@ public sealed record ColumnSpec(
     ColumnSortOrder SortOrder = ColumnSortOrder.None,
     string? Caption = null,
     int? SortIndex = null,
-    string? Band = null);
+    string? Band = null,
+    int? GroupIndex = null);
 
 /// <summary>A band (BAND-001): a header over a run of adjacent columns. A null <see cref="Caption"/> shows the id, as XAF does.</summary>
 public sealed record BandSpec(string Id, string? Caption = null);
@@ -109,7 +111,10 @@ public sealed record ListColumnsSpec(
     IReadOnlyList<ColumnSpec> Columns,
     IReadOnlyList<string> HiddenMembers,
     ListColumnsSpec? Lookup = null,
-    IReadOnlyList<BandSpec>? Bands = null) {
+    IReadOnlyList<BandSpec>? Bands = null,
+    // GROUP-001: left out of the JSON while false, like the other optional fields.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    bool ShowGroupPanel = false) {
     readonly IReadOnlyList<ColumnSpec> columns = Columns.Frozen();
     readonly IReadOnlyList<string> hiddenMembers = HiddenMembers.Frozen();
     readonly IReadOnlyList<BandSpec>? bands = Bands?.Frozen();
@@ -204,9 +209,9 @@ public static class LayoutSpecChecks {
 
     /// <summary>
     /// The column rules, for a spec from any source: a blank member name or an empty segment in a nested path, a column
-    /// listed twice, a column both listed and hidden, a lookup inside a lookup, and a sort index that is on an unsorted
-    /// column, negative, used twice, or given on some sorted columns but not all. The lookup's own columns are checked
-    /// the same way.
+    /// listed twice, a column both listed and hidden, a lookup inside a lookup, a sort index that is on an unsorted or a
+    /// grouped column, negative, used twice, or given on some sorted ungrouped columns but not all, and a group index that
+    /// is negative or used twice. The lookup's own columns are checked the same way.
     /// </summary>
     public static void Validate(ListColumnsSpec spec) {
         var type = ShortName(spec.TypeName);
@@ -225,14 +230,21 @@ public static class LayoutSpecChecks {
             if (s.Columns.Select(c => c.Member).Concat(s.HiddenMembers).FirstOrDefault(m => m.Split('.').Any(string.IsNullOrWhiteSpace)) is { } broken)
                 throw new LayoutSpecException($"{type}: column '{broken}' has an empty segment in its path.");
             // SORT-001: an explicit sort priority belongs to a sorted column, is not negative and is unique, and is given on
-            // every sorted column of the list or on none.
+            // every sorted column of the list or on none. GROUP-001: DxGrid sorts a grouped column by its group index before
+            // the others and keeps no sort index for it (docs/api-notes.md), so it takes none and is left out of that rule.
             foreach (var c in s.Columns.Where(c => c.SortIndex is not null)) {
                 if (c.SortOrder == ColumnSortOrder.None)
                     throw new LayoutSpecException($"{type}: column '{c.Member}' has a sort index but no sort order.");
                 if (c.SortIndex < 0)
                     throw new LayoutSpecException($"{type}: column '{c.Member}' has a negative sort index.");
+                if (c.GroupIndex is not null)
+                    throw new LayoutSpecException($"{type}: column '{c.Member}' is grouped, so it takes no sort index; its group index orders it.");
             }
-            var sorted = s.Columns.Where(c => c.SortOrder != ColumnSortOrder.None).ToList();
+            if (s.Columns.FirstOrDefault(c => c.GroupIndex < 0) is { } negativeGroup)
+                throw new LayoutSpecException($"{type}: column '{negativeGroup.Member}' has a negative group index.");
+            if (s.Columns.Where(c => c.GroupIndex is not null).GroupBy(c => c.GroupIndex).FirstOrDefault(g => g.Count() > 1) is { } twiceGroup)
+                throw new LayoutSpecException($"{type}: group index {twiceGroup.Key} is used twice.");
+            var sorted = s.Columns.Where(c => c.SortOrder != ColumnSortOrder.None && c.GroupIndex is null).ToList();
             if (sorted.Any(c => c.SortIndex is not null)) {
                 if (sorted.Any(c => c.SortIndex is null))
                     throw new LayoutSpecException($"{type}: set sortIndex on every sorted column or on none.");

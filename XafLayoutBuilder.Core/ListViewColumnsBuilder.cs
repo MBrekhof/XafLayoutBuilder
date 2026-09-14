@@ -10,6 +10,7 @@ public sealed class ListViewColumnsBuilder<T> {
     readonly bool isLookup;
     ListColumnsSpec? lookup;
     string? currentBand;
+    bool showGroupPanel;
 
     ListViewColumnsBuilder(bool isLookup) { this.isLookup = isLookup; }
 
@@ -28,17 +29,25 @@ public sealed class ListViewColumnsBuilder<T> {
         builder.hidden.UnionWith(baseColumns.HiddenMembers);
         builder.bands.AddRange(baseColumns.Bands ?? []);
         builder.lookup = baseColumns.Lookup is { } lookup ? lookup with { TypeName = typeof(T).FullName! } : null;
+        builder.showGroupPanel = baseColumns.ShowGroupPanel;
         return builder;
     }
 
     /// <summary>
     /// <paramref name="member"/> may follow references: <c>x => x.Customer.City</c> is the column "Customer.City".
     /// <paramref name="sortIndex"/> is this sorted column's sort priority (0 first) when it should differ from column order;
-    /// set it on every sorted column or on none.
+    /// set it on every sorted column or on none. <paramref name="groupIndex"/> (GROUP-001) groups the list by this column
+    /// when it opens, 0 outermost; a grouped column is sorted by its group index before the others and takes no sort index.
     /// </summary>
     public ListViewColumnsBuilder<T> Column(Expression<Func<T, object?>> member, int? width = null,
-        ColumnSortOrder sort = ColumnSortOrder.None, string? caption = null, int? sortIndex = null) {
-        columns.Add(new ColumnSpec(MemberPath.ChainOf(member), width, sort, caption, sortIndex, currentBand));
+        ColumnSortOrder sort = ColumnSortOrder.None, string? caption = null, int? sortIndex = null, int? groupIndex = null) {
+        columns.Add(new ColumnSpec(MemberPath.ChainOf(member), width, sort, caption, sortIndex, currentBand, groupIndex));
+        return this;
+    }
+
+    /// <summary>GROUP-001: shows the grid's group panel, where a user drags a column header to group by it.</summary>
+    public ListViewColumnsBuilder<T> GroupPanel() {
+        showGroupPanel = true;
         return this;
     }
 
@@ -77,7 +86,8 @@ public sealed class ListViewColumnsBuilder<T> {
 
     /// <summary>Freezes and validates with <see cref="LayoutSpecChecks.Validate(ListColumnsSpec)"/>, which lists the rules.</summary>
     public ListColumnsSpec Build() {
-        var spec = new ListColumnsSpec(typeof(T).FullName!, columns.ToArray(), hidden.ToArray(), lookup, bands.Count == 0 ? null : bands.ToArray());
+        var spec = new ListColumnsSpec(typeof(T).FullName!, columns.ToArray(), hidden.ToArray(), lookup,
+            bands.Count == 0 ? null : bands.ToArray(), showGroupPanel);
         LayoutSpecChecks.Validate(spec);
         return spec;
     }

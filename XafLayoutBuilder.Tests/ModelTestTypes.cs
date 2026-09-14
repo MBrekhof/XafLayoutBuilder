@@ -264,6 +264,24 @@ public class ModelTestTicket : ISupportViewLayoutCustomization {
             .Build();
 }
 
+// GROUP-001: the group panel shown, grouped by Customer, and ShipDate sorted.
+[DomainComponent]
+public class ModelTestGrouped : ISupportViewLayoutCustomization {
+    public string? Number { get; set; }
+    public ModelTestCustomer? Customer { get; set; }
+    public DateTime ShipDate { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() => null;
+
+    public static ListColumnsSpec? BuildListViewColumns() =>
+        ListViewColumnsBuilder<ModelTestGrouped>.Create()
+            .Column(x => x.Number)
+            .Column(x => x.Customer, sort: ColumnSortOrder.Ascending, groupIndex: 0)
+            .Column(x => x.ShipDate, sort: ColumnSortOrder.Descending)
+            .GroupPanel()
+            .Build();
+}
+
 // SORT-001: sorted in column order; LayoutExporterTests groups ShipDate the way the Blazor grid stores it.
 [DomainComponent]
 public class ModelTestParcel : ISupportViewLayoutCustomization {

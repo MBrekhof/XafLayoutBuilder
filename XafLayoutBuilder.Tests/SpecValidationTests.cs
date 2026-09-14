@@ -144,6 +144,24 @@ public class SpecValidationTests {
             LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [new ColumnSpec("Number", SortOrder: ColumnSortOrder.Ascending, SortIndex: -1)], []))).Message);
     }
 
+    // GROUP-001: a group index is not negative and unique. A grouped column is sorted by its group index first, as DxGrid
+    // sorts it (docs/api-notes.md), so it takes no sort index and does not count for the every-sorted-column rule.
+    [Fact]
+    public void RawColumns_GroupIndexRules() {
+        Assert.Contains("'Number' has a negative group index", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [new ColumnSpec("Number", GroupIndex: -1)], []))).Message);
+        Assert.Contains("group index 0 is used twice", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [
+                new ColumnSpec("Number", GroupIndex: 0),
+                new ColumnSpec("Customer", GroupIndex: 0)], []))).Message);
+        Assert.Contains("'Customer' is grouped, so it takes no sort index", Assert.Throws<LayoutSpecException>(() =>
+            LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [
+                new ColumnSpec("Customer", SortOrder: ColumnSortOrder.Ascending, SortIndex: 0, GroupIndex: 0)], []))).Message);
+        LayoutSpecChecks.Validate(new ListColumnsSpec(Order, [
+            new ColumnSpec("Customer", SortOrder: ColumnSortOrder.Ascending, GroupIndex: 0),
+            new ColumnSpec("Number", SortOrder: ColumnSortOrder.Ascending, SortIndex: 0)], []));
+    }
+
     [Fact]
     public void BuilderOutput_AndTheSection4Example_AreValid() {
         LayoutSpecChecks.Validate(LayoutBuilderTests.Section4Detail());
