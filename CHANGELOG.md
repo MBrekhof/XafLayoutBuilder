@@ -1,10 +1,12 @@
 # Changelog
 
 One line per change, newest first. The version is `PackageVersion` in `Directory.Build.props`, the
-version the packages on the local feed carry. Ids are ContextBoard cards; the detail is in
+version the packages on the feed carry. Ids are ContextBoard cards; the detail is in
 `SESSION_HANDOFF.md`.
 
 ## Unreleased
+
+- PKG-002: Core, Module and Blazor 0.2.0 published as private packages on GitHub Packages (`https://nuget.pkg.github.com/MBrekhof/index.json`), the feed from now on.
 
 - MODELEDITOR-007: Model Editor validation: required and key values are checked against pending edits, including required resets on saved user-created nodes; Save lists missing values and warns about unusable stored differences.
 - MODELEDITOR-006: Model Editor special editors: a filter builder for criteria values, text areas for expressions and multiline strings, image names with a preview.

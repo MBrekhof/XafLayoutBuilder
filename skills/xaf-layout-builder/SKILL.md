@@ -13,7 +13,7 @@ nothing else. Changes appear after an application restart.
 ## Setup (once per solution)
 
 - The app's module references the `XafLayoutBuilder.Module` package (a Blazor host also
-  `XafLayoutBuilder.Blazor`; local feed, see the repository README) or the projects, and requires it:
+  `XafLayoutBuilder.Blazor`; private GitHub Packages feed, see the repository README) or the projects, and requires it:
   `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
 - Keep `XafLayoutBuilderModule` in its own assembly: reference the projects, never copy their files
   into an existing module project. `ModuleBase` scans its own assembly for `ModuleUpdater` types and

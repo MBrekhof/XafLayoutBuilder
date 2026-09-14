@@ -50,7 +50,7 @@ dotnet test XafLayoutBuilder.Tests
 dotnet run --project XafLayoutBuilder.E2ETests     # builds + starts the sample on :5100, asserts, exits 0/1/2
 dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://localhost:5000, Admin / empty password
 dotnet pack XafLayoutBuilder.slnx -c Release -o artifacts/packages                       # Core, Module, Blazor
-dotnet nuget push "artifacts/packages/*.nupkg" --source C:\Projects\local-nuget         # local feed (backslashes)
+dotnet nuget push "artifacts/packages/*.nupkg" --source https://nuget.pkg.github.com/MBrekhof/index.json --api-key "$(gh auth token)"   # private GitHub Packages; gh needs write:packages
 ```
 
 LocalDB catalog `XafLayoutBuilder.Sample` on `(localdb)\mssqllocaldb`. Debug builds auto-update the
@@ -69,7 +69,7 @@ Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
   the packages accept `[26.1.4,26.2)`). Never mix in 25.2 packages, never float the version again.
 - **Package versions:** `PackageVersion` in `Directory.Build.props`, never `Version` (XAF records the
   module's assembly version in the database and refuses a lower one). Bump it before each push to
-  the local feed `C:\Projects\local-nuget`.
+  the private GitHub Packages feed (source `github-mbrekhof`); a pushed version cannot be pushed again.
 - **Version and changelog:** SemVer, 0.x while a proof of concept; the version is `PackageVersion`.
   Every commit that changes behaviour adds a one-line entry, card id first, under `## Unreleased` in
   `CHANGELOG.md`. A feed push bumps `PackageVersion` (minor for features, patch for fixes only) and
