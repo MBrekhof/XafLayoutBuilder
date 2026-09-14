@@ -35,6 +35,18 @@ public class ModelEditorTreeTests(ApplicationModelFixture fixture) {
         Assert.All(leaves, leaf => Assert.Empty(ModelEditing.Children(leaf)));
     }
 
+    // MODELEDITOR-013: the icon the Visual Studio Model Editor shows, the first [ImageName] on the node's interfaces
+    // (ModelInterfaceAdapter.GetImageInfo, ModelInterfaceAdapter.cs 115-127).
+    [Fact]
+    public void ImageName_IsTheImageNameOnTheNodesInterface() {
+        Assert.Equal("ModelEditor_Views", ModelEditing.ImageName(fixture.Model.Views));
+        Assert.Equal("ModelEditor_ListView", ModelEditing.ImageName(OrderListView));
+    }
+
+    [Fact]
+    public void ImageName_FallsBackToTheDefaultImage_WithoutAnImageNameAttribute() =>
+        Assert.Equal("ModelEditor_Default", ModelEditing.ImageName(OrderListView.Columns));
+
     [Fact]
     public void IsModified_MarksANodeWithDifferencesInTheWritableLayer() {
         var view = fixture.Class<ModelTestContact>().DefaultListView;

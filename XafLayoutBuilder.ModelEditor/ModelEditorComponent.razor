@@ -233,7 +233,7 @@ else {
         }
         <span data-node="@ModelEditing.Path(node)" class="@(ModelEditing.IsModified(node) ? "xlb-modified" : null)"
               style="cursor:pointer; padding:0 2px; font-weight:@(ModelEditing.IsModified(node) ? "600" : "normal"); font-style:@(Session.IsAdded(node) ? "italic" : "normal"); text-decoration:@(Session.IsPendingDelete(node) ? "line-through" : "none"); background:@(ReferenceEquals(node, selected) ? "rgba(128,128,128,0.25)" : "transparent")"
-              @onclick="() => Select(node)">@ModelEditing.Caption(node)</span>
+              @onclick="() => Select(node)">@if (ImageUrl(ModelEditing.ImageName(node)) is { } icon) {<img class="xlb-node-icon" src="@icon" alt="" style="height:1em; vertical-align:text-bottom; margin-right:0.25em" />}@ModelEditing.Caption(node)</span>
         @if (expanded.Contains(ModelEditing.Path(node))) {
             <ul style="list-style:none; padding-left:1.25em; margin:0">
                 @foreach (var child in ModelEditing.Children(node)) {
@@ -337,11 +337,12 @@ else {
         }
     };
 
-    // An image name the application does not know shows no preview.
+    // An image name the application does not know shows no image: XAF Blazor gives an empty URL for it (ImageUrlService.GetImageUrl,
+    // IImageUrlService.cs 58-78).
     string? ImageUrl(string imageName) {
         if (string.IsNullOrEmpty(imageName)) return null;
         try {
-            return ImageUrls.GetImageUrl(imageName);
+            return ImageUrls.GetImageUrl(imageName) is { Length: > 0 } url ? url : null;
         }
         catch (Exception) {
             return null;

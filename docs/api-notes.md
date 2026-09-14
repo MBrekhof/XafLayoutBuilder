@@ -556,6 +556,13 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   cloned subtree back to the values it held in the writable layer at Save (`ModelNode.IsValueModified`, 899): the stored
   ones are set again, since a clone carries values nobody edited, and any other is cleared, such as the `Index = -1` the
   old grid writes over a column saved without an Index. A failing write there is logged, not thrown, because it would fail XAF's own save.
+- Tree icons (MODELEDITOR-013). The Visual Studio Model Editor takes a node's icon from the first `[ImageName]` on the
+  interfaces its type implements, else `ModelEditor_Default` (`DevExpress.ExpressApp.Win/Core/ModelEditor/NodesTree/ModelInterfaceAdapter.cs`
+  115-127). The model interfaces carry the names, e.g. `IModelViews` `ModelEditor_Views` (`Model/CommonInterfaces.cs` 548),
+  `IModelListView` `ModelEditor_ListView` (`Model/IModelListView.cs` 50); `IModelColumns` has none. The SVGs ship in
+  DevExpress.Images (`Win/DevExpress.Images/SvgImages/XAF/ModelEditor_*.svg`). `IImageUrlService.GetImageUrl` returns an
+  empty string, not an exception, for a name no image source has (`DevExpress.ExpressApp.Blazor/Services/IImageUrlService.cs`
+  58-78).
 
 ## Still open
 

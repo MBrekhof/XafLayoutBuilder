@@ -6,6 +6,7 @@ version the packages on the feed carry. Ids are ContextBoard cards; the detail i
 
 ## Unreleased
 
+- MODELEDITOR-013: Model Editor tree nodes show the Visual Studio Model Editor's icons; an unknown image name no longer shows a broken image preview.
 - PKG-002: Core, Module and Blazor 0.2.0 published as private packages on GitHub Packages (`https://nuget.pkg.github.com/MBrekhof/index.json`), the feed from now on.
 
 - MODELEDITOR-007: Model Editor validation: required and key values are checked against pending edits, including required resets on saved user-created nodes; Save lists missing values and warns about unusable stored differences.

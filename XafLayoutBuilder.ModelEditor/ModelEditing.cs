@@ -78,6 +78,15 @@ public static class ModelEditing {
     public static string NodeDescription(IModelNode node) => Helper.GetNodeDescription((ModelNode)node);
 
     /// <summary>
+    /// MODELEDITOR-013: the icon the Visual Studio Model Editor shows for the node, the first [ImageName] on its interfaces, else
+    /// ModelEditor_Default (ModelInterfaceAdapter.GetImageInfo, DevExpress.ExpressApp.Win ModelInterfaceAdapter.cs 115-127).
+    /// </summary>
+    public static string ImageName(IModelNode node) =>
+        XafTypesInfo.Instance.FindTypeInfo(node.GetType()).ImplementedInterfaces
+            .Select(i => i.FindAttribute<ImageNameAttribute>()?.ImageName)
+            .FirstOrDefault(name => name is not null) ?? "ModelEditor_Default";
+
+    /// <summary>
     /// A description as HTML: everything encoded except the &lt;b&gt;, &lt;/b&gt; and &lt;br&gt; DevExpress formats it with, so a generic type
     /// name such as System.Nullable&lt;System.Int32&gt; (ModelEditorHelper.GetFriendlyTypeName) shows as text (Codex review).
     /// </summary>

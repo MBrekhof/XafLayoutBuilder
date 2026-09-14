@@ -28,7 +28,8 @@ using Microsoft.Playwright;
 //   E2E 8   Customer's .Unplaced(AppendToGroup("Other")) collects City instead of failing startup
 //   MODELEDITOR-001 Edit Model (ModelEditor add-on): a caption edit closed with Cancel is dropped; a saved caption is stored
 //            in Admin's user model and shows after Save's reload; MODELEDITOR-002: a saved Reset takes it away at once;
-//            MODELEDITOR-003: the search finds the view and a value's description shows; MODELEDITOR-004: a column added
+//            MODELEDITOR-003: the search finds the view and a value's description shows; MODELEDITOR-013: the tree's Views
+//            node shows its icon; MODELEDITOR-004: a column added
 //            in the editor shows after Save and is gone again after deleting it, and a model save from a second logon does
 //            not store a node added in the open editor but not saved; MODELEDITOR-005: the DetailView drop-down sets
 //            Order_ListView's form, View in Model selects the open view's node, Go to and Back navigate, a reset restores it;
@@ -568,6 +569,10 @@ try
     await search.FillAsync("");
     await search.PressAsync("Enter");
     await modelEditor.Locator("[data-node='Views/Order_ListView']").WaitForAsync(new() { Timeout = 10_000 });
+    // MODELEDITOR-013: tree nodes carry the Visual Studio Model Editor's icons, served by XAF Blazor's image service.
+    var viewsIconLoads = await modelEditor.Locator("[data-node='Views'] img.xlb-node-icon")
+        .EvaluateAsync<bool>("img => img.decode().then(() => true, () => false)");
+    Assert(viewsIconLoads, "the Views node in the Model Editor tree shows its icon");
     await modelEditor.Locator("tr[data-value='Caption'] .xlb-value-name").ClickAsync();
     // The click is a server round trip; wait for the panel to re-render before reading it.
     try { await modelEditor.Locator(".xlb-description", new() { HasText = "Property type" }).WaitForAsync(new() { Timeout = 10_000 }); }
