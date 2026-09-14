@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <Description>Conditional appearance add-on for XafLayoutBuilder: appearance rules declared in the builder, applied through XAF's Conditional Appearance module. The Module stays free of that module.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DevExpress.ExpressApp.ConditionalAppearance" Version="$(DevExpressPackageRange)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XafLayoutBuilder.Module\XafLayoutBuilder.Module.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XafLayoutBuilder.Tests" />
+  </ItemGroup>
+</Project>

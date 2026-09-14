@@ -8,7 +8,7 @@
     <DevExpressPackageRange>[26.1.4,26.2)</DevExpressPackageRange>
   </PropertyGroup>
   <PropertyGroup>
-    <!-- Only Core, Module and Blazor are packages; they set IsPackable. PackageVersion rather than Version: XAF
+    <!-- Only Core, Module, Blazor and Appearance are packages; they set IsPackable. PackageVersion rather than Version: XAF
          records each module's assembly version in the application database, and an assembly version lower than the
          recorded one makes XAF refuse to start. Bump PackageVersion for every push to the feed. -->
     <IsPackable>false</IsPackable>

@@ -264,6 +264,128 @@ public class ModelTestTicket : ISupportViewLayoutCustomization {
             .Build();
 }
 
+// APPEAR-001: builder rules next to an [Appearance] rule of the class's own; the layout group "Header" is a layout target.
+[DomainComponent]
+[DevExpress.ExpressApp.ConditionalAppearance.Appearance("FromAttribute", TargetItems = "Code", FontColor = "Blue")]
+public class ModelTestStyled : ISupportViewLayoutCustomization, ISupportAppearanceRules {
+    public string? Code { get; set; }
+    public DateTime Due { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestStyled>.Create().Group("Header", g => g.Item(x => x.Code).Item(x => x.Due)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestStyled>.Create()
+            .Rule("Late", r => r
+                .When("[Due] < LocalDateTimeToday()")
+                .On(x => x.Due, x => x.Code)
+                .FontColor("Red")
+                .BackColor("#FFF3E0")
+                .FontStyle(AppearanceFontStyle.Bold | AppearanceFontStyle.Italic)
+                .Priority(2)
+                .InListView())
+            .Rule("HeaderHidden", r => r
+                .OnLayout("Header")
+                .Visibility(AppearanceVisibility.Hide)
+                .Enabled(false)
+                .InDetailView()
+                .InView("ModelTestStyled_ListView"))
+            .Build();
+}
+
+// APPEAR-001: a builder rule with the id of an [Appearance] rule on the class (XLB006). Two identical types because a class's
+// rules are generated once: one is read with FailFastOnLayoutErrors on, the other with it off.
+[DomainComponent]
+[DevExpress.ExpressApp.ConditionalAppearance.Appearance("Taken", TargetItems = "Name", FontColor = "Blue")]
+public class ModelTestAppearanceClashStrict : ISupportAppearanceRules {
+    public string? Name { get; set; }
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceClashStrict>.Create()
+            .Rule("Free", r => r.On(x => x.Name).BackColor("Yellow"))
+            .Rule("Taken", r => r.On(x => x.Name).FontColor("Red"))
+            .Build();
+}
+
+[DomainComponent]
+[DevExpress.ExpressApp.ConditionalAppearance.Appearance("Taken", TargetItems = "Name", FontColor = "Blue")]
+public class ModelTestAppearanceClashDegraded : ISupportAppearanceRules {
+    public string? Name { get; set; }
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceClashDegraded>.Create()
+            .Rule("Free", r => r.On(x => x.Name).BackColor("Yellow"))
+            .Rule("Taken", r => r.On(x => x.Name).FontColor("Red"))
+            .Build();
+}
+
+// APPEAR-001, Codex review: criteria that do not parse, read with FailFastOnLayoutErrors off: not even the valid rule is added.
+[DomainComponent]
+public class ModelTestAppearanceBadCriteriaDegraded : ISupportAppearanceRules {
+    public string? Name { get; set; }
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceBadCriteriaDegraded>.Create()
+            .Rule("Fine", r => r.On(x => x.Name).FontColor("Red"))
+            .Rule("BadCriteria", r => r.When("[Name] = ").On(x => x.Name).FontColor("Red"))
+            .Build();
+}
+
+// APPEAR-001, Codex review: a layout rule on the builder's Header group, which AppearanceRulesTests removes as a later layer would.
+[DomainComponent]
+public class ModelTestAppearanceOverridden : ISupportViewLayoutCustomization, ISupportAppearanceRules {
+    public string? Name { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestAppearanceOverridden>.Create().Group("Header", g => g.Item(x => x.Name)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceOverridden>.Create().Rule("Tint", r => r.OnLayout("Header").BackColor("Yellow")).Build();
+}
+
+// APPEAR-001: a layout target its builder layout does not have (XLB007) and criteria that do not parse (XLB008).
+[DomainComponent]
+public class ModelTestAppearanceBroken : ISupportViewLayoutCustomization, ISupportAppearanceRules {
+    public string? Name { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestAppearanceBroken>.Create().Group("Info", g => g.Item(x => x.Name)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceBroken>.Create()
+            .Rule("NoSuchGroup", r => r.OnLayout("Nope").BackColor("Yellow"))
+            .Rule("BadCriteria", r => r.When("[Name] = ").On(x => x.Name).FontColor("Red"))
+            .Build();
+}
+
+// APPEAR-001, gate: a layout rule on a class whose builder layout fails (XLB001). Its layout errors are LayoutStartupCheck's to
+// report, never the appearance check's. ApplicationModelFixture runs the appearance check before anything reads this layout.
+[DomainComponent]
+public class ModelTestAppearanceOnBrokenLayout : ISupportViewLayoutCustomization, ISupportAppearanceRules {
+    public string? Name { get; set; }
+    [Browsable(false)] public string? InternalCode { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestAppearanceOnBrokenLayout>.Create().Group("Broken", g => g.Item(x => x.Name).Item(x => x.InternalCode)).Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<ModelTestAppearanceOnBrokenLayout>.Create().Rule("Tint", r => r.OnLayout("Broken").BackColor("Yellow")).Build();
+}
+
+// APPEAR-001: no spec and no [Appearance]; AppearanceRulesTests adds rules to its model node the way an administrator would.
+[DomainComponent]
+public class ModelTestAppearanceExport {
+    public string? Name { get; set; }
+}
+
 // GROUP-001: the group panel shown, grouped by Customer, and ShipDate sorted.
 [DomainComponent]
 public class ModelTestGrouped : ISupportViewLayoutCustomization {

@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\XafLayoutBuilder.Sample.Module\XafLayoutBuilder.Sample.Module.csproj" />
     <ProjectReference Include="../XafLayoutBuilder.Blazor/XafLayoutBuilder.Blazor.csproj" />
+    <ProjectReference Include="../XafLayoutBuilder.Appearance/XafLayoutBuilder.Appearance.csproj" />
     <ProjectReference Include="../XafLayoutBuilder.ModelEditor/XafLayoutBuilder.ModelEditor.csproj" />
   </ItemGroup>
 </Project>

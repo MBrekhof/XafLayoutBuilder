@@ -53,7 +53,7 @@ public static class LayoutRegistry {
 
     // Parses the document, then deserialises only the requested half, so a broken detail cannot cost the columns their
     // spec or the other way round. Malformed JSON still fails both halves: neither can be read from it.
-    static TSpec? ReadHalf<T, TSpec>(string json, string half) where TSpec : class {
+    internal static TSpec? ReadHalf<T, TSpec>(string json, string half) where TSpec : class {
         try {
             using var document = System.Text.Json.JsonDocument.Parse(json);
             if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)

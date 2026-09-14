@@ -70,6 +70,10 @@ That file is the sample's only layout source for `Order`; the sample module has 
   Layout File" saves it as `{Type}.Layout.cs`, both in one click. "Export Layout To JSON" and
   "Download Layout JSON" give the same export as a JSON document that `LayoutRegistry.RegisterJson`
   loads, for layouts kept as data.
+- **Appearance rules too.** With the optional `XafLayoutBuilder.Appearance` add-on, a class declares
+  conditional appearance (font and back colour, font style, enabled, visibility) next to its layout in
+  `BuildAppearanceRules()`, with compile-checked member targets and layout group ids checked at startup,
+  where XAF's `[Appearance]` attribute silently ignores a target that does not exist.
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
@@ -78,6 +82,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 Session of 2026-09-14. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- APPEAR-001: `XafLayoutBuilder.Appearance` add-on: conditional appearance rules in the builder (`AppearanceBuilder<T>`, `ISupportAppearanceRules`, `AppearanceRegistry`) with checked targets, startup diagnostics XLB006-008, JSON and export.
 - GROUP-001: `Column(..., groupIndex:)` and `.GroupPanel()` set a ListView's default grouping and show its group panel; the export keeps both.
 - MODELEDITOR-013: Model Editor tree nodes show the Visual Studio Model Editor's icons; an unknown image name no longer shows a broken image preview.
 - HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
@@ -140,8 +145,9 @@ catalog `XafLayoutBuilder.Sample` and its users on first start in Debug builds.
 
 ## Packages
 
-`XafLayoutBuilder.Core`, `XafLayoutBuilder.Module` and `XafLayoutBuilder.Blazor` are published as
-private NuGet packages on the owner's GitHub Packages feed; nothing is on nuget.org. Without access
+`XafLayoutBuilder.Core`, `XafLayoutBuilder.Module`, `XafLayoutBuilder.Blazor` and
+`XafLayoutBuilder.Appearance` (from the next feed version) are published as private NuGet packages on the owner's
+GitHub Packages feed; nothing is on nuget.org. Without access
 to that feed, reference the projects instead.
 
 ```bash
@@ -168,7 +174,9 @@ file.
    remove duplicates, so seeders run twice) and read your model resources as its own.
 2. Require the module from yours:
    `RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Module.XafLayoutBuilderModule));`
-   In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard and download actions.
+   In a Blazor host, add `XafLayoutBuilder.Blazor` too if you want the clipboard and download actions,
+   and `XafLayoutBuilder.Appearance` (`XafLayoutBuilderAppearanceModule`) if classes declare appearance rules
+   (`ISupportAppearanceRules`, `AppearanceRegistry`); it brings XAF's Conditional Appearance module along.
 3. Add a partial `{Type}.Layout.cs` implementing `ISupportViewLayoutCustomization`, or call
    `LayoutRegistry.Register<T>(detail, columns)` for types you do not own. Registration checks
    nothing: every rule is applied when the view is built, under `FailFastOnLayoutErrors`. Pass
@@ -193,6 +201,9 @@ The full surface, the rules and the checklist for changing a class are in the sk
 | XLB003 | A column names a collection, or something that is not a member of the type. |
 | XLB004 | A type has a spec but no default view to apply it to, or a declared view could not be added. |
 | XLB005 | A view declared in code has a blank id, an id another view already has, or an id also declared for another class or kind of view. Declaring the same view again replaces it. |
+| XLB006 | An appearance rule (Appearance add-on) has the id of an `[Appearance]` rule on the same class. |
+| XLB007 | An appearance rule targets a layout node that the class's builder layouts do not have (not checked for a class without one). |
+| XLB008 | An appearance rule's criteria do not parse. |
 
 ## How it works
 
@@ -294,6 +305,7 @@ specs, and a printer turns specs into the builder C#.
 XafLayoutBuilder.Core/                  builder, LayoutSpec records, JSON, C# printer (no DevExpress reference)
 XafLayoutBuilder.Module/                generator updaters, registry, startup check, exporter, export action
 XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
+XafLayoutBuilder.Appearance/            optional add-on: conditional appearance rules (XAF's Conditional Appearance module)
 XafLayoutBuilder.ModelEditor/           spike (MODELEDITOR-001): runtime Model Editor for XAF Blazor, Edit Model
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template

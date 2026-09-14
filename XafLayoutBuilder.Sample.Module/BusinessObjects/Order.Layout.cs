@@ -3,7 +3,7 @@ using XafLayoutBuilder.Core;
 namespace XafLayoutBuilder.Sample.Module.BusinessObjects;
 
 // The section 4 example from the start document, verbatim. This file is Order's only layout source.
-public partial class Order : ISupportViewLayoutCustomization {
+public partial class Order : ISupportViewLayoutCustomization, ISupportAppearanceRules {
     public static DetailLayoutSpec? BuildDetailViewLayout() =>
         LayoutBuilder<Order>.Create()
             .Group("Header", g => g
@@ -30,5 +30,20 @@ public partial class Order : ISupportViewLayoutCustomization {
             .Lookup(l => l
                 .Column(x => x.Number)
                 .Column(x => x.Customer))
+            .Build();
+
+    // APPEAR-001: applied by the XafLayoutBuilder.Appearance add-on the host registers.
+    public static AppearanceSpec? BuildAppearanceRules() =>
+        AppearanceBuilder<Order>.Create()
+            .Rule("GlobexOrder", r => r
+                .When("[Customer.Name] = 'Globex'")
+                .On(x => x.Number)
+                .FontColor("DarkRed")
+                .FontStyle(AppearanceFontStyle.Bold)
+                .InListView())
+            .Rule("HeaderCaption", r => r
+                .OnLayout("Header")
+                .FontColor("DarkBlue")
+                .InDetailView())
             .Build();
 }

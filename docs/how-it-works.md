@@ -36,6 +36,9 @@ Fluent builder ──► LayoutSpec (immutable records, JSON) ──► generato
 - **XafLayoutBuilder.Module** references `DevExpress.ExpressApp` and `DevExpress.Persistent.Base`
   only, so it is platform neutral: the two updaters, discovery and registry, the startup check, the
   exporter and the export action.
+- **XafLayoutBuilder.Blazor** and **XafLayoutBuilder.Appearance** are optional add-ons: the first holds
+  what needs a browser (clipboard, download), the second appearance rules through XAF's Conditional
+  Appearance module (see "Appearance rules" below).
 - **The spec is the contract.** Builders validate at `Build()` and hand out frozen records. Every
   list is copied into a read-only collection in its `init` accessor, so the constructor, JSON
   deserialisation and `with` expressions all end with a private copy.
@@ -223,6 +226,36 @@ popup template for a non-persistent object renders only its own OK and Cancel bu
 print through the same `LayoutCodePrinter.ForView`, so the popup, the clipboard and the file always
 agree, and the gate asserts exactly that.
 
+## Appearance rules: `XafLayoutBuilder.Appearance`
+
+Conditional appearance (APPEAR-001) follows the same path as layouts, in an add-on so the Module never
+references XAF's Conditional Appearance module:
+
+- **Spec in Core.** `AppearanceSpec` and `AppearanceRuleSpec` are plain records; `AppearanceBuilder<T>`
+  targets members through lambdas or DetailView layout nodes by id, and `LayoutSpecChecks.Validate`
+  rejects a blank or repeated id, a rule without targets or appearance, and a colour it cannot read.
+  A class opts in through `ISupportAppearanceRules`, separate from the layout interface so existing
+  layout classes change nothing; `AppearanceRegistry` covers types you don't own and JSON.
+- **Updater.** XAF keeps rules only under BOModel | Class | AppearanceRules, filled by
+  `AppearanceRulesModelNodesGenerator` from `[Appearance]` attributes. `AppearanceRulesUpdater` runs
+  after it, checks first (XLB006: a rule id an attribute rule already has, which XAF would reject with
+  a duplicate-id exception), then adds the spec's rules in the generated layer, with their spec order
+  as `Index` because the model lists rules by id.
+- **Startup check.** XAF ignores a target that does not exist, so `AppearanceStartupCheck` generates
+  every class's rules at startup and reports XLB006 and XLB008 again for a class whose updater threw,
+  and XLB007 for a layout target the class's builder layouts do not have, under the same
+  `FailFastOnLayoutErrors` switch. The updater parses criteria before it adds anything (Codex review:
+  XAF parses them again when the view renders). XLB007 is judged against the layout specs, never the
+  merged model: a later layer may remove a group on purpose (Codex review), and reading a broken layout
+  made the appearance check report Order's layout error first under the gate's `--break-layout`,
+  ending the startup before XLB001. A class without a builder layout is not checked.
+- **Export.** The Module's `LayoutCodePrinter.AppearanceExport` hook is filled by the add-on, so the C#
+  and JSON exports carry the rules. Rules from `[Appearance]` attributes stay attributes and are only
+  named in the leading comment, as are rules the builder cannot express (Action targets, method
+  rules, the `*` all-except target, view items that are no members such as static text) and rules
+  that set nothing or target nothing, which `Build()` would reject. A model without the Conditional
+  Appearance module exports no rules: the hook is process-wide.
+
 ## The user layer in XAF Blazor
 
 E2E 4 to 6 need a user difference. Since E2E4-001, E2E 4 makes it the way a user does: a pointer
@@ -307,3 +340,7 @@ when Notes was its only item. The export prints what renders, so it emits `.Capt
 - With fail-fast on, a spec factory that throws anything other than a layout error stops the startup check at once
   instead of joining the aggregated report: the owner, 2026-09-14. That exception is a bug in spec code, so it keeps
   its own type and stack trace; the price is a second start when a crash and later layout errors coincide.
+- Grouping (GROUP-001) only sets how a ListView opens; after that it is a normal XAF Blazor app: the owner, 2026-09-14.
+- Appearance rules (APPEAR-001) in a separate add-on assembly, declared through their own `ISupportAppearanceRules`
+  method, an id clash with an `[Appearance]` rule a startup error (XLB006), and attribute rules left out of the export:
+  the owner, 2026-09-14.

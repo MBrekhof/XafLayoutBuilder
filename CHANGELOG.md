@@ -6,6 +6,7 @@ version the packages on the feed carry. Ids are ContextBoard cards; the detail i
 
 ## Unreleased
 
+- APPEAR-001: `XafLayoutBuilder.Appearance` add-on: conditional appearance rules in the builder (`AppearanceBuilder<T>`, `ISupportAppearanceRules`, `AppearanceRegistry`) with checked targets, startup diagnostics XLB006-008, JSON and export.
 - GROUP-001: `Column(..., groupIndex:)` and `.GroupPanel()` set a ListView's default grouping and show its group panel; the export keeps both.
 - MODELEDITOR-013: Model Editor tree nodes show the Visual Studio Model Editor's icons; an unknown image name no longer shows a broken image preview.
 - PKG-002: Core, Module and Blazor 0.2.0 published as private packages on GitHub Packages (`https://nuget.pkg.github.com/MBrekhof/index.json`), the feed from now on.

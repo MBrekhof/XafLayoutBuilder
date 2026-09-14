@@ -27,5 +27,6 @@ public static class LayoutSpecJson {
 /// <summary>
 /// Both halves of one type's layout as one JSON document: what the JSON export writes and
 /// <c>LayoutRegistry.RegisterJson</c> reads. A null half is left out of the JSON and leaves that view to XAF.
+/// <see cref="Appearance"/> (APPEAR-001) is read by the XafLayoutBuilder.Appearance add-on.
 /// </summary>
-public sealed record LayoutSpecs(DetailLayoutSpec? Detail, ListColumnsSpec? Columns);
+public sealed record LayoutSpecs(DetailLayoutSpec? Detail, ListColumnsSpec? Columns, AppearanceSpec? Appearance = null);

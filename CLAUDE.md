@@ -20,15 +20,19 @@ view's current layout back to the same fluent C#.
 - `XafLayoutBuilder.Blazor`: optional add-on, `XafLayoutBuilderBlazorModule` +
   `CopyLayoutCodeController` (clipboard through `IXafJSRuntime`). Everything browser-specific goes
   here so the Module stays platform neutral.
+- `XafLayoutBuilder.Appearance`: optional add-on (APPEAR-001), `XafLayoutBuilderAppearanceModule` requires XAF's
+  `ConditionalAppearanceModule`. `AppearanceRegistry` + resolver, `AppearanceRulesUpdater` (BOModel | Class |
+  AppearanceRules, XLB006), `AppearanceStartupCheck` (XLB006-008) and `AppearanceExporter`, which fills
+  `LayoutCodePrinter.AppearanceExport` so the Module's exports carry rules without referencing the add-on.
 - `XafLayoutBuilder.ModelEditor`: MODELEDITOR-001 spike, a runtime Model Editor for XAF Blazor ("Edit Model",
   gated by `ModelOperationPermissionRequest`, so the role needs `CanEditModel`). No dependency on the builder;
   `ModelEditing` holds the testable node and value logic, `ModelEditorComponent.razor` the UI.
 - `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
   into the catch-all group, and columns), `Order`
-  (+ `Order.Layout.cs`, the start document's section 4 example verbatim), `OrderLine` (+
-  `OrderLine.Layout.cs`, columns that also shape Order's Lines tab, VIEW-001), `SampleViews` (a compact
-  Order DetailView and ListView declared in code, registered by the host, VIEW-001, and a banded Order
-  ListView, BAND-001),
+  (+ `Order.Layout.cs`, the start document's section 4 example verbatim, plus two appearance rules, APPEAR-001),
+  `OrderLine` (+ `OrderLine.Layout.cs`, columns that also shape Order's Lines tab, VIEW-001), `SampleViews` (a compact
+  Order DetailView and ListView declared in code, registered by the host, VIEW-001, a banded Order
+  ListView, BAND-001, and a grouped Order ListView, GROUP-001),
   `OrderAttachment`, `ServiceOrder : Order` (with `OriginalOrder` for the lookup test, + `ServiceOrder.Layout.cs`
   extending Order's layout and columns, HIER-001),
   `BrokenLayouts` (startup-failure fixture), seeding in `DatabaseUpdate/Updater.cs`.
@@ -49,7 +53,7 @@ dotnet build XafLayoutBuilder.slnx
 dotnet test XafLayoutBuilder.Tests
 dotnet run --project XafLayoutBuilder.E2ETests     # builds + starts the sample on :5100, asserts, exits 0/1/2
 dotnet run --project XafLayoutBuilder.Sample.Blazor.Server   # manual: http://localhost:5000, Admin / empty password
-dotnet pack XafLayoutBuilder.slnx -c Release -o artifacts/packages                       # Core, Module, Blazor
+dotnet pack XafLayoutBuilder.slnx -c Release -o artifacts/packages                       # Core, Module, Blazor, Appearance
 dotnet nuget push "artifacts/packages/*.nupkg" --source https://nuget.pkg.github.com/MBrekhof/index.json --api-key "$(gh auth token)"   # private GitHub Packages; gh needs write:packages
 ```
 

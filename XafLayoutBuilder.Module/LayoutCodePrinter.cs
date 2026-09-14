@@ -11,12 +11,18 @@ namespace XafLayoutBuilder.Module;
 /// and the C# and JSON forms come from the same export.
 /// </summary>
 public static class LayoutCodePrinter {
+    /// <summary>
+    /// APPEAR-001: set by the XafLayoutBuilder.Appearance add-on, the only assembly that knows appearance rules; with it set the
+    /// exports carry the class's rules and the notes about rules left out. The Module never references that add-on.
+    /// </summary>
+    public static Func<IModelClass, (AppearanceSpec? Spec, IReadOnlyList<string> Notes)>? AppearanceExport { get; set; }
+
     public static (string FileName, string Code) ForView(XafApplication application, View view) {
         var export = Export(application, view);
         var fileName = $"{export.Type.Name}.Layout.cs";
         export.Notes.Insert(0, $"Exported from the running model ({DateTime.Now:yyyy-MM-dd HH:mm}); every layer applied. Save as {fileName}.");
         export.Notes.Insert(1, $"Views: {export.Views}.");
-        return (fileName, CSharpLayoutPrinter.PrintClass(export.Type.Namespace, export.Type.Name, export.Detail, export.Columns, export.Notes));
+        return (fileName, CSharpLayoutPrinter.PrintClass(export.Type.Namespace, export.Type.Name, export.Detail, export.Columns, export.Notes, export.Appearance));
     }
 
     /// <summary>
@@ -25,10 +31,10 @@ public static class LayoutCodePrinter {
     /// </summary>
     public static (string FileName, string Json) JsonForView(XafApplication application, View view) {
         var export = Export(application, view);
-        return ($"{export.Type.Name}.layout.json", LayoutSpecJson.Serialize(new LayoutSpecs(export.Detail, export.Columns)));
+        return ($"{export.Type.Name}.layout.json", LayoutSpecJson.Serialize(new LayoutSpecs(export.Detail, export.Columns, export.Appearance)));
     }
 
-    static (Type Type, DetailLayoutSpec? Detail, ListColumnsSpec? Columns, List<string> Notes, string Views) Export(XafApplication application, View view) {
+    static (Type Type, DetailLayoutSpec? Detail, ListColumnsSpec? Columns, AppearanceSpec? Appearance, List<string> Notes, string Views) Export(XafApplication application, View view) {
         var type = view.ObjectTypeInfo.Type;
         var modelClass = application.Model.BOModel.GetClass(type);
         var notes = new List<string>();
@@ -54,7 +60,13 @@ public static class LayoutCodePrinter {
             columns = spec;
             notes.AddRange(skipped);
         }
+        AppearanceSpec? appearance = null;
+        if (AppearanceExport is { } exportAppearance) {
+            var (spec, skipped) = exportAppearance(modelClass);
+            appearance = spec;
+            notes.AddRange(skipped);
+        }
         var views = $"{detailView?.Id ?? "(no DetailView)"}, {listView?.Id ?? "(no ListView)"}, {lookupView?.Id ?? "(no lookup)"}";
-        return (type, detail, columns, notes, views);
+        return (type, detail, columns, appearance, notes, views);
     }
 }

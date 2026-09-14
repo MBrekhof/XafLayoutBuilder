@@ -149,6 +149,28 @@ ListView's spec is ignored. Do not try to give a builder layout to a view that e
   class (`Order_Lines_ListView` for `Order.Lines`). A column for the reference back to the owner is
   left out there, as XAF does, even when the spec lists it.
 
+## Appearance rules (XafLayoutBuilder.Appearance add-on)
+
+- Add `XafLayoutBuilderAppearanceModule` to the host next to the other modules; it brings XAF's
+  Conditional Appearance module along. Without the add-on nothing reads `BuildAppearanceRules`.
+- Declare rules in the same `{Type}.Layout.cs` partial: add `ISupportAppearanceRules` and
+  `public static AppearanceSpec? BuildAppearanceRules() => AppearanceBuilder<Order>.Create()
+  .Rule("GlobexOrder", r => r.When("[Customer.Name] = 'Globex'").On(x => x.Number)
+  .FontColor("DarkRed").FontStyle(AppearanceFontStyle.Bold).InListView()).Build();`. For a type you
+  don't own, `AppearanceRegistry.Register<T>(() => spec)` or `AppearanceRegistry.RegisterJson<T>(...)`.
+- A rule targets members with `.On(x => x.M, ...)` (their editors and grid cells; a member may follow
+  references) or DetailView layout nodes by id with `.OnLayout("Header")`, never both. `.When(...)`
+  takes XAF criteria text; without it the rule always applies. It changes `.FontColor`, `.BackColor`
+  (a colour name or `#RRGGBB`), `.FontStyle`, `.Enabled` or `.Visibility`; `.Priority` decides between
+  rules colouring the same item. `.InListView()`, `.InDetailView()` and `.InView(id)` combine; none
+  means every view.
+- `Build()` throws on a blank or repeated rule id, a rule without targets, a rule that changes nothing,
+  a colour it cannot read, and a rule with both kinds of target. The startup check adds XLB006-008.
+- Rules are generated-layer defaults like layouts: an administrator's or user's changes still win. XAF
+  applies a base class's rules to derived classes; a derived class's own spec only adds rules.
+- Not in the builder: rules that call a method, rules on Actions, and the `*` all-except target. Keep
+  `[Appearance]` for those, with ids the builder rules do not use (XLB006).
+
 ## Rules that throw at Build()
 
 A member placed twice, a member both placed and hidden, a group id used twice in the view, a group

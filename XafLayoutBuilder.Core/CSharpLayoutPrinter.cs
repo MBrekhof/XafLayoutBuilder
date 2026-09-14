@@ -13,7 +13,43 @@ public static class CSharpLayoutPrinter {
     /// class's namespace: without it the printed partial declares a different type and the member lambdas do not
     /// compile against the real class.
     /// </summary>
-    public static string PrintClass(string? namespaceName, string typeName, DetailLayoutSpec? detail, ListColumnsSpec? columns, IEnumerable<string>? notes = null) {
+    /// <summary>APPEAR-001: the rules as the fluent builder, unindented, without trailing semicolon.</summary>
+    public static string PrintAppearance(AppearanceSpec spec, string typeName) {
+        var sb = new StringBuilder();
+        sb.Append("AppearanceBuilder<").Append(Ident(typeName)).Append(">.Create()");
+        foreach (var rule in spec.Rules) {
+            sb.AppendLine().Append(Pad(1)).Append(".Rule(").Append(Quote(rule.Id)).Append(", r => r");
+            if (rule.Criteria is not null) Call($".When({Quote(rule.Criteria)})");
+            Call(rule.TargetKind == AppearanceTargetKind.Items
+                ? $".On({string.Join(", ", rule.Targets.Select(t => "x => x." + PathIdent(t)))})"
+                : $".OnLayout({string.Join(", ", rule.Targets.Select(Quote))})");
+            if (rule.FontColor is not null) Call($".FontColor({Quote(rule.FontColor)})");
+            if (rule.BackColor is not null) Call($".BackColor({Quote(rule.BackColor)})");
+            if (rule.FontStyle is { } style) Call($".FontStyle({FontStyle(style)})");
+            if (rule.Enabled is { } enabled) Call($".Enabled({(enabled ? "true" : "false")})");
+            if (rule.Visibility is { } visibility) Call($".Visibility(AppearanceVisibility.{visibility})");
+            if (rule.Priority is { } priority) Call($".Priority({priority.ToString(CultureInfo.InvariantCulture)})");
+            // ponytail: a context token without a shortcut, "Any" included, prints as InView, which builds the same string back.
+            foreach (var context in (rule.Context ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                Call(context switch { "ListView" => ".InListView()", "DetailView" => ".InDetailView()", _ => $".InView({Quote(context)})" });
+            sb.Append(')');
+        }
+        sb.AppendLine().Append(Pad(1)).Append(".Build()");
+        return sb.ToString();
+
+        void Call(string call) => sb.AppendLine().Append(Pad(2)).Append(call);
+    }
+
+    // Flags print as their members joined with |; Regular when none is set.
+    static string FontStyle(AppearanceFontStyle style) =>
+        style == AppearanceFontStyle.Regular
+            ? "AppearanceFontStyle.Regular"
+            : string.Join(" | ", Enum.GetValues<AppearanceFontStyle>()
+                .Where(f => f != AppearanceFontStyle.Regular && style.HasFlag(f))
+                .Select(f => "AppearanceFontStyle." + f));
+
+    public static string PrintClass(string? namespaceName, string typeName, DetailLayoutSpec? detail, ListColumnsSpec? columns, IEnumerable<string>? notes = null,
+        AppearanceSpec? appearance = null) {
         var sb = new StringBuilder();
         sb.AppendLine("using XafLayoutBuilder.Core;");
         sb.AppendLine();
@@ -22,12 +58,18 @@ public static class CSharpLayoutPrinter {
             sb.AppendLine();
         }
         foreach (var n in notes ?? []) sb.Append("// ").AppendLine(n);
-        sb.Append("public partial class ").Append(Ident(typeName)).AppendLine(" : ISupportViewLayoutCustomization {");
+        sb.Append("public partial class ").Append(Ident(typeName)).Append(" : ISupportViewLayoutCustomization")
+            .AppendLine(appearance is null ? " {" : ", ISupportAppearanceRules {");
         sb.AppendLine("    public static DetailLayoutSpec? BuildDetailViewLayout() =>");
         sb.AppendLine(detail is null ? "        null;" : Indent(PrintDetail(detail, typeName), 8) + ";");
         sb.AppendLine();
         sb.AppendLine("    public static ListColumnsSpec? BuildListViewColumns() =>");
         sb.AppendLine(columns is null ? "        null;" : Indent(PrintColumns(columns, typeName), 8) + ";");
+        if (appearance is not null) {
+            sb.AppendLine();
+            sb.AppendLine("    public static AppearanceSpec? BuildAppearanceRules() =>");
+            sb.AppendLine(Indent(PrintAppearance(appearance, typeName), 8) + ";");
+        }
         sb.Append('}');
         return sb.ToString();
     }

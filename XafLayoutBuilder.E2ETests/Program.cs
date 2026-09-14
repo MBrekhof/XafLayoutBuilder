@@ -16,6 +16,9 @@ using Microsoft.Playwright;
 //   BAND-001 Order_Banded_ListView's band header Order spans Number and Customer
 //   GROUP-001 Order_Grouped_ListView opens grouped by Customer (a group row per customer, Customer no data header) with
 //            the group panel holding Customer
+//   APPEAR-001 Order.Layout.cs's appearance rules (Appearance add-on): Globex's order numbers bold in DarkRed in
+//            Order_ListView, Acme's unchanged; the Header group's caption DarkBlue on ORD-001, Notes unchanged; the Order
+//            export (E2E 5a) prints the rules back equal to the source
 //   E2E 5a  exporting the untouched layout reproduces Order.Layout.cs; Customer's column caption round-trips
 //   E2E 4   Admin drags OrderDate into Details in XAF's layout editor and hides the Customer column from the grid header
 //           menu (E2E4-001); the user layer wins over the builder
@@ -309,6 +312,50 @@ try
     Assert(string.Join(",", groupedHeaders) == "Number,Order Date", $"the grouped Customer column is no data header (got {string.Join(",", groupedHeaders)})");
     Assert(groupedText.Split("Selection")[0].Contains("Customer"), $"the group panel above the header row holds Customer (got {groupedText})");
 
+    Step("APPEAR-001: Order.Layout.cs's appearance rules colour Globex's order numbers and the Header caption");
+    await OpenListView(page, "Order_ListView", "ORD-003");
+    var orderGrid = page.Locator("[role=tabpanel].dxbl-active .dxbl-grid").First;
+    // Read from the running sample: XAF puts the rule's style on the cell through a generated CSS class, so the cell's computed
+    // colour and weight are what a user sees. DarkRed is rgb(139, 0, 0).
+    // Pairs come back as "key|value" strings: Playwright 1.49 for .NET turns a JS object into an empty Dictionary (probed
+    // 2026-09-14), while string[] works, as everywhere else in this gate.
+    static Dictionary<string, string> Pairs(string[] entries) {
+        var pairs = new Dictionary<string, string>();
+        foreach (var entry in entries) {
+            var parts = entry.Split('|', 2);
+            pairs.TryAdd(parts[0], parts.Length > 1 ? parts[1] : "");
+        }
+        return pairs;
+    }
+    const string NumberStylesScript = @"g => ['ORD-001', 'ORD-003', 'SRV-001'].map(n => {
+        const td = [...g.querySelectorAll('td')].find(c => c.textContent.trim() === n);
+        const s = td && getComputedStyle(td);
+        return n + '|' + (s ? s.color + ' ' + s.fontWeight : 'missing');
+    })";
+    try { await page.WaitForFunctionAsync("() => [...document.querySelectorAll('[role=tabpanel].dxbl-active td')].some(c => c.textContent.trim() === 'ORD-003' && getComputedStyle(c).color === 'rgb(139, 0, 0)')", null, new() { Timeout = 10_000 }); }
+    catch (TimeoutException) { /* the assertion below reports the styles */ }
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09h-appearance-listview.png") });
+    var numberStyles = Pairs(await orderGrid.EvaluateAsync<string[]>(NumberStylesScript));
+    var numberStylesText = string.Join(", ", numberStyles.Select(p => $"{p.Key}: {p.Value}"));
+    Assert(numberStyles["ORD-003"] == "rgb(139, 0, 0) 700" && numberStyles["SRV-001"] == "rgb(139, 0, 0) 700",
+        $"Globex's orders show their Number bold in DarkRed (got {numberStylesText})");
+    Assert(numberStyles["ORD-001"] != "rgb(139, 0, 0) 700", $"Acme's ORD-001 keeps the grid's own style (got {numberStylesText})");
+    // The layout rule colours the caption text of the Header group ("Order"); DarkBlue is rgb(0, 0, 139). Notes stays as it was.
+    await OpenOrd001Detail(page);
+    var captionColors = Pairs(await page.Locator("[role=tabpanel].dxbl-active .detail-view-content").First.EvaluateAsync<string[]>(
+        @"f => [...f.querySelectorAll('[role=group].dxbl-fl-group')]
+            .map(g => g.querySelector(':scope > .dxbl-group > .dxbl-group-header'))
+            .filter(Boolean)
+            .map(h => {
+                const text = [...h.querySelectorAll('*')].find(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) ?? h;
+                return h.innerText.trim() + '|' + getComputedStyle(text).color;
+            })"));
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-09i-appearance-detailview.png") });
+    var captionColorsText = string.Join(", ", captionColors.Select(p => $"{p.Key}: {p.Value}"));
+    Assert(captionColors.GetValueOrDefault("Order") == "rgb(0, 0, 139)", $"the Header group's caption Order is DarkBlue (got {captionColorsText})");
+    Assert(captionColors.GetValueOrDefault("Notes") is { } notesColor && notesColor != "rgb(0, 0, 139)",
+        $"the Notes group's caption keeps its own colour (got {captionColorsText})");
+
     Step("E2E 5a: exporting the untouched builder layout reproduces the source (section 6 round trip)");
     await OpenOrd001Detail(page);
     var roundTrip = await ExportLayoutCode(page, Path.Combine(screenshotDir, "e2e-09b-export-roundtrip.png"));
@@ -316,7 +363,9 @@ try
     await ClosePopup(page);
     var layoutSource = await File.ReadAllTextAsync(Path.Combine(repoRoot, "XafLayoutBuilder.Sample.Module", "BusinessObjects", "Order.Layout.cs"));
     Assert(roundTrip.Contains("namespace XafLayoutBuilder.Sample.Module.BusinessObjects;"), "export declares the business object's namespace");
-    Assert(roundTrip.Contains("public partial class Order : ISupportViewLayoutCustomization {"), "export declares the partial class");
+    Assert(roundTrip.Contains("public partial class Order : ISupportViewLayoutCustomization, ISupportAppearanceRules {"), "export declares the partial class, with its appearance rules (APPEAR-001)");
+    Assert(NormalizeCode(BuilderExpression(roundTrip, "AppearanceBuilder<Order>.Create()")) == NormalizeCode(BuilderExpression(layoutSource, "AppearanceBuilder<Order>.Create()")),
+        "exported appearance rules equal the ones in Order.Layout.cs (APPEAR-001)");
     Assert(roundTrip.Contains("Views: Order_DetailView, Order_ListView, Order_LookupListView."), "export names the views it read");
     Assert(NormalizeCode(BuilderExpression(roundTrip, "LayoutBuilder<Order>.Create()")) == NormalizeCode(BuilderExpression(layoutSource, "LayoutBuilder<Order>.Create()")),
         "exported DetailView builder equals the one in Order.Layout.cs (modulo indentation)");

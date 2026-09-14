@@ -571,6 +571,43 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   empty string, not an exception, for a name no image source has (`DevExpress.ExpressApp.Blazor/Services/IImageUrlService.cs`
   58-78).
 
+## Conditional appearance (APPEAR-001)
+
+Paths: `CA` = `Sources\DevExpress.ExpressApp.Modules\DevExpress.ExpressApp.ConditionalAppearance`, `PB` =
+`Sources\DevExpress.Persistent\DevExpress.Persistent.Base\ConditionalAppearance`, `XA`/`XB` = `DevExpress.ExpressApp`/`.Blazor`.
+
+- Package `DevExpress.ExpressApp.ConditionalAppearance` (net8.0, no Blazor dependency); module
+  `ConditionalAppearanceModule` (`CA\Module.cs` 52), platform-agnostic (dxdocs 113286). XAF Blazor renders appearance
+  itself (`XB\Editors\BlazorPropertyEditorBase_ConditionalAppearance.cs`, `XB\Layout\LayoutComponent.razor.cs`), so there
+  is no Blazor module. `AppearanceAttribute`, `IAppearanceRuleProperties` and the `AppearanceItemType` enum are in
+  DevExpress.Persistent.Base (`PB\AppearanceAttribute.cs`, `PB\AppearanceRule.cs`).
+- Rules live only under BOModel | Class | AppearanceRules (`CA\Module.cs` 93-96, `IModelConditionalAppearance`); a rule
+  reaches views through its `Context` string. `IModelAppearanceRules` carries
+  `[ModelNodesGenerator(typeof(AppearanceRulesModelNodesGenerator))]` (`CA\ModelExtenders.cs` 125-128); the generator adds
+  one `IModelAppearanceRule` per `[Appearance]` on the class and its members and sets its `Attribute` (54-124).
+- `IModelAppearanceRule : IModelNode, IAppearanceRuleProperties` (`ModelExtenders.cs` 129-136) has no `Id` member; read
+  it from `ModelNode.Id`. Values (`PB\AppearanceRule.cs` 51-97): `TargetItems` (required, split on `,` and `;`),
+  `AppearanceItemType` (the enum's name: ViewItem, Action, LayoutItem), `Criteria`, `Method`, `Context`, `Priority`,
+  `FontStyle` (`DXFontStyle?`), `FontColor`/`BackColor` (`System.Drawing.Color?`), `Visibility` (`ViewItemVisibility?`),
+  `Enabled` (`bool?`). A node without an attribute defaults to ViewItem and "Any" (`ModelExtenders.cs` 151-165).
+- A `ModelNodesGeneratorUpdater<AppearanceRulesModelNodesGenerator>` runs after the attribute rules are generated and
+  writes the generated layer (`XA\Model\Core\ModelApplicationCreator.cs` 394-400, `ModelNodeGenerator.cs` 50-65,
+  `ModelNode.cs` 430-463). Adding a rule whose id an attribute rule has throws `DuplicateModelNodeIdException`
+  (`ModelNode.cs` 483-491): XLB006 checks it first.
+- Runtime reads rules from the model only, walking `BaseClass`, so a base class's rules apply to derived classes
+  (`CA\AppearanceController.cs` 221-231). A `TargetItems` name that does not exist is ignored silently
+  (`ViewItemAppearanceController.cs` 259-267, `LayoutComponent.razor.cs` 168-178): XLB007 checks layout targets against
+  the builder's layout specs, the resolver checks member targets. Criteria are parsed lazily through the object space when
+  a view renders (`CA\AppearanceRule.cs` 64-78), so bad criteria would throw there even with fail-fast off: the updater
+  parses them before it adds a rule (XLB008). A ViewItem target need not be a member (a static text item), so the export
+  leaves such rules out. Several rules on one item: Enabled AND-ed, font style flags OR-ed, Hide wins, the
+  higher `Priority` wins for colours (`AppearanceController.cs` 312-337).
+- Blazor 26.1: grid cells take FontColor, BackColor and FontStyle as CSS (`XB\Editors\DxGridBase\DxGridListEditorBase.cs`
+  1035-1071); DetailView property editors those plus Enabled and Visibility; layout groups, tabs and items format and
+  visibility by layout node id (`LayoutComponent.razor.cs` 168-178), with the CSS on the caption.
+- In-process model: `DesignerModelFactory` adds each `RequiredModuleTypes` entry (`XA\Utils\DesignerModelFactory.cs`
+  415-424); the test fixture lists `ConditionalAppearanceModule` and the add-on module explicitly.
+
 ## Still open
 
 - Bands (`IModelListView.BandsLayout`, `IModelBandsLayout` is added as a child node at

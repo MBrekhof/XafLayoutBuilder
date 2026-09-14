@@ -15,5 +15,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="XafLayoutBuilder.Tests" />
+    <InternalsVisibleTo Include="XafLayoutBuilder.Appearance" />
   </ItemGroup>
 </Project>

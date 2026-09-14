@@ -127,7 +127,7 @@ public sealed record ListColumnsSpec(
         Columns.Select(c => c.Member).Concat(HiddenMembers).Concat(Lookup?.Members() ?? []);
 }
 
-public static class LayoutSpecChecks {
+public static partial class LayoutSpecChecks {
     /// <summary>
     /// Throws when a spec names a property or field that <paramref name="type"/> does not have. A dotted column path
     /// ("Customer.City") is followed segment by segment through each member's type. Used by the registry.
