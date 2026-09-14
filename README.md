@@ -119,8 +119,12 @@ From the E2E gate's run on the sample.
 | A user difference moved Order Date into Details and wins over the builder. | The export prints that merged layout as builder C#. |
 | ![After reset](docs/screenshots/07-after-user-reset.png) | ![Copy to clipboard](docs/screenshots/08-copy-to-clipboard.png) |
 | With the user's differences deleted, the builder layout is back. | The Blazor add-on adds copy and download next to the export. |
-| ![Catch-all group](docs/screenshots/09-unplaced-catch-all-group.png) | |
-| Opting out of the strict rule: whatever the layout does not mention lands in one group. | |
+| ![Catch-all group](docs/screenshots/09-unplaced-catch-all-group.png) | ![Grouped ListView](docs/screenshots/10-grouped-listview.png) |
+| Opting out of the strict rule: whatever the layout does not mention lands in one group. | `groupIndex:` and `.GroupPanel()`: the list opens grouped by Customer, with the group panel shown. |
+| ![Appearance rule in a ListView](docs/screenshots/11-appearance-listview.png) | ![Appearance rule on a layout group](docs/screenshots/12-appearance-detailview.png) |
+| Appearance add-on: a rule makes Globex's order numbers bold and dark red. | A layout rule colours the Header group's caption. |
+| ![Model Editor](docs/screenshots/13-model-editor.png) | |
+| The runtime Model Editor for XAF Blazor (View in Model): model tree with icons, DevExpress editors and node actions. | |
 
 ## Run it
 
