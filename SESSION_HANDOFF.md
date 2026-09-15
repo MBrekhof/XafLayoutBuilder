@@ -10,6 +10,12 @@ Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
 
 ## Session 2026-09-15: release 0.3.0 and MODELEDITOR-008
 
+**Docs follow-up (2026-09-15, after the session):** README's "Latest changes" is one line per session plus links (the
+rule is in CLAUDE.md); the Model Editor is named as the second answer to the ticket that will probably move to its own
+repository once packaged; screenshots 14-17 (translate, shared model, shared as user, validation) copied from the gate's
+e2e-28/30/31/27. **Open:** the gate now scrolls to the PropertyName row before e2e-27; after the next gate run copy
+`e2e-27-model-editor-required-reset.png` over `docs/screenshots/17-model-editor-validation.png`.
+
 PKG-003 (1b9d5d2): `System.Security.Cryptography.Xml` 10.0.12 pinned in Blazor, ModelEditor and the sample module; the
 DevExpress Blazor package pulled in 9.0.0 with eight NU1903 advisories. Release 0.3.0 (fc76eb5): Core, Module, Blazor and,
 for the first time, Appearance on GitHub Packages; the Model Editor stays unpackaged until MODELEDITOR-012. RUNTIME-001

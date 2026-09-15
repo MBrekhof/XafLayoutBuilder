@@ -823,6 +823,7 @@ try
     await resetRequiredMessage.WaitForAsync(new() { Timeout = 10_000 });
     Assert((await resetRequiredMessage.InnerTextAsync()).Contains("Views/Order_ListView/Columns/EditorNotes"),
         "the refused required reset names the saved custom column");
+    await modelEditor.Locator("tr[data-value='PropertyName']").ScrollIntoViewIfNeededAsync(); // the screenshot shows the empty required value with the message
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-27-model-editor-required-reset.png") });
     await CloseModelEditor(page, modelEditor);
     await OpenListView(page, "Order_ListView", "ORD-001"); // full navigation: rebuild the model from its stored differences
