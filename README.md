@@ -104,8 +104,12 @@ From the E2E gate's run on the sample.
 | Opting out of the strict rule: whatever the layout does not mention lands in one group. | `groupIndex:` and `.GroupPanel()`: the list opens grouped by Customer, with the group panel shown. |
 | ![Appearance rule in a ListView](docs/screenshots/11-appearance-listview.png) | ![Appearance rule on a layout group](docs/screenshots/12-appearance-detailview.png) |
 | Appearance add-on: a rule makes Globex's order numbers bold and dark red. | A layout rule colours the Header group's caption. |
-| ![Model Editor](docs/screenshots/13-model-editor.png) | |
-| The runtime Model Editor for XAF Blazor (View in Model): model tree with icons, DevExpress editors and node actions. | |
+| ![Model Editor](docs/screenshots/13-model-editor.png) | ![Translate view](docs/screenshots/14-model-editor-translate.png) |
+| The runtime Model Editor for XAF Blazor (View in Model): model tree with icons, DevExpress editors and node actions. | Languages: the Translate view lists every localizable value under the node, here Order_ListView's caption in nl-NL, still unsaved. |
+| ![Edit Shared Model](docs/screenshots/15-model-editor-shared.png) | ![Shared caption as another user](docs/screenshots/16-model-editor-shared-as-user.png) |
+| Edit Shared Model: Admin changes the caption in the administrator differences. | User, at the next logon, sees "Orders for everyone" without a host restart. |
+| ![Validation on Save](docs/screenshots/17-model-editor-validation.png) | |
+| Save refuses a required reset and names the node, so a broken model is never stored. | |
 
 ## Run it
 
