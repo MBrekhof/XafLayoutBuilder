@@ -74,6 +74,10 @@ That file is the sample's only layout source for `Order`; the sample module has 
   conditional appearance (font and back colour, font style, enabled, visibility) next to its layout in
   `BuildAppearanceRules()`, with compile-checked member targets and layout group ids checked at startup,
   where XAF's `[Appearance]` attribute silently ignores a target that does not exist.
+- **A runtime Model Editor, for now.** `XafLayoutBuilder.ModelEditor` is "Edit Model" in XAF Blazor: the
+  model tree, values, node actions, languages and shared differences, edited in the running app instead of
+  the Windows-only Model Editor. It is the second answer to the same support ticket, but it does not use the
+  builder and will probably move to a repository of its own once it is packaged (MODELEDITOR-012).
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
@@ -288,7 +292,7 @@ XafLayoutBuilder.Core/                  builder, LayoutSpec records, JSON, C# pr
 XafLayoutBuilder.Module/                generator updaters, registry, startup check, exporter, export action
 XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
 XafLayoutBuilder.Appearance/            optional add-on: conditional appearance rules (XAF's Conditional Appearance module)
-XafLayoutBuilder.ModelEditor/           spike (MODELEDITOR-001): runtime Model Editor for XAF Blazor, Edit Model
+XafLayoutBuilder.ModelEditor/           runtime Model Editor for XAF Blazor, Edit Model (will probably move to its own repository)
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template
 XafLayoutBuilder.Tests/                 xUnit tests for Core and the Module's resolver and registry
