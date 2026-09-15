@@ -71,7 +71,7 @@ whether switching the aspect in XAF Blazor is per circuit or changes the process
 through MODELEDITOR-012 (#1704), same loop: test first, gate, Codex review, stop the broker, commit with exact files.
 A gate step that needs a DevExpress component's DOM (MODELEDITOR-006's filter builder) was read from the running sample
 first rather than guessed. `docs/devexpress-support-request.md` (ten items, still a draft for the owner to send) and
-`extras.jpg` are tracked and now public.
+is tracked and now public (`extras.jpg`, the RUNTIME-001 screenshot, was removed on 2026-09-15).
 
 **MODELEDITOR-007 review fix (2026-09-13, user delegated implementation):** the first review reproduced a P1: resetting
 `ModelClass` on a custom DetailView saved in an earlier session passed validation, removed `ClassName` from its differences,
@@ -97,8 +97,8 @@ added the deferred save that stores unsaved state and the old views that overwri
 owner's to send. RUNTIME-001 default taken meanwhile: the editor may change builder-owned views in a user's own
 differences, as XAF's layout editor can. RUNTIME-001 (1688): the facts are on the card (no
 runtime Model Editor in XAF Blazor 26.1; the documented one is WinForms-only); allow or restrict stays the
-owner's call. `extras.jpg` in the repo root is the owner's screenshot for
-RUNTIME-001, now tracked at the owner's request. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
+owner's call (decided 2026-09-15: allow). Its screenshot `extras.jpg` was tracked for
+RUNTIME-001 and removed 2026-09-15. Not autonomous: SEC-001, REL-001, the BPG LAYOUT cards.
 
 Decided by the owner 2026-09-14 (was an open question from TEST-001): with `FailFastOnLayoutErrors` on, a
 non-layout exception from a spec factory keeps ending the startup check at once instead of joining its aggregated
