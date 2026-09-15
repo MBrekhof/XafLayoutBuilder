@@ -4,7 +4,7 @@ Typed, compile-checked C# for DevExpress XAF view layouts, poured into the Appli
 generated-layer defaults. The running Blazor app stays the visual designer. The source of truth
 becomes a fluent builder next to the business class instead of `Model.xafml`.
 
-**Status: proof of concept, version 0.2.0, complete against its start document** (`XafLayoutBuilder-START.md`).
+**Status: proof of concept, version 0.3.0, complete against its start document** (`XafLayoutBuilder-START.md`).
 Built and tested with DevExpress XAF 26.1.4, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
 Server. One subject (the sample `Order`), one end-to-end gate, and the limitations listed below.
 
@@ -79,9 +79,10 @@ That file is the sample's only layout source for `Order`; the sample module has 
 
 ## Latest changes
 
-Session of 2026-09-14. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
+Session of 2026-09-15: 0.3.0 pushed to GitHub Packages (Core, Module, Blazor and, for the first time, Appearance). Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- PKG-003: `System.Security.Cryptography.Xml` pinned to 10.0.12 in Blazor, ModelEditor and the sample module; DevExpress.ExpressApp.Blazor pulled in 9.0.0 with eight high-severity advisories (NU1903).
 - MODELEDITOR-003 (review): the Model Editor's buttons and inputs are DevExpress Blazor components, matching the rest of XAF Blazor; no stray "Model" caption beside the editor; long values wrap instead of pushing the editors out of view, the node's path and actions stay at the top while its values scroll, and View in Model opens at the top.
 - APPEAR-001: `XafLayoutBuilder.Appearance` add-on: conditional appearance rules in the builder (`AppearanceBuilder<T>`, `ISupportAppearanceRules`, `AppearanceRegistry`) with checked targets, startup diagnostics XLB006-008, JSON and export.
 - GROUP-001: `Column(..., groupIndex:)` and `.GroupPanel()` set a ListView's default grouping and show its group panel; the export keeps both.

@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-14 (MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-15 (0.3.0 pushed to GitHub Packages; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests

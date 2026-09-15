@@ -4,7 +4,7 @@ One line per change, newest first. The version is `PackageVersion` in `Directory
 version the packages on the feed carry. Ids are ContextBoard cards; the detail is in
 `SESSION_HANDOFF.md`.
 
-## Unreleased
+## 0.3.0 (2026-09-15)
 
 - PKG-003: `System.Security.Cryptography.Xml` pinned to 10.0.12 in Blazor, ModelEditor and the sample module; DevExpress.ExpressApp.Blazor pulled in 9.0.0 with eight high-severity advisories (NU1903).
 - MODELEDITOR-003 (review): the Model Editor's buttons and inputs are DevExpress Blazor components, matching the rest of XAF Blazor; no stray "Model" caption beside the editor; long values wrap instead of pushing the editors out of view, the node's path and actions stay at the top while its values scroll, and View in Model opens at the top.
