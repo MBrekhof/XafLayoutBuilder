@@ -625,10 +625,28 @@ public static class ModelEditing {
     /// </summary>
     public static void Reset(IModelNode node, string name) {
         var modelNode = (ModelNode)node;
+        // ClearValue drops the value with every language it holds (ClearValueInThisLayer removes the whole IModelValue, ModelNode.cs
+        // 2385-2391), so a reset in one language keeps the others' values by writing them back (MODELEDITOR-010, Codex review 3;
+        // docs/devexpress-support-request.md item 13).
+        var others = IsLocalizable(node, name)
+            ? Aspects(node).Where(a => a != CurrentAspect(node)).Select(a => {
+                using var _ = Aspect(node, a);
+                return (Aspect: a, Stored: modelNode.IsValueModified(name), Value: modelNode.GetValue(name));
+            }).Where(v => v.Stored).ToList()
+            : [];
         modelNode.ClearValue(name);
         if (!string.IsNullOrEmpty(modelNode.GetValueInfo(name)?.PersistentPath))
             modelNode.ClearValue(ModelValuePersistentPathCalculator.GetHelperValueName(name));
+        foreach (var (aspect, _, value) in others) {
+            using var _ = Aspect(node, aspect);
+            // Forced: SetValue skips a value equal to the one the warmed-up cache still holds after the clear (SetValue<T>,
+            // ModelNode.cs 2650-2660), so the layer would stay empty (measured in ModelEditorLocalizationTests).
+            ForceSet.MakeGenericMethod(modelNode.GetValueInfo(name)!.PropertyType).Invoke(null, [modelNode, name, value]);
+        }
     }
+
+    // ModelEditorHelper.ForceSetValueInCurrentAspect<T>(ModelNode, string, T), public (Model/ModelEditorHelper.cs 449-452).
+    static readonly System.Reflection.MethodInfo ForceSet = typeof(ModelEditorHelper).GetMethod(nameof(ModelEditorHelper.ForceSetValueInCurrentAspect))!;
 
     /// <summary>
     /// The aspects of a differences layer whose XML is empty, written the way ModelDifferenceDbStore.SaveDifference writes
@@ -1017,6 +1035,39 @@ public sealed class ModelEditSession {
     /// <summary>Set by the editor around its own model save, which keeps the nodes it added.</summary>
     public bool Saving { get; set; }
 
+    /// <summary>
+    /// MODELEDITOR-010: whether anything is not saved yet: a pending value edit, reset, delete or node reset, an added node, or
+    /// edits Apply wrote to the model whose save then failed (Codex review).
+    /// </summary>
+    public bool HasPendingEdits => pending.Count > 0 || deletes.Count > 0 || nodeResets.Count > 0 || added.Count > 0 || writes.Count > 0;
+
+    /// <summary>Set once closing with pending edits was refused; the next close discards them (ModelEditorController).</summary>
+    public bool CloseWarned { get; set; }
+
+    /// <summary>
+    /// Set by <see cref="Discard"/> when edits an Apply had written to the model were discarded: they are still in the live
+    /// model, so XAF's own deferred save of the user model must not store them (ModelEditorController.BeforeSave, Codex review 2).
+    /// </summary>
+    public bool DiscardedApplied { get; private set; }
+
+    /// <summary>
+    /// Reload: drops every pending edit and removes the nodes added since the last Save. Returns true when edits were already
+    /// written to the model by an Apply whose save failed: those cannot be taken back here, and the editor reloads the page so
+    /// the next circuit builds the model from what is stored (Codex review).
+    /// </summary>
+    public bool Discard() {
+        RollbackAdded();
+        pending.Clear();
+        deletes.Clear();
+        nodeResets.Clear();
+        CloseWarned = false;
+        var applied = writes.Count > 0;
+        writes.Clear();
+        emptiedAspects.Clear();
+        DiscardedApplied |= applied;
+        return applied;
+    }
+
     // Aspects the applied edits emptied whose stored rows have not been blanked yet (StoredAspectCleanup).
     readonly HashSet<string> emptiedAspects = [];
 
@@ -1119,6 +1170,8 @@ public sealed class ModelEditSession {
             added.RemoveAll(a => IsAtOrUnder(a, [node]));
             cleared.RemoveWhere(c => IsAtOrUnder(c.Node, [node]));
             addedLookups.RemoveWhere(l => IsAtOrUnder(l.Node, [node]));
+            // Counted as an unsaved write until Saved, like a value edit; nothing to replay for a node that is gone (Codex review 2).
+            writes.Add((node, () => { }));
         }
         deletes.Clear();
     }

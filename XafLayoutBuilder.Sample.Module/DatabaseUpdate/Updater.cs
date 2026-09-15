@@ -115,6 +115,12 @@ public class Updater : ModuleUpdater {
             defaultRole.AddTypePermissionsRecursively<ModelDifference>(SecurityOperations.Create, SecurityPermissionState.Allow);
             defaultRole.AddTypePermissionsRecursively<ModelDifferenceAspect>(SecurityOperations.Create, SecurityPermissionState.Allow);
         }
+        // MODELEDITOR-010: User may read the sample's data, so the gate can show that a caption saved to the shared model
+        // reaches a user who may not edit the model. Set on an existing role too, once.
+        foreach (var type in new[] { typeof(Customer), typeof(Order), typeof(OrderLine), typeof(OrderAttachment) }) {
+            if (defaultRole.TypePermissions.All(p => p.TargetType != type))
+                defaultRole.AddTypePermissionsRecursively(type, SecurityOperations.Read, SecurityPermissionState.Allow);
+        }
         return defaultRole;
     }
 }

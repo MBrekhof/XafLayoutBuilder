@@ -3,6 +3,7 @@ using DevExpress.ExpressApp.Blazor.Components.Models;
 using DevExpress.ExpressApp.Blazor.Editors;
 using DevExpress.ExpressApp.Editors;
 using DevExpress.ExpressApp.Model;
+using DevExpress.ExpressApp.Model.Core;
 
 namespace XafLayoutBuilder.ModelEditor;
 
@@ -23,17 +24,32 @@ public sealed class ModelEditorPropertyEditor(Type objectType, IModelMemberViewI
     /// </summary>
     public ModelEditSession Session { get; } = new();
 
+    /// <summary>MODELEDITOR-010: the shared differences the editor edits instead of the user's, opened when the window says so.</summary>
+    public SharedModelSession? Shared { get; private set; }
+
+    /// <summary>Runs the action against the editor's model: inside the shared session's storage when there is one.</summary>
+    public void InModel(Action action) {
+        if (Shared is null) action();
+        else Shared.Run(action);
+    }
+
     void IComplexViewItem.Setup(IObjectSpace objectSpace, XafApplication application) => this.application = application;
 
     // MODELEDITOR-003 review: no "Model" caption beside the editor. XAF Blazor asks the view item when the layout item sets no
     // ShowCaption (LayoutComponent.razor.cs 206), so nothing is written to the user's model; DetailPropertyEditor does the same.
     public override bool IsCaptionVisible => false;
 
-    protected override IComponentModel CreateComponentModel() => new ModelEditorComponentModel {
-        Application = application!,
-        Session = Session,
-        StartViewId = (CurrentObject as ModelEditorWindow)?.StartViewId,
-    };
+    protected override IComponentModel CreateComponentModel() {
+        var window = CurrentObject as ModelEditorWindow;
+        if (window is { Shared: true } && Shared is null) Shared = SharedModel.Open(application!);
+        return new ModelEditorComponentModel {
+            Application = application!,
+            Model = Shared?.Model ?? (ModelApplicationBase)application!.Model,
+            Session = Session,
+            Shared = Shared,
+            StartViewId = window?.StartViewId,
+        };
+    }
 }
 
 public sealed class ModelEditorComponentModel : ComponentModelBase {
@@ -42,8 +58,18 @@ public sealed class ModelEditorComponentModel : ComponentModelBase {
         set => SetPropertyValue(value);
     }
 
+    public ModelApplicationBase Model {
+        get => GetPropertyValue<ModelApplicationBase>();
+        set => SetPropertyValue(value);
+    }
+
     public ModelEditSession Session {
         get => GetPropertyValue<ModelEditSession>();
+        set => SetPropertyValue(value);
+    }
+
+    public SharedModelSession? Shared {
+        get => GetPropertyValue<SharedModelSession?>();
         set => SetPropertyValue(value);
     }
 

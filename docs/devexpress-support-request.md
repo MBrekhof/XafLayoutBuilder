@@ -149,8 +149,36 @@ keeps returning its old value. Could DevExpress consider the changes below, or a
 - **Meanwhile.** The editor scopes `CultureInfo.CurrentUICulture` and `ModelApplicationBase.SetCurrentAspect` around each
   synchronous read or write (`ModelEditing.Aspect`), which serves both aspect modes.
 
+## 12. No public way to reach or refresh the shared (administrator) differences from a circuit
+
+- **Behaviour.** With warm-up the administrator layer is read once into the shared model every circuit builds on
+  (`ApplicationWarmUpService.cs` 150-179, `ApplicationModelManager.cs` 379-385); `LoadUserDifferences` adds only the
+  user layer and the user-store event's extra stores (`XafApplication.cs` 1485-1519). A circuit never raises
+  `CreateCustomModelDifferenceStore`, so a module cannot learn where the host keeps the shared differences, and a change
+  saved to the shared record shows only after a restart (dxdocs 112580 says as much for the Administrative UI).
+- **Repro.** Save a caption to the shared `ModelDifference` record; open another circuit: the caption is not there.
+- **Smallest change.** A public `XafApplication.CreateModelDifferenceStore()` (it is `protected internal`, 1728) and a
+  documented way to re-read the administrator layer per circuit, or an option to load it below the user layer at logon.
+- **Meanwhile.** The host names the store (`XafModelEditorModule.SharedDifferences`); the module adds it through
+  `AddExtraDiffStore` on the user-store event, so every circuit reads it at logon, and edits it in a second model built
+  with `IApplicationModelManagerProvider.GetModelManager()` inside a value-manager storage of its own (`SharedModelSession`).
+
+## 13. ClearValue drops a localizable value in every language
+
+- **Behaviour.** `ModelNode.ClearValue(name)` removes the layer's whole `IModelValue` for the name
+  (`ClearValueInThisLayer`, `Model/Core/ModelNode.cs` 2385-2391), whichever aspect is current, while `SetValue` and
+  `GetValue` work per aspect (`GetValueCurrentAspectIndex`, 848-863). Clearing a caption's Dutch translation also clears
+  its default-language value and every other translation in that layer. The WinForms Localization window's Undo lives
+  with it by clearing in the default aspect (`LocalizationItem.cs` `Undo`).
+- **Repro.** `XafLayoutBuilder.Tests/ModelEditorLocalizationTests.cs`, `AResetInOneLanguage_KeepsTheOtherLanguagesValues`
+  without the editor's workaround.
+- **Smallest change.** `ClearValue(name, aspect)` (or clear only the current aspect's value when the value is localizable
+  and other aspects hold one).
+- **Meanwhile.** The editor reads the other aspects' stored values first and writes them back after the clear
+  (`ModelEditing.Reset`).
+
 ## To verify before sending
 
-- Shared (administrator) differences: whether they can be edited through public API (MODELEDITOR-010).
+- Shared (administrator) differences: done, item 12 (MODELEDITOR-010).
 - Aspects on a warmed-up model (MODELEDITOR-008): done, item 11; the value cache is per aspect (`TryGetValueFromCache`
   takes the aspect index, `ModelNode.cs` 2514-2518), so item 1 gains nothing there.

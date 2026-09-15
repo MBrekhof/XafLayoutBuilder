@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-15 (0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-15 (0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
@@ -30,6 +30,60 @@ language; the gate translates Order_ListView's caption, checks the nl-NL aspect 
 the request-culture cookie and sees the Dutch caption, then resets it. Two gate races found and fixed in the gate: the
 combo list's items render after it opens, and switching the language re-renders the value rows (the table now carries
 `data-aspect`). 10 unit tests, 254 in total; gate exit 0; support request item 11 added.
+
+**MODELEDITOR-010 (shared differences, Reload, close prompt):** the facts, verified in the 26.1 source and recorded in
+`docs/api-notes.md`: with warm-up the administrator layer is read once into the shared model every circuit builds on, a
+circuit never raises `CreateCustomModelDifferenceStore`, and XAF's own Administrative UI needs a restart too. So the host
+names its shared store (`XafModelEditorModule.SharedDifferences = new(typeof(ModelDifference), "Blazor")`, one line in the
+sample's Blazor module) and the module does two things with it: it adds the store as an extra layer below the user layer
+on the user-store event, so every circuit reads the current shared differences at logon (the "refresh": a shared edit
+shows to everyone at their next page load, no restart), and "Edit Shared Model" (Tools; active when the user may write
+the shared record, the same permission the store's own save checks) opens the editor on a second model built with
+`IApplicationModelManagerProvider.GetModelManager()` whose writable layer is the shared store's (`SharedModelSession`),
+saved with `SaveDifference`. That second model lives in a value-manager storage of its own, the way XAF builds its shared
+application, because the shared unchangeable layer resolves its master per storage and a second model in the circuit's
+storage would take the circuit model's place; the component renders inside the scope (`IsolatedRender`) and every handler
+runs inside it. Found on the way: a layer given nodes before it joins the model (as `LoadUserDifferences` does for the user
+layer) makes the warmed-up unchangeable layer throw "Cannot reset an unchangeable node"; the layer holds only the store's
+differences now. Reload discards pending edits and added nodes (`ModelEditSession.Discard`); closing with pending edits is
+refused once with an XAF warning toast, the second close discards. "Refresh after Save" stays the page reload the card
+allowed. Three more things the gate taught: the extra shared layer must load through a nonsecured object space, since a
+role with only the template's own-record permission gets no shared record back from a secured query and the store then
+tries to create one and fails the logon ("Cannot load user settings from the database"); a popup's Cancel and close
+button go through `BlazorWindow.Close`, which raises its own cancellable `Closing` and never the view's `QueryCanClose`,
+so the prompt lives in a controller on the popup's frame (`ModelEditorWindowController`); and the sample's Default role
+now reads the sample's data (set on an existing role too), or User could not open Order_ListView at all. The gate's own
+helpers changed with it: the account button is found by `data-action-name`, closing the editor goes through
+`CloseModelEditor` (a close with edits is refused once), and the start-up cleanup joins user ids with `TRY_CONVERT`
+because the shared record's UserId is empty. Codex round 1, three P2s: a host that also registers the database store on
+`CreateCustomModelDifferenceStore` bakes the startup shared values into the warmed-up model, so a shared reset would show
+again until a restart, which no per-circuit layer can undo: documented as a host constraint (leave the template's
+subscription commented out, Model.xafml is the baseline); `CanEdit` asked a secured query whether the shared record exists,
+so a role that may not read it was offered a create in its place: existence is now asked without security; and edits an
+Apply wrote to the model before a save threw counted as saved: `HasPendingEdits` counts them and Reload then reloads the
+page, since they cannot be taken back in the model (test written with the fix, not red-checked). Codex round 2, three
+P2s, all failure paths after a save: a discarded edit already in the user layer would still be stored by the deferred save
+the reload triggers, so the session marks it and the user-store handler answers with no store (nothing of that circuit's
+user model is saved); a role that may write the record but not its aspect rows would lose a shared save silently, so
+`CanEdit` checks the aspect permissions too and `Save` compares the stored rows with the layer afterwards and throws
+(`StoredHolds`, unit tested), which also covers a newer stored version; and an applied deletion was not counted as
+unsaved (it is a write entry now). Codex round 3, two P2s about a second administrator: the store replaces every row and
+never bumps `Version` on save, so two open shared editors overwrote each other in silence: the session snapshots the
+stored rows when it opens and refuses the save when they changed (`RowsChanged`); and a save the version guard refused
+passed the check when its only change emptied an aspect: the check runs after the cleanup and expects an emptied aspect's
+row gone or blank (`StoredHolds`), both unit tested. That test exposed a MODELEDITOR-008 bug: XAF's `ClearValue` drops a
+localizable value in every language of the layer, so a reset in nl-NL also dropped the default-language caption; the
+reset now writes the other languages' stored values back (support request item 13, test first). Codex round 4, two P2s:
+the row check and the save were two steps, so two editors could both pass the check; a verified save now raises the
+record's `Version` as the Administrative UI does, and the store's own guard refuses the other editor's later save (its
+check after saving reports it; the gate asserts the bump); and a retry after a failed cleanup read its own committed rows
+as someone else's, so the snapshot is refreshed right after the store commit. Codex round 5, one P2: the window between
+a save and its version bump still let two saves interleave (the record's EF types carry `OptimisticLockIgnore`), so
+check, save, cleanup and bump run under one process-wide lock (`SharedModelSession.Persist`); a host on several servers
+needs a database lock there instead, noted in the code. That last fix was not re-reviewed: the owner asked for commit, push and a restart after the gate. Not done: a stricter
+separate permission (the record's write permission is the natural one; say if you want a role flag). The gate:
+Admin saves a shared caption, sees it after the reload, User sees it at the next logon, Reload and the close prompt are
+exercised, a shared reset takes it out of the record. 8 unit tests (262 in total); support request items 12 and 13.
 
 ## Board loop 2026-09-13
 
@@ -93,7 +147,7 @@ through `CurrentAspectProvider.CurrentAspect`, `AddAspect`, the localizable valu
 whether switching the aspect in XAF Blazor is per circuit or changes the process-wide provider. The cards continue
 through MODELEDITOR-012 (#1704), same loop: test first, gate, Codex review, stop the broker, commit with exact files.
 A gate step that needs a DevExpress component's DOM (MODELEDITOR-006's filter builder) was read from the running sample
-first rather than guessed. `docs/devexpress-support-request.md` (eleven items, still a draft for the owner to send)
+first rather than guessed. `docs/devexpress-support-request.md` (thirteen items, still a draft for the owner to send)
 is tracked and now public (`extras.jpg`, the RUNTIME-001 screenshot, was removed on 2026-09-15).
 
 **MODELEDITOR-007 review fix (2026-09-13, user delegated implementation):** the first review reproduced a P1: resetting

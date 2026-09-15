@@ -610,6 +610,57 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   cultures the host accepts; XAF Blazor's language switcher writes the `.AspNetCore.Culture` cookie and reloads
   (`XafLanguageService.cs` 108-113), which the gate does directly. `ModelEditorHelper.HasValueInCurrentAspect` is public
   (`Model/ModelEditorHelper.cs` 454), used for the translate view's translated mark.
+- **Shared (administrator) differences (MODELEDITOR-010).** With warm-up on, the default, one shared application per
+  process is built at startup (`ApplicationWarmUpService.RunWarmUpWithModel`, key the invariant culture,
+  `SharedApplicationProvider.cs` 69-97, 106-131) and its model, generated plus module plus administrator layers, is the
+  "unchangeable" layer every circuit's model builds on (`ApplicationModelManager.Setup` 379-385,
+  `CreateModelApplication` 418-429). A circuit's `LoadUserDifferences` (`XafApplication.cs` 1485-1519) adds only the
+  `ExtraDiffStores` of the user-store event and the user store; the administrator layer is read once, so a change to the
+  shared record shows only after a restart, and the documented Administrative UI says the same (dxdocs 112580). The
+  `CreateCustomModelDifferenceStore` event is not raised for a circuit, so a module cannot see the host's shared store: the
+  host names its type and context id (`XafModelEditorModule.SharedDifferences`). Two consequences used by the editor: a
+  `ModelDifferenceDbStore(app, type, isShared: true, contextId)` added through `AddExtraDiffStore` on the *user*-store event
+  (`EventArgs.cs` 642-651) is loaded below the user layer at every logon, a per-circuit refresh of the shared differences
+  without a restart; and the application's model manager is public through `IApplicationModelManagerProvider`
+  (`XafApplication.cs` 101, 2662), so `CreateLayerByStore` plus `CreateModelApplication([layer])` build a second model
+  whose writable layer is the shared store's, saved with `store.SaveDifference(layer)`. That second model must live in a
+  value-manager storage of its own: the unchangeable layer has many masters, one per circuit, resolved through the storage's
+  `BlazorModelMultipleMasterStore` dictionary (`ModelNode.MasterItem` 350-360, `BlazorModelMultipleMasterStore.cs`), and
+  `AddLayerInternal` makes the new model the master (`SetMaster`, 806-813), as XAF's own shared application is built inside
+  `IValueManagerStorageContext.RunWithStorage` (`SharedApplicationProvider.cs` 108-111). `ValueManagerContext.OverrideStorage`
+  is public and its scope does not restore the previous storage (`AmbientContext/ValueManagerContext.cs` 55-66, 91-97),
+  `IValueManagerStorage` is three methods; `CaptionHelper` keeps its model per storage (`CaptionHelperImplementer.cs` 55),
+  so the session calls `CaptionHelper.Setup`. A layer given nodes before it joins the model (`AddNode<IModelOptions>` as
+  `LoadUserDifferences` does, 1503-1511) made the warmed-up unchangeable layer reset a node it must not ("Cannot reset an
+  unchangeable node", `IsUnchangeable` 3702-3708, `InsertLayerAtCoreInLock` 806-813); a layer holding only the store's
+  differences works, and the editor writes create the path (`GetLayerForModification`). The shared record is readable by
+  every user: the store registers both types as anonymous-allowed (`RegisterModelDifferenceTypesInSecurity`,
+  `ModelDifferenceDbStore.cs` 331-344); `SaveDifference` checks Write on the record and Create on the type
+  (178-213) and refuses silently, so `SharedModel.CanEdit` asks the same permission first. Readable is not queryable:
+  a role with only the template's object-level permission ("UserId = ToStr(CurrentUserId())") does not get the shared
+  record back from `FindObject` in a secured object space, so the store's `Load` for that user tries to create a second
+  shared record, which security refuses ("Saving the 'ModelDifference.ContextId' property is prohibited") and the logon
+  reports "Cannot load user settings from the database" (measured in the gate as User). XAF's own shared application
+  loads the administrator layer without a logged-on user; the editor's extra-layer store reads through
+  `IObjectSpaceFactoryBase.CreateNonSecuredObjectSpace` (`Services/Core/IObjectSpaceFactoryBase.cs` 46-48, the store's
+  public `CreateObjectSpaceHandler`), the editing store stays secured. Closing a popup: the popup's Cancel
+  (`DialogController.cs` 146-150) and its close button (`PopupWindowTemplateClosingController.cs` 69-84) both call
+  `Window.Close`, and `BlazorWindow.Close` raises its own cancellable `Closing` and then closes the view with
+  `View.Close(false)` (`BlazorWindow.cs` 66-88), so `View.QueryCanClose` (`View.cs` 408-418) never fires for a popup; a
+  controller on the popup's own frame subscribes to `BlazorWindow.Closing`. `SaveDifference` also checks Write on every
+  aspect row and Create for a row it adds (`ModelDifferenceDbStore.cs` 194-213), and returns silently when any check
+  fails, or when the stored `Version` is newer than the layer's (181): the editor asks the same permissions before it
+  offers the action (`SharedModel.CanEdit`) and compares the stored rows with the layer after saving
+  (`SharedModel.StoredHolds`; the rows carry `XafmlHeader` plus a newline before the XML, 213). `SaveDifference` never
+  increments `Version` (only the Administrative UI's controller does, `ModelDifferenceViewController.cs` 188-196), and
+  it rewrites every aspect row, so two open shared editors would overwrite each other without a trace; the session keeps
+  the rows it opened with and refuses a save over rows that changed (`SharedModel.RowsChanged`), and after a verified
+  save raises the record's `Version` the way the Administrative UI does, so an editor opened earlier is refused by the
+  store's own version guard on its later save (which its check after saving reports). A discarded edit that
+  an Apply had already written to the user layer would still be stored by XAF's deferred save at the reload (the flush
+  in `BlazorApplication.LoadUserDifferences`), unless the user-store event answers with no store: `SaveModelChanges`
+  saves nothing then (`XafApplication.cs` 2497-2506; `CreateUserModelDifferenceStore` 408-414 takes `Handled` with a
+  null `Store`).
 
 ## Conditional appearance (APPEAR-001)
 

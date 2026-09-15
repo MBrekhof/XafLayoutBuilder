@@ -30,10 +30,15 @@ internal static class StoredAspectCleanup {
     /// Call after SaveModelChanges.
     /// </summary>
     public static void ClearEmptied(XafApplication application, IReadOnlyCollection<string> emptied) {
-        if (emptied.Count == 0
-            || ((ModelApplicationBase)application.Model).LastLayer is not { } userLayer
+        if (((ModelApplicationBase)application.Model).LastLayer is not { } userLayer
             || !Stores.TryGetValue(application, out var store)
             || application.Security?.UserId is not { } userId) return;
+        ClearEmptied(application, store, ModelDifferenceDbStore.UserIdTypeConverter.ConvertToInvariantString(userId) ?? "", userLayer.Version, emptied);
+    }
+
+    /// <summary>The same for a given store and record: the shared record has user id "" (MODELEDITOR-010).</summary>
+    public static void ClearEmptied(XafApplication application, ModelDifferenceDbStore store, string userIdText, int layerVersion, IReadOnlyCollection<string> emptied) {
+        if (emptied.Count == 0) return;
         // ponytail: the store's ModelDifferenceType is internal, so the application's one persistent IModelDifference class
         // stands in for it; with more than one the cleanup is skipped (the stale row stays until someone clears it).
         var types = application.TypesInfo.PersistentTypes
@@ -42,9 +47,8 @@ internal static class StoredAspectCleanup {
         if (types.Count != 1) return;
         var type = types[0].Type;
         using var objectSpace = store.CreateObjectSpaceHandler(application, type);
-        var userIdText = ModelDifferenceDbStore.UserIdTypeConverter.ConvertToInvariantString(userId) ?? "";
         if (ModelDifferenceDbStore.FindModelDifference(objectSpace, type, userIdText, store.ContextId) is not { } difference
-            || !StoreAcceptsSaveFrom(difference, userLayer.Version)) return;
+            || !StoreAcceptsSaveFrom(difference, layerVersion)) return;
         var changed = false;
         foreach (var aspect in emptied) {
             if (ModelDifferenceDbStore.FindModelDifferenceAspect(difference, aspect) is { } row && row.Xml != ModelDifferenceDbStore.EmptyXafml) {

@@ -303,7 +303,15 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
     // then each application's own model built from the same manager over its user layer (XafApplication.LoadUserDifferences
     // 1485-1519, ApplicationModelsManager.CreateModelApplication 418-429) and collapsed. `build` makes such a model over
     // the given user differences.
-    internal static void WithWarmedUpModels(Action<Func<ModelStoreBase, ModelApplicationBase>> test) {
+    internal static void WithWarmedUpModels(Action<Func<ModelStoreBase, ModelApplicationBase>> test) =>
+        WithWarmedUpManager(manager => test(userDifferences => {
+            var model = manager.CreateModelApplication([manager.CreateLayerByStore("UserDiff", userDifferences)]);
+            model.Collapse();
+            return model;
+        }));
+
+    /// <summary>The warmed-up manager itself, for models over other layers (MODELEDITOR-010's shared session).</summary>
+    internal static void WithWarmedUpManager(Action<ApplicationModelManager> test) {
         var optimization = new ApplicationOptions().Optimization;
         var warmUp = optimization.WarmUpApplication;
         var lockHelper = ModelNodeLockHelper.Instance;
@@ -330,11 +338,7 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
             manager.CreateModelApplication([manager.CreateLayer("AfterSetup")]).WarmUp();
             ModelEditorHelper.ModelCalculatorsCacheEnabled = calculatorsCache;
 
-            test(userDifferences => {
-                var model = manager.CreateModelApplication([manager.CreateLayerByStore("UserDiff", userDifferences)]);
-                model.Collapse();
-                return model;
-            });
+            test(manager);
         }
         finally {
             ModelNodeSharedValuesCache.Instance.Clear();

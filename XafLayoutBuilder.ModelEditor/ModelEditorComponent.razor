@@ -8,6 +8,8 @@
     <p class="xlb-model-editor-denied">Your role may not edit the application model.</p>
 }
 else {
+    @* MODELEDITOR-010: a shared session's model is read inside its own storage (SharedModelSession); the handlers do the same. *@
+    <IsolatedRender Scope="@(Shared is null ? null : Shared.Enter)">
     <div class="xlb-model-editor" style="display:flex; gap:1rem; height:65vh; font-size:0.875rem">
         <div style="flex:0 0 40%; display:flex; flex-direction:column; min-width:0">
             @* MODELEDITOR-003 review: DevExpress Blazor editors and buttons throughout, so the editor looks like the rest of XAF.
@@ -29,7 +31,7 @@ else {
             }
             else {
                 <ul class="xlb-model-tree" style="overflow:auto; list-style:none; padding-left:0; margin:0">
-                    @foreach (var child in ModelEditing.Children(Application.Model)) {
+                    @foreach (var child in ModelEditing.Children(Model)) {
                         @TreeNode(child)
                     }
                 </ul>
@@ -40,6 +42,9 @@ else {
                add, and the translate view over the selected node. Reads and writes are scoped on the thread (ModelEditing.Aspect),
                so the rest of the circuit keeps its own language. *@
             <div class="xlb-language-bar" style="display:flex; flex-wrap:wrap; gap:0.25rem; align-items:center; margin-bottom:0.5rem">
+                @if (Shared is not null) {
+                    <span class="xlb-shared" title="The shared differences every user starts from" style="font-weight:600; margin-right:0.5rem">Shared model</span>
+                }
                 <span>Language</span>
                 <span class="xlb-language">
                     <DxComboBox TData="AspectItem" TValue="string" Data="@AspectItems()" ValueFieldName="Value" TextFieldName="Text"
@@ -242,10 +247,14 @@ else {
             }
             <div style="margin-top:0.75rem">
                 <DxButton CssClass="xlb-save" Text="Save" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!Session.HasErrors)" Click="Save" />
+                @* MODELEDITOR-010: Reload drops the pending edits and the nodes added since the last Save. *@
+                <DxButton CssClass="xlb-reload" Text="Reload" title="Discard the unsaved edits" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@Session.HasPendingEdits" Click="Reload" />
                 <span class="xlb-model-editor-message" style="margin-left:0.5rem">@message</span>
             </div>
         </div>
     </div>
+    </IsolatedRender>
 }
 
 @inject NavigationManager Navigation
@@ -253,7 +262,10 @@ else {
 
 @code {
     [Parameter] public XafApplication Application { get; set; } = null!;
+    // The model the editor shows and edits: the application's own, or a shared session's (MODELEDITOR-010).
+    [Parameter] public ModelApplicationBase Model { get; set; } = null!;
     [Parameter] public ModelEditSession Session { get; set; } = null!;
+    [Parameter] public SharedModelSession? Shared { get; set; }
     [Parameter] public string? StartViewId { get; set; }
 
     // By path: the node instances Parent returns are not the tree's own (ModelEditing.IsInModel).
@@ -285,9 +297,9 @@ else {
     sealed record AspectItem(string Value, string Text);
 
     // The editor's language: the session's, or the model's own until one is chosen.
-    string Aspect => Session.Aspect ?? ModelEditing.CurrentAspect(Application.Model);
+    string Aspect => Session.Aspect ?? ModelEditing.CurrentAspect(Model);
 
-    List<AspectItem> AspectItems() => ModelEditing.Aspects(Application.Model).Select(a => new AspectItem(a, a.Length == 0 ? "(default)" : a)).ToList();
+    List<AspectItem> AspectItems() => ModelEditing.Aspects(Model).Select(a => new AspectItem(a, a.Length == 0 ? "(default)" : a)).ToList();
 
     void SetAspect(string value) {
         Session.Aspect = value;
@@ -297,7 +309,7 @@ else {
     void AddLanguage() => Run(() => {
         var language = newLanguage.Trim();
         if (language.Length == 0) throw new InvalidOperationException("Give the language's culture name, nl-NL for example.");
-        Session.Aspect = ModelEditing.AddAspect(Application.Model, language);
+        Session.Aspect = ModelEditing.AddAspect(Model, language);
         newLanguage = "";
     }, "Language added; it is stored with its first saved value");
 
@@ -319,8 +331,11 @@ else {
     // node's values already rendered as the popup opened, focus ended up in the last value editor and the panel scrolled to
     // the bottom, while selecting a node later leaves focus in the search box (MODELEDITOR-003 review, measured in the sample).
     protected override void OnAfterRender(bool firstRender) {
-        if (!firstRender || StartViewId is null || Application.Model.Views[StartViewId] is not { } view) return;
-        Reveal(view);
+        if (!firstRender || StartViewId is null) return;
+        using (Shared?.Enter()) {
+            if (((IModelApplication)Model).Views[StartViewId] is not { } view) return;
+            Reveal(view);
+        }
         StateHasChanged();
     }
 
@@ -355,6 +370,7 @@ else {
     // MODELEDITOR-007: leaving a node that lacks required values says so. ponytail: the WinForms editor refuses the node change
     // (ModelEditorViewController.cs 1351); here Save refuses, listing every node, so moving around the tree stays free.
     void Select(IModelNode node) {
+        using var _ = Shared?.Enter();
         var left = selected is not null && ModelEditing.IsInModel(selected) ? Session.MissingRequired(selected) : [];
         var leftPath = selected is null ? null : ModelEditing.Path(selected);
         history.RemoveRange(historyAt + 1, history.Count - historyAt - 1);
@@ -373,6 +389,7 @@ else {
 
     // A node removed since is skipped.
     void StepHistory(int direction) {
+        using var _ = Shared?.Enter();
         for (var at = historyAt + direction; at >= 0 && at < history.Count; at += direction) {
             if (!ModelEditing.IsInModel(history[at])) continue;
             historyAt = at;
@@ -383,11 +400,12 @@ else {
 
     // Source: open the node a calculated value comes from, with that value's description.
     void GoToSource(IModelNode node, string name) {
+        using var _ = Shared?.Enter();
         Reveal(node);
         focusedDescription = ModelEditing.Values(node).FirstOrDefault(r => r.Name == name)?.Description;
     }
 
-    void RunSearch() => Run(() => searchResults = string.IsNullOrWhiteSpace(searchText) ? null : ModelEditing.Search(Application.Model, searchText), null);
+    void RunSearch() => Run(() => searchResults = string.IsNullOrWhiteSpace(searchText) ? null : ModelEditing.Search(Model, searchText), null);
 
     void SearchTextChanged(string text) {
         searchText = text;
@@ -490,29 +508,46 @@ else {
     void Save() => Run(() => {
         // MODELEDITOR-007: stored differences the model can no longer use are dropped by this save (the database store writes
         // only the usable layer), so the first Save says so and the next one goes ahead.
-        if (!unusableWarned && ModelEditing.HasUnusableDifferences((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model)) {
+        if (!unusableWarned && ModelEditing.HasUnusableDifferences(Model)) {
             unusableWarned = true;
-            throw new InvalidOperationException("Your stored model differences hold nodes the model no longer has (after a module or version change, " +
-                "for example). They are not applied, and saving rewrites your differences without them. Press Save again to go ahead.");
+            throw new InvalidOperationException("The stored model differences hold nodes the model no longer has (after a module or version change, " +
+                "for example). They are not applied, and saving rewrites the differences without them. Press Save again to go ahead.");
         }
         // The database store keeps an aspect whose differences became empty; without the cleanup a reset localized caption
         // returns. Only the aspects these edits emptied are blanked, and the session keeps them until that succeeded.
-        Session.Apply(((DevExpress.ExpressApp.Model.Core.ModelApplicationBase)Application.Model).LastLayer);
-        // Before any other model save ModelEditorController removes the nodes added here; this one keeps them.
-        Session.Saving = true;
-        try {
-            Application.SaveModelChanges();
+        Session.Apply(Model.LastLayer);
+        if (Shared is not null) {
+            // MODELEDITOR-010: through the shared store, record UserId ""; the reload's circuit layers the saved differences over
+            // its model (XafModelEditorModule), and so does every other user's next page load.
+            Shared.Persist(() => {
+                if (Shared.Store is ModelDifferenceDbStore sharedStore)
+                    StoredAspectCleanup.ClearEmptied(Application, sharedStore, "", Shared.Version, Session.EmptiedAspects);
+            });
         }
-        finally {
-            Session.Saving = false;
+        else {
+            // Before any other model save ModelEditorController removes the nodes added here; this one keeps them.
+            Session.Saving = true;
+            try {
+                Application.SaveModelChanges();
+            }
+            finally {
+                Session.Saving = false;
+            }
+            StoredAspectCleanup.ClearEmptied(Application, Session.EmptiedAspects);
         }
-        StoredAspectCleanup.ClearEmptied(Application, Session.EmptiedAspects);
         Session.Saved();
         Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
     }, "Saved, reloading");
 
+    void Reload() => Run(() => {
+        // Edits a failed save left in the model come out only with the page: the new circuit reads what is stored.
+        if (Session.Discard()) Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        refusals++;
+    }, "Unsaved edits discarded");
+
     // Text that is no value of its type, a calculator that throws, a failed save: reported, not thrown into the circuit.
     void Run(Action action, string? done) {
+        using var _ = Shared?.Enter();
         try {
             // A save of this user's model from elsewhere removed the nodes added here (ModelEditorController).
             if (selected is not null && !ModelEditing.IsInModel(selected)) {

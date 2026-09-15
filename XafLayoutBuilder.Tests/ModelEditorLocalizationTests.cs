@@ -90,6 +90,27 @@ public class ModelEditorLocalizationTests(ApplicationModelFixture fixture) {
         Assert.Equal(aspect, model.CurrentAspect);
     });
 
+    // MODELEDITOR-010, Codex review 3: XAF's ClearValue drops a localizable value with every language it holds, so a reset in
+    // one language must put the others' values back.
+    [Fact]
+    public void AResetInOneLanguage_KeepsTheOtherLanguagesValues() => WarmedUpModelTests.WithWarmedUpModels(build => {
+        var model = build(ModelStoreBase.Empty);
+        model.AddAspect(Dutch);
+        var view = ContactListView(model);
+        using (ModelEditing.Aspect(view, Dutch)) ModelEditing.SetText(view, "Caption", "Contactpersonen");
+        using (ModelEditing.Aspect(view, "")) ModelEditing.SetText(view, "Caption", "Contacts (default)");
+
+        using (ModelEditing.Aspect(view, Dutch)) ModelEditing.Reset(view, "Caption");
+
+        using (ModelEditing.Aspect(view, Dutch)) Assert.False(Row(view, "Caption").IsModified);
+        using (ModelEditing.Aspect(view, "")) {
+            Assert.True(Row(view, "Caption").IsModified);
+            Assert.Equal("Contacts (default)", view.Caption);
+        }
+        Assert.DoesNotContain("Contactpersonen", new ModelXmlWriter().WriteToString(model.LastLayer, model.GetAspectIndex(Dutch)));
+        Assert.Contains("Contacts (default)", model.LastLayer.Xml);
+    });
+
     // The session keeps one pending edit per value and aspect, and Apply writes each in its aspect.
     [Fact]
     public void Session_KeepsAndAppliesEditsOfOneValue_PerAspect() => WarmedUpModelTests.WithWarmedUpModels(build => {

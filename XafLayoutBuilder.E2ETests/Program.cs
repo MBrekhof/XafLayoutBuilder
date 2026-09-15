@@ -47,7 +47,10 @@ using Microsoft.Playwright;
 //            resetting a saved custom column's required PropertyName is refused and the column survives a reload;
 //            MODELEDITOR-008: a language added in the editor is offered in its language combo, a caption translated to nl-NL
 //            lists in the translate view, is stored in the nl-NL aspect row, stays out of en-US and shows in nl-NL, and a
-//            saved reset in nl-NL takes it out of that row
+//            saved reset in nl-NL takes it out of that row; MODELEDITOR-010: a caption saved through Edit Shared Model is
+//            stored in the shared record, shows to Admin after the reload and to User at the next logon, Admin's own editor
+//            shows it below the user layer, Reload drops a pending edit, closing with an edit is refused once and the second
+//            close discards it, and a saved reset in the shared editor takes the caption out of the shared record
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -92,9 +95,12 @@ try
     // E2E 5a would then export that layout instead of the builder's. Always start from an empty user model.
     try
     {
-        var leftOver = SqlScalar("SELECT COUNT(*) FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'");
+        var leftOver = SqlScalar("SELECT COUNT(*) FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = TRY_CONVERT(uniqueidentifier, d.UserId) WHERE u.UserName = 'Admin'");
         if (leftOver != "0") Console.WriteLine($"    clearing {leftOver} left-over user model row(s) for Admin");
-        Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin'; DELETE d FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = d.UserId WHERE u.UserName = 'Admin';");
+        Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID JOIN PermissionPolicyUser u ON u.ID = TRY_CONVERT(uniqueidentifier, d.UserId) WHERE u.UserName = 'Admin'; DELETE d FROM ModelDifferences d JOIN PermissionPolicyUser u ON u.ID = TRY_CONVERT(uniqueidentifier, d.UserId) WHERE u.UserName = 'Admin';");
+        // MODELEDITOR-010: the shared record (UserId '') too, which the shared store recreates from Model.xafml at the next logon;
+        // its empty UserId is why the joins above convert with TRY_CONVERT.
+        Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = ''; DELETE FROM ModelDifferences WHERE UserId = '';");
     }
     // 4060: the catalog does not exist yet. 208: it exists but the schema does not. Either way this is the first run
     // on this machine and the sample is about to create both; anything else is a real connection or permission fault.
@@ -652,8 +658,7 @@ try
     await captionInput.FillAsync("Cancelled edit");
     await captionInput.PressAsync("Tab"); // the input posts its change on blur
     await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
     captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
     var reopenedCaption = await captionInput.InputValueAsync();
@@ -730,6 +735,63 @@ try
     var dutchReset = SqlScalar($"SELECT CAST(a.Xml AS NVARCHAR(MAX)) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}' AND a.Name = 'nl-NL'") ?? "";
     Assert(!dutchReset.Contains(DutchCaption), "after the saved reset the nl-NL aspect row no longer holds the Dutch caption");
 
+    // MODELEDITOR-010: the shared (administrator) differences. Edit Shared Model edits them in a model of their own and saves
+    // through the shared store (record UserId ''); every circuit layers that store over its model at logon, so the caption
+    // shows to Admin after the reload and to User at the next logon, without a host restart. Reload discards the pending
+    // edits; closing with edits is refused once, with a warning, and the second close discards them.
+    Step("MODELEDITOR-010: a caption saved to the shared model shows for another user; Reload discards; closing with edits warns");
+    const string SharedCaption = "Orders for everyone";
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView", shared: true);
+    await modelEditor.Locator(".xlb-shared").WaitForAsync(new() { Timeout = 10_000 });
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    await captionInput.FillAsync(SharedCaption);
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-30-model-editor-shared.png") });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var sharedStored = SqlScalar("SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = ''") ?? "";
+    Assert(sharedStored.Contains(SharedCaption), "the caption is stored in the shared record (UserId '') of the model differences");
+    // A verified shared save raises the record's Version, so a second editor opened before it is refused by the store's guard.
+    var sharedVersion = SqlScalar("SELECT MAX(Version) FROM ModelDifferences WHERE UserId = ''") ?? "";
+    Assert(sharedVersion != "0", $"the shared record's Version is raised by the save (got {sharedVersion})");
+    Assert((await page.InnerTextAsync("body")).Contains(SharedCaption), "after the reload Admin's circuit shows the shared caption");
+    await LogOff(page);
+    await Login(page, "User");
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    Assert((await page.InnerTextAsync("body")).Contains(SharedCaption), "User, at the next logon, sees the caption Admin saved to the shared model");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-31-model-editor-shared-as-user.png") });
+    await LogOff(page);
+    await Login(page);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    Assert(await captionInput.InputValueAsync() == SharedCaption, "Admin's own editor shows the shared caption as the value below the user layer");
+    await captionInput.FillAsync("Discarded edit");
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-reload").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "discarded" }).WaitForAsync(new() { Timeout = 10_000 });
+    Assert(await modelEditor.Locator("tr[data-value='Caption'] input").InputValueAsync() == SharedCaption, "Reload drops the pending edit and shows the saved caption again");
+    Assert(await modelEditor.Locator(".xlb-pending").CountAsync() == 0, "nothing is pending after Reload");
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    await captionInput.FillAsync("Unsaved edit");
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await ClosePopup(page);
+    await page.GetByText("Unsaved edits").First.WaitForAsync(new() { Timeout = 10_000 });
+    Assert(await modelEditor.IsVisibleAsync(), "the first close with unsaved edits is refused with a warning");
+    await CloseModelEditor(page, modelEditor);
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    Assert(await modelEditor.Locator("tr[data-value='Caption'] input").InputValueAsync() == SharedCaption, "the second close discarded the unsaved edit");
+    await CloseModelEditor(page, modelEditor);
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView", shared: true);
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var sharedReset = SqlScalar("SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = ''") ?? "";
+    Assert(!sharedReset.Contains(SharedCaption), "after the saved reset the shared record no longer holds the caption");
+    Assert(!(await page.InnerTextAsync("body")).Contains(SharedCaption), "after the reset Order_ListView shows its own caption again");
+
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
@@ -762,8 +824,7 @@ try
     Assert((await resetRequiredMessage.InnerTextAsync()).Contains("Views/Order_ListView/Columns/EditorNotes"),
         "the refused required reset names the saved custom column");
     await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-27-model-editor-required-reset.png") });
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
     await OpenListView(page, "Order_ListView", "ORD-001"); // full navigation: rebuild the model from its stored differences
     var headersAfterRequiredReset = await GridHeaders(page);
     Assert(headersAfterRequiredReset.Contains("Notes"), "the saved custom column survives a refused required reset and reload");
@@ -788,8 +849,7 @@ try
     await secondTab.CloseAsync();
     var foreignSaved = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
     Assert(!foreignSaved.Contains("EditorUnsaved"), "a model save from a second logon does not store a node added in the open Model Editor but not saved");
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
 
     Step("MODELEDITOR-005: a lookup sets Order_ListView's DetailView; View in Model, Go to and Back navigate the editor");
     // The DetailView drop-down lists the Order detail views ([DataSourceProperty] + [DataSourceCriteria]); after Save the list
@@ -820,8 +880,7 @@ try
     await page.GetByText("View in Model", new() { Exact = true }).First.ClickAsync();
     modelEditor = page.Locator(".xlb-model-editor");
     await modelEditor.Locator("[data-selected='Views/Order_Compact_DetailView']").WaitForAsync(new() { Timeout = 15_000 });
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
     // Go to follows the DetailView reference, Back returns; then the DetailView is reset and saved for the steps after this one.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
     await modelEditor.Locator("tr[data-value='DetailView'] .xlb-goto").ClickAsync();
@@ -894,8 +953,7 @@ try
     // A column's ToolTip takes the multiline string editor (IModelToolTip, CommonInterfaces.cs 562).
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns/Number");
     Assert(await modelEditor.Locator("tr[data-value='ToolTip'] textarea").CountAsync() == 1, "a column's ToolTip is edited in a text area");
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
     // Reset and save, for the steps after this one.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
     await modelEditor.Locator("tr[data-value='Criteria'] .xlb-reset").ClickAsync();
@@ -918,8 +976,7 @@ try
     Assert(requiredText.Contains("Views/Order_ListView/Columns/Number"),
         $"Save with a required value cleared is refused, naming the node and the value (got '{requiredText}')");
     Assert(await modelEditor.IsVisibleAsync(), "the refused Save leaves the Model Editor open with the edit to correct");
-    await ClosePopup(page);
-    await modelEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await CloseModelEditor(page, modelEditor);
     var headersAfterRefusedSave = await GridHeaders(page);
     Assert(headersAfterRefusedSave.Contains("Number"),
         $"nothing was saved: Order_ListView still shows its Number column (got {string.Join(",", headersAfterRefusedSave)})");
@@ -1134,7 +1191,16 @@ static void Assert(bool condition, string what)
     Console.WriteLine($"    [ok] {what}");
 }
 
-static async Task Login(IPage page)
+// MODELEDITOR-010: the account menu's Log Off lands on the login page.
+static async Task LogOff(IPage page)
+{
+    // The header's account button (AccountComponent.razor): named by data-action-name, the user name is its aria-label only.
+    await page.Locator("button[data-action-name='Account']").ClickAsync();
+    await page.GetByRole(AriaRole.Button, new() { Name = "Log Off", Exact = true }).ClickAsync();
+    await page.WaitForURLAsync(url => url.Contains("LoginPage", StringComparison.OrdinalIgnoreCase), new() { Timeout = 20_000 });
+}
+
+static async Task Login(IPage page, string user = "Admin")
 {
     // Blazor Server circuit-connect race: DOMContentLoaded fires on the static shell before
     // the SignalR circuit attaches handlers, so an early Fill() can be dropped server-side.
@@ -1150,8 +1216,8 @@ static async Task Login(IPage page)
         await userField.WaitForAsync(new() { Timeout = 20_000 });
         for (var i = 0; i < 10; i++)
         {
-            await userField.FillAsync("Admin");
-            if (await userField.InputValueAsync() == "Admin") break;
+            await userField.FillAsync(user);
+            if (await userField.InputValueAsync() == user) break;
             await Task.Delay(300);
         }
         await userField.PressAsync("Tab");
@@ -1332,12 +1398,26 @@ static async Task ClosePopup(IPage page)
     else await page.Keyboard.PressAsync("Escape");
 }
 
+// MODELEDITOR-010: a close with unsaved edits is refused once, with a warning toast; the second close discards them. A clean
+// close detaches at once.
+static async Task CloseModelEditor(IPage page, ILocator editor)
+{
+    await ClosePopup(page);
+    try
+    {
+        await page.GetByText("Unsaved edits").First.WaitForAsync(new() { Timeout = 3_000 });
+        await ClosePopup(page);
+    }
+    catch (TimeoutException) { /* no pending edits: the first close went through */ }
+    await editor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+}
+
 // Tools tab -> Edit Model (ModelEditor add-on); expands the tree down to the node and selects it.
-static async Task<ILocator> OpenModelEditorAt(IPage page, string nodePath)
+static async Task<ILocator> OpenModelEditorAt(IPage page, string nodePath, bool shared = false)
 {
     // Running an action or closing a popup can drop the toolbar back to the Home tab, so select Tools every time.
     await page.GetByText("Tools", new() { Exact = true }).First.ClickAsync();
-    var editModel = page.GetByText("Edit Model", new() { Exact = true }).First;
+    var editModel = page.GetByText(shared ? "Edit Shared Model" : "Edit Model", new() { Exact = true }).First;
     await editModel.WaitForAsync(new() { Timeout = 10_000 });
     await editModel.ClickAsync();
     var editor = page.Locator(".xlb-model-editor");

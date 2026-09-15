@@ -79,9 +79,10 @@ That file is the sample's only layout source for `Order`; the sample module has 
 
 ## Latest changes
 
-Session of 2026-09-15: 0.3.0 pushed to GitHub Packages (Core, Module, Blazor and, for the first time, Appearance), then MODELEDITOR-008. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
+Session of 2026-09-15: 0.3.0 pushed to GitHub Packages (Core, Module, Blazor and, for the first time, Appearance), then MODELEDITOR-008 and MODELEDITOR-010. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
 [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
+- MODELEDITOR-010: Edit Shared Model edits the administrator differences in a model of their own and saves them through the shared store; the module layers that store over every circuit's model at logon, so a shared edit shows to everyone at their next page load without a restart; Reload discards pending edits; closing with edits warns once. The host sets `XafModelEditorModule.SharedDifferences`.
 - MODELEDITOR-008: Model Editor languages: a language combo reads and writes localizable values per aspect without touching the circuit's culture, Add makes a new language, and Translate lists every localizable value under the node with its translation and an untranslated filter.
 - PKG-003: `System.Security.Cryptography.Xml` pinned to 10.0.12 in Blazor, ModelEditor and the sample module; DevExpress.ExpressApp.Blazor pulled in 9.0.0 with eight high-severity advisories (NU1903).
 - MODELEDITOR-003 (review): the Model Editor's buttons and inputs are DevExpress Blazor components, matching the rest of XAF Blazor; no stray "Model" caption beside the editor; long values wrap instead of pushing the editors out of view, the node's path and actions stay at the top while its values scroll, and View in Model opens at the top.
