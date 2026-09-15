@@ -1,12 +1,35 @@
 # Session handoff
 
-Updated 2026-09-15 (0.3.0 pushed to GitHub Packages; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-15 (0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
+
+## Session 2026-09-15: release 0.3.0 and MODELEDITOR-008
+
+PKG-003 (1b9d5d2): `System.Security.Cryptography.Xml` 10.0.12 pinned in Blazor, ModelEditor and the sample module; the
+DevExpress Blazor package pulled in 9.0.0 with eight NU1903 advisories. Release 0.3.0 (fc76eb5): Core, Module, Blazor and,
+for the first time, Appearance on GitHub Packages; the Model Editor stays unpackaged until MODELEDITOR-012. RUNTIME-001
+decided by the owner: allow (the editor may change builder-owned views; MODELEDITOR-012 offers the read-only policy as an
+opt-in). `extras.jpg` removed (6eb0bc9). The owner updates the board for the Review cards.
+
+**MODELEDITOR-008 (languages):** the key finding, verified in the 26.1 source and recorded in `docs/api-notes.md`: XAF
+Blazor's warmed-up model takes its aspect from the thread's UI culture, and the application's `CurrentAspectProvider`
+setter changes the process-wide default culture, so the WinForms Localization window's provider scope would leak across
+circuits. The editor scopes `CultureInfo.CurrentUICulture` and `SetCurrentAspect` on the thread around each synchronous
+read or write (`ModelEditing.Aspect`), which serves both aspect modes; `ModelEditSession.Aspect` keys pending edits per
+aspect and the write closures carry their aspect for the replay. The UI: a language combo (default first, then the
+model's languages), Add (a predefined culture, registered in its canonical spelling; the Codex review's one finding, P2,
+fixed with a test but not red-checked, one line) and Translate, the WinForms Localization window as a table over the
+selected node with an untranslated filter. Skipped: CSV import and export, Bing translation, "mark as translated" (the
+card called them optional; add when someone translates a whole model at once). The sample lists `nl-NL` as a second
+language; the gate translates Order_ListView's caption, checks the nl-NL aspect row, switches the browser culture through
+the request-culture cookie and sees the Dutch caption, then resets it. Two gate races found and fixed in the gate: the
+combo list's items render after it opens, and switching the language re-renders the value rows (the table now carries
+`data-aspect`). 10 unit tests, 254 in total; gate exit 0; support request item 11 added.
 
 ## Board loop 2026-09-13
 
@@ -70,7 +93,7 @@ through `CurrentAspectProvider.CurrentAspect`, `AddAspect`, the localizable valu
 whether switching the aspect in XAF Blazor is per circuit or changes the process-wide provider. The cards continue
 through MODELEDITOR-012 (#1704), same loop: test first, gate, Codex review, stop the broker, commit with exact files.
 A gate step that needs a DevExpress component's DOM (MODELEDITOR-006's filter builder) was read from the running sample
-first rather than guessed. `docs/devexpress-support-request.md` (ten items, still a draft for the owner to send) and
+first rather than guessed. `docs/devexpress-support-request.md` (eleven items, still a draft for the owner to send)
 is tracked and now public (`extras.jpg`, the RUNTIME-001 screenshot, was removed on 2026-09-15).
 
 **MODELEDITOR-007 review fix (2026-09-13, user delegated implementation):** the first review reproduced a P1: resetting

@@ -4,6 +4,10 @@ One line per change, newest first. The version is `PackageVersion` in `Directory
 version the packages on the feed carry. Ids are ContextBoard cards; the detail is in
 `SESSION_HANDOFF.md`.
 
+## Unreleased
+
+- MODELEDITOR-008: Model Editor languages: a language combo reads and writes localizable values per aspect without touching the circuit's culture, Add makes a new language, and Translate lists every localizable value under the node with its translation and an untranslated filter.
+
 ## 0.3.0 (2026-09-15)
 
 - PKG-003: `System.Security.Cryptography.Xml` pinned to 10.0.12 in Blazor, ModelEditor and the sample module; DevExpress.ExpressApp.Blazor pulled in 9.0.0 with eight high-severity advisories (NU1903).

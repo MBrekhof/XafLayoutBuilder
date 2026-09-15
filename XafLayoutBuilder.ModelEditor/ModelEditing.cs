@@ -32,6 +32,12 @@ public enum ModelValueEditor { Text, Criteria, Expression, Multiline, Image }
 public sealed record FilterField(string FieldName, string Caption, Type Type, bool IsCollection, IReadOnlyList<FilterField> Fields);
 
 /// <summary>
+/// One localizable value in the localization grid (MODELEDITOR-008), as the WinForms Localization window's item: the default
+/// language's text, the language's text, and whether that is a translation (the two differ, or the language holds a value).
+/// </summary>
+public sealed record LocalizationRow(IModelNode Node, string Name, string DefaultText, string TranslatedText, bool IsTranslated);
+
+/// <summary>
 /// The editor's model logic, kept out of the component so it runs against an in-process model in tests. Reads go through
 /// every layer; writes and resets go to the node's writable layer, which in a running application is the current user's
 /// differences (ModelNode.SetValue 2598-2601, ClearValue 2368-2383, IsValueModified 899-903). Verified API: docs/api-notes.md.
@@ -277,18 +283,26 @@ public static class ModelEditing {
     internal static IReadOnlyList<(IModelNode Node, Action Write)> StoredValueWrites(IModelNode root) {
         var writes = new List<(IModelNode, Action)>();
         foreach (var node in Subtree(root).Cast<ModelNode>()) {
-            var stored = node.NodeInfo.ValuesInfo
-                .Where(info => !Bookkeeping.Contains(info.Name) && node.IsValueModified(info.Name))
-                .ToDictionary(info => info.Name, info => node.GetValue(info.Name));
+            // A localizable value is stored per aspect (MODELEDITOR-008); the others live in the default aspect only.
+            var stored = new Dictionary<(string Name, string? Aspect), object?>();
+            foreach (var (info, aspect) in ValueAspects(node)) {
+                using var _ = Aspect(node, aspect);
+                if (node.IsValueModified(info.Name)) stored[(info.Name, aspect)] = node.GetValue(info.Name);
+            }
             writes.Add((node, () => {
-                foreach (var info in node.NodeInfo.ValuesInfo) {
-                    if (Bookkeeping.Contains(info.Name)) continue;
-                    if (stored.TryGetValue(info.Name, out var value)) node.SetValue(info.Name, value);
+                foreach (var (info, aspect) in ValueAspects(node)) {
+                    using var _ = Aspect(node, aspect);
+                    if (stored.TryGetValue((info.Name, aspect), out var value)) node.SetValue(info.Name, value);
                     else if (node.IsValueModified(info.Name)) node.ClearValue(info.Name);
                 }
             }));
         }
         return writes;
+
+        static IEnumerable<(ModelValueInfo Info, string? Aspect)> ValueAspects(ModelNode node) =>
+            node.NodeInfo.ValuesInfo
+                .Where(info => !Bookkeeping.Contains(info.Name))
+                .SelectMany(info => info.IsLocalizable ? Aspects(node).Select(a => (info, (string?)a)) : [(info, null)]);
     }
 
     /// <summary>
@@ -371,6 +385,102 @@ public static class ModelEditing {
         { Parent: IModelListView view } => view.BandsLayout.Enable,
         _ => false,
     };
+
+    // MODELEDITOR-008: languages. A localizable value is stored per aspect, "" the default language and one per language
+    // (ModelApplicationBase.GetAspectNames). Which aspect a read or write hits is the model's current aspect, or in XAF Blazor's
+    // warmed-up model the thread's UI culture (UseCurrentUICultureToGetCurrentAspectIndex, AspNetCore ApplicationWarmUpService.cs
+    // 169; ModelApplication.cs 226-232). The application's CurrentAspectProvider would switch it, but its setter also changes
+    // CultureInfo.DefaultThreadCurrentUICulture, the process-wide default (CurrentAspectProvider.cs 80-90), so the editor scopes
+    // both the thread culture and the model's aspect for the duration of a synchronous read or write instead (Aspect), the way
+    // the WinForms Localization window scopes the provider (LocalizationItem.cs AspectScope).
+
+    /// <summary>The model's aspects: "" for the default language first, then the languages.</summary>
+    public static IReadOnlyList<string> Aspects(IModelNode node) => ["", .. Root(node).GetAspectNames()];
+
+    /// <summary>The aspect the model reads and writes outside a scope.</summary>
+    public static string CurrentAspect(IModelNode node) => Root(node).CurrentAspect;
+
+    /// <summary>
+    /// Adds a language (ModelApplicationBase.AddAspect, ModelApplication.cs 368-379) and returns its name in the culture's own
+    /// spelling: the aspect lookup is case-sensitive (GetAspectIndex, 333-342) and the scope sets the canonical culture (Codex
+    /// review). It exists in this circuit's model; the store writes it once it holds a value (ModelDifferenceDbStore.cs
+    /// 194-198), and the next load reads it back.
+    /// </summary>
+    public static string AddAspect(IModelNode node, string aspect) {
+        // XAF accepts any name CultureInfo takes, which with ICU is nearly anything; only a known culture is a language here.
+        string name;
+        try {
+            name = CultureInfo.GetCultureInfo(aspect, predefinedOnly: true).Name;
+        }
+        catch (CultureNotFoundException) {
+            throw new ArgumentException($"'{aspect}' is not a known culture name (nl-NL, de, ...).", nameof(aspect));
+        }
+        Root(node).AddAspect(name);
+        return name;
+    }
+
+    /// <summary>Whether the value is stored per language.</summary>
+    public static bool IsLocalizable(IModelNode node, string name) => ((ModelNode)node).GetValueInfo(name)?.IsLocalizable ?? false;
+
+    /// <summary>
+    /// Reads and writes of localizable values inside the scope hit the aspect, on this thread only; null scopes nothing. Dispose
+    /// restores the thread's UI culture and the model's aspect. Synchronous use only: nothing may await inside.
+    /// </summary>
+    public static IDisposable Aspect(IModelNode node, string? aspect) => aspect is null ? NoScope.Instance : new AspectScope(Root(node), aspect);
+
+    sealed class NoScope : IDisposable {
+        public static readonly NoScope Instance = new();
+        public void Dispose() { }
+    }
+
+    sealed class AspectScope : IDisposable {
+        readonly ModelApplicationBase model;
+        readonly CultureInfo culture = CultureInfo.CurrentUICulture;
+        readonly string aspect;
+
+        public AspectScope(ModelApplicationBase model, string aspect) {
+            this.model = model;
+            this.aspect = model.CurrentAspect;
+            // The invariant culture is the default aspect (CurrentAspectProviderFromCulture.CurrentAspect, CurrentAspectProvider.cs 73-79).
+            CultureInfo.CurrentUICulture = aspect.Length == 0 ? CultureInfo.InvariantCulture : CultureInfo.GetCultureInfo(aspect);
+            model.SetCurrentAspect(aspect);
+        }
+
+        public void Dispose() {
+            model.SetCurrentAspect(aspect);
+            CultureInfo.CurrentUICulture = culture;
+        }
+    }
+
+    static ModelApplicationBase Root(IModelNode node) => (ModelApplicationBase)((ModelNode)node).Root;
+
+    /// <summary>
+    /// The localizable values under the node that have a default-language value, with their text in the aspect, as the WinForms
+    /// Localization window lists them (LocalizationItems.CreateLocalizationItemsFromModel, LocalizationItemBind.IsTranslated).
+    /// ponytail: reading the subtree generates it, as the WinForms window does; <paramref name="maxNodes"/> bounds that.
+    /// </summary>
+    public static IReadOnlyList<LocalizationRow> LocalizableValues(IModelNode root, string aspect, int maxNodes = 5000) {
+        var rows = new List<LocalizationRow>();
+        foreach (var node in Subtree(root).Take(maxNodes).Cast<ModelNode>()) {
+            foreach (var info in VisibleValues(node).Where(v => v.IsLocalizable)) {
+                string defaultText, translatedText;
+                bool hasValueInAspect;
+                try {
+                    using (Aspect(node, "")) defaultText = Format(node.GetValue(info.Name));
+                    if (defaultText.Length == 0) continue;
+                    using (Aspect(node, aspect)) {
+                        translatedText = Format(node.GetValue(info.Name));
+                        hasValueInAspect = ModelEditorHelper.HasValueInCurrentAspect(node, info.Name);
+                    }
+                }
+                catch (Exception) {
+                    continue; // a calculator that throws on this node: not a value to translate
+                }
+                rows.Add(new(node, info.Name, defaultText, translatedText, defaultText != translatedText || hasValueInAspect));
+            }
+        }
+        return rows;
+    }
 
     /// <summary>The ids from below the root down to the node, joined with '/': "Views/Order_ListView".</summary>
     public static string Path(IModelNode node) => string.Join("/", Ids(node));
@@ -479,22 +589,22 @@ public static class ModelEditing {
         .Order(StringComparer.Ordinal)
         .ToList());
 
-    public static IReadOnlyList<ModelValueRow> Values(IModelNode node) {
-        var modelNode = (ModelNode)node;
-        // The WinForms grid's rules (ModelAttributesPropertyGridHelper.CalculatePropertyVisible, 505-540): Index is not
-        // offered for the root or a node right under it, and [ModelHideProperties] hides named values.
-        var hidden = AttributeHelper.GetAttributesConsideringInterfaces<ModelHidePropertiesAttribute>(modelNode.GetType(), true)
+    public static IReadOnlyList<ModelValueRow> Values(IModelNode node) =>
+        VisibleValues((ModelNode)node).Select(v => Row((ModelNode)node, v)).ToList();
+
+    // The values the grid shows, by name. The WinForms grid's rules (ModelAttributesPropertyGridHelper.CalculatePropertyVisible,
+    // 505-540): Index is not offered for the root or a node right under it, and [ModelHideProperties] hides named values.
+    static IEnumerable<ModelValueInfo> VisibleValues(ModelNode node) {
+        var hidden = AttributeHelper.GetAttributesConsideringInterfaces<ModelHidePropertiesAttribute>(node.GetType(), true)
             .SelectMany(a => a.HideProperties ?? [])
             .ToHashSet();
         var indexHidden = node.Parent is null or { Parent: null };
-        return modelNode.NodeInfo.ValuesInfo
+        return node.NodeInfo.ValuesInfo
             .Where(v => !Bookkeeping.Contains(v.Name)
                 && !hidden.Contains(v.Name)
                 && !(indexHidden && v.Name == ModelValueNames.Index)
-                && Helper.IsPropertyModelBrowsableVisible(modelNode, v.Name))
-            .OrderBy(v => v.Name, StringComparer.Ordinal)
-            .Select(v => Row(modelNode, v))
-            .ToList();
+                && Helper.IsPropertyModelBrowsableVisible(node, v.Name))
+            .OrderBy(v => v.Name, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -672,8 +782,25 @@ public static class ModelEditing {
 /// from a cache that ClearValue does not update (docs/api-notes.md). An editor closed without Save just drops its session.
 /// </summary>
 public sealed class ModelEditSession {
-    // Text null: reset the value on Apply. Error set: the text is no value of that type, and Apply refuses to run.
-    readonly Dictionary<(IModelNode Node, string Name), (string? Text, string? Error)> pending = [];
+    // Text null: reset the value on Apply. Error set: the text is no value of that type, and Apply refuses to run. Aspect:
+    // the language a localizable value's edit is for, "" for the default language and for every other value (MODELEDITOR-008).
+    readonly Dictionary<(IModelNode Node, string Name, string Aspect), (string? Text, string? Error)> pending = [];
+
+    /// <summary>
+    /// The language (aspect) the editor reads and writes localizable values in: "" for the default language, or a name from
+    /// <see cref="ModelEditing.Aspects"/>. Null, the initial value, is the model's own current aspect (MODELEDITOR-008).
+    /// </summary>
+    public string? Aspect { get; set; }
+
+    // The aspect an edit of the value goes to: a localizable value's is the editor's language, any other value's the default.
+    string EffectiveAspect(IModelNode node, string name) =>
+        ModelEditing.IsLocalizable(node, name) ? Aspect ?? ModelEditing.CurrentAspect(node) : "";
+
+    // The scope a read or write of the value runs in: none for values that are not localizable, or without an editor language.
+    IDisposable Scoped(IModelNode node, string name) =>
+        ModelEditing.Aspect(node, ModelEditing.IsLocalizable(node, name) ? Aspect : null);
+
+    (IModelNode Node, string Name, string Aspect) Key(IModelNode node, string name) => (node, name, EffectiveAspect(node, name));
 
     /// <summary>
     /// Keeps the edit pending. Text that is no value of that type is kept too, with its error, so it supersedes an earlier
@@ -690,12 +817,12 @@ public sealed class ModelEditSession {
         }
         catch (Exception ex) {
             // On an added node too: the invalid text blocks Save until a valid value replaces it (Codex review).
-            pending[(node, name)] = (text, ex.Message);
+            pending[Key(node, name)] = (text, ex.Message);
             throw;
         }
         if (IsAddedOrUnder(node)) {
-            pending.Remove((node, name));
-            ModelEditing.SetText(node, name, text);
+            pending.Remove(Key(node, name));
+            using (Scoped(node, name)) ModelEditing.SetText(node, name, text);
             // Written at once, yet chosen from a model without the pending edits: later edits check it like a pending one.
             if (ModelEditing.IsLookupValue(node, name)) addedLookups.Add((node, name));
             // Empty text clears the value, or sets an optional reference to none (ModelEditing.SetText); cleared only counts
@@ -703,7 +830,7 @@ public sealed class ModelEditSession {
             if (text.Length == 0) cleared.Add((node, name));
             else cleared.Remove((node, name));
         }
-        else pending[(node, name)] = (text, null);
+        else pending[Key(node, name)] = (text, null);
     }
 
     public void Reset(IModelNode node, string name) {
@@ -711,11 +838,11 @@ public sealed class ModelEditSession {
         ThrowIfLookupConflict(node, name);
         // ponytail: on an added node a warmed-up model shows the cleared value until the reload (ClearValue skips the cache).
         if (IsAddedOrUnder(node)) {
-            pending.Remove((node, name));
-            ModelEditing.Reset(node, name);
+            pending.Remove(Key(node, name));
+            using (Scoped(node, name)) ModelEditing.Reset(node, name);
             cleared.Add((node, name));
         }
-        else pending[(node, name)] = (null, null);
+        else pending[Key(node, name)] = (null, null);
     }
 
     // An error on a node marked for deletion does not count: the edit goes with the node (Codex review).
@@ -726,7 +853,7 @@ public sealed class ModelEditSession {
     /// (Codex review). A pending reset has no target until the model is built again.
     /// </summary>
     public IModelNode? Referenced(IModelNode node, string name) {
-        if (!pending.TryGetValue((node, name), out var entry)) return ModelEditing.Referenced(node, name);
+        if (!pending.TryGetValue(Key(node, name), out var entry)) return ModelEditing.Referenced(node, name);
         return entry is { Error: null, Text.Length: > 0 } && ModelEditing.LookupItem(node, name, entry.Text) is IModelNode target
             ? ModelEditing.Canonical(target)
             : null;
@@ -735,7 +862,7 @@ public sealed class ModelEditSession {
     /// <param name="text">The pending text, or null for a pending reset.</param>
     /// <param name="error">Why the text is no value of that type, or null.</param>
     public bool TryGetPending(IModelNode node, string name, out string? text, out string? error) {
-        var found = pending.TryGetValue((node, name), out var entry);
+        var found = pending.TryGetValue(Key(node, name), out var entry);
         (text, error) = entry;
         return found;
     }
@@ -779,7 +906,8 @@ public sealed class ModelEditSession {
             return ModelEditing.MissingRequired(node, cleared.Where(c => ModelEditing.Ids(c.Node).SequenceEqual(ids)).Select(c => c.Name));
         }
         return ModelEditing.MissingRequired(node,
-            pending: pending.Where(p => ReferenceEquals(p.Key.Node, node)).ToDictionary(p => p.Key.Name, p => p.Value.Text));
+            pending: pending.Where(p => ReferenceEquals(p.Key.Node, node) && p.Key.Aspect == EffectiveAspect(node, p.Key.Name))
+                .ToDictionary(p => p.Key.Name, p => p.Value.Text));
     }
 
     public bool IsAdded(IModelNode node) => added.Contains(node);
@@ -829,7 +957,7 @@ public sealed class ModelEditSession {
 
     // Pending lookup edits and the ones written to added nodes; one on or under the node being deleted goes with it.
     void ThrowIfPendingLookup((IModelNode Node, string Name)? except = null, IModelNode? deleting = null) {
-        foreach (var (lookupNode, lookupName) in pending.Keys.Concat(addedLookups)) {
+        foreach (var (lookupNode, lookupName) in pending.Keys.Select(k => (k.Node, k.Name)).Concat(addedLookups)) {
             if (except is { } e && ReferenceEquals(e.Node, lookupNode) && e.Name == lookupName) continue;
             if (deleting is not null && IsAtOrUnder(lookupNode, [deleting])) continue;
             if (ModelEditing.IsLookupValue(lookupNode, lookupName))
@@ -867,7 +995,7 @@ public sealed class ModelEditSession {
 
     // The Index a node has once the pending edits are applied; ponytail: a pending reset counts the current Index.
     int? EffectiveIndex(IModelNode node) =>
-        pending.TryGetValue((node, ModelValueNames.Index), out var p)
+        pending.TryGetValue(Key(node, ModelValueNames.Index), out var p)
         && int.TryParse(p.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) ? index : node.Index;
 
     /// <summary>
@@ -967,10 +1095,14 @@ public sealed class ModelEditSession {
         // the live model (Codex review).
         var values = pending
             .Where(p => !IsDeleted(p.Key.Node))
-            .Select(p => (p.Key.Node, p.Key.Name, Parsed: p.Value.Text is null ? (Set: false, Value: null) : ModelEditing.ParseText(p.Key.Node, p.Key.Name, p.Value.Text)))
+            .Select(p => (p.Key.Node, p.Key.Name, p.Key.Aspect, Parsed: p.Value.Text is null ? (Set: false, Value: null) : ModelEditing.ParseText(p.Key.Node, p.Key.Name, p.Value.Text)))
             .ToList();
-        foreach (var (node, name, (set, value)) in values) {
-            Action write = set ? () => ModelEditing.SetValue(node, name, value) : () => ModelEditing.Reset(node, name);
+        foreach (var (node, name, aspect, (set, value)) in values) {
+            // Written in the edit's aspect, now and on a replay, whatever the thread's language is then (MODELEDITOR-008).
+            var scope = ModelEditing.IsLocalizable(node, name) ? aspect : null;
+            Action write = set
+                ? () => { using (ModelEditing.Aspect(node, scope)) ModelEditing.SetValue(node, name, value); }
+                : () => { using (ModelEditing.Aspect(node, scope)) ModelEditing.Reset(node, name); };
             write();
             writes.Add((node, write));
         }

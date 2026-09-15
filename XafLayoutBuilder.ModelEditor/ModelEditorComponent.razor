@@ -36,6 +36,22 @@ else {
             }
         </div>
         <div class="xlb-model-values" style="flex:1; overflow:auto; display:flex; flex-direction:column">
+            @* MODELEDITOR-008: the language localizable values are read and written in (ModelEditSession.Aspect), a language to
+               add, and the translate view over the selected node. Reads and writes are scoped on the thread (ModelEditing.Aspect),
+               so the rest of the circuit keeps its own language. *@
+            <div class="xlb-language-bar" style="display:flex; flex-wrap:wrap; gap:0.25rem; align-items:center; margin-bottom:0.5rem">
+                <span>Language</span>
+                <span class="xlb-language">
+                    <DxComboBox TData="AspectItem" TValue="string" Data="@AspectItems()" ValueFieldName="Value" TextFieldName="Text"
+                                Value="@Aspect" ValueChanged="@((string value) => SetAspect(value))" style="width:11em" />
+                </span>
+                <DxTextBox InputCssClass="xlb-new-language" NullText="Add a language (nl-NL)" style="width:12em" @bind-Text="newLanguage" />
+                <DxButton CssClass="xlb-add-language" Text="Add" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="AddLanguage" />
+                @if (selected is not null && Aspect.Length > 0) {
+                    <DxButton CssClass="xlb-translate" Text="@(translating ? "Values" : "Translate")" title="Every localizable value under the node, with its translation"
+                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="() => translating = !translating" />
+                }
+            </div>
             @if (selected is null || !ModelEditing.IsInModel(selected)) {
                 <p>Select a node.</p>
             }
@@ -77,18 +93,55 @@ else {
                 </div>
                 </div>
                 var missingRequired = Session.MissingRequired(selected);
+                @if (translating && Aspect.Length > 0) {
+                    @* MODELEDITOR-008: the WinForms Localization window as a table: node, value, the default language's text and
+                       the language's text to edit; edits are pending like the value grid's. *@
+                    <div style="margin-bottom:0.25rem">
+                        <DxCheckBox CssClass="xlb-untranslated-only" @bind-Checked="untranslatedOnly">Untranslated only</DxCheckBox>
+                    </div>
+                    <table class="xlb-localization" data-aspect="@Aspect" style="width:100%; border-collapse:collapse; table-layout:fixed">
+                        <colgroup><col style="width:30%" /><col style="width:16%" /><col /><col /><col style="width:6em" /></colgroup>
+                        <tr style="font-weight:600; opacity:0.7"><td style="padding:2px 6px">Node</td><td style="padding:2px 6px">Value</td><td style="padding:2px 6px">Default</td><td style="padding:2px 6px">@Aspect</td><td></td></tr>
+                        @foreach (var row in LocalizationRows()) {
+                            var pending = Session.TryGetPending(row.Node, row.Name, out var pendingText, out var pendingError);
+                            var text = pending ? pendingText ?? "" : row.TranslatedText;
+                            <tr @key="(ModelEditing.Path(row.Node), row.Name, refusals)" data-translate="@(ModelEditing.Path(row.Node) + "|" + row.Name)" style="border-bottom:1px solid rgba(128,128,128,0.2)">
+                                <td style="padding:2px 6px; overflow-wrap:anywhere"><span style="cursor:pointer" title="Open the node" @onclick="() => Reveal(row.Node)">@ModelEditing.Path(row.Node)</span></td>
+                                <td style="padding:2px 6px; overflow-wrap:anywhere">@row.Name</td>
+                                <td style="padding:2px 6px; overflow-wrap:anywhere">@row.DefaultText</td>
+                                <td style="padding:2px 6px">
+                                    <DxTextBox Text="@text" TextChanged="@((string value) => Translate(row.Node, row.Name, value))" style="width:100%" />
+                                </td>
+                                <td style="padding:2px 6px; white-space:nowrap">
+                                    @if (pendingError is not null) {
+                                        <span class="xlb-invalid" title="@pendingError" style="color:#c00">invalid</span>
+                                    }
+                                    else if (pending) {
+                                        <span class="xlb-pending">@(pendingText is null ? "reset on save" : "unsaved")</span>
+                                    }
+                                    else if (row.IsTranslated) {
+                                        <span class="xlb-translated" style="opacity:0.7">translated</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </table>
+                }
+                else {
                 @* Fixed layout: a long read-only value, such as a node path, wraps instead of widening the table past the panel, where
                    the editors were clipped (MODELEDITOR-003 review). *@
-                <table style="width:100%; border-collapse:collapse; table-layout:fixed">
+                @* data-aspect: the language the rows were rendered in, which the gate waits for after switching. *@
+                <table class="xlb-values" data-aspect="@Aspect" style="width:100%; border-collapse:collapse; table-layout:fixed">
                     <colgroup><col style="width:38%" /><col /><col style="width:7.5em" /></colgroup>
-                    @foreach (var group in ModelEditing.Values(selected).GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
+                    @foreach (var group in ValueRows().GroupBy(r => r.Category ?? "Misc").OrderBy(g => g.Key, StringComparer.Ordinal)) {
                         <tr class="xlb-category"><td colspan="3" style="padding:6px 6px 2px; font-weight:600; opacity:0.7">@group.Key</td></tr>
                         @foreach (var row in group) {
                             var pending = Session.TryGetPending(selected, row.Name, out var pendingText, out var pendingError);
                             var text = pending ? pendingText ?? "" : row.Text;
                             @* Keyed with the refusal count: the controls are not bound, so a refused edit recreates them from the
-                               session and the model instead of leaving the refused text on screen (Codex review 5). *@
-                            <tr @key="(row.Name, refusals)" data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
+                               session and the model instead of leaving the refused text on screen (Codex review 5). The language
+                               too: its texts differ per language (MODELEDITOR-008). *@
+                            <tr @key="(row.Name, refusals, Aspect)" data-value="@row.Name" style="border-bottom:1px solid rgba(128,128,128,0.2)">
                                 <td style="padding:2px 6px; overflow-wrap:anywhere">
                                     <span class="xlb-value-name" style="cursor:pointer; font-weight:@(row.IsModified ? "600" : "normal")"
                                           @onclick="() => focusedDescription = row.Description">@row.Name</span>
@@ -164,6 +217,7 @@ else {
                         }
                     }
                 </table>
+                }
                 @* MODELEDITOR-006: XAF Blazor edits criteria with DxFilterBuilder (CriteriaPropertyEditor); the fields are the filtered type's
                    members as its criteria editor lists them. Apply writes the builder's criteria back as text. *@
                 @if (criteriaName is not null && ModelEditing.CriteriaTypeInfo(selected, criteriaName) is { } criteriaType) {
@@ -223,6 +277,40 @@ else {
     DxFilterBuilder? filterBuilderRef;
     int criteriaOpenings;
     bool unusableWarned;
+    // MODELEDITOR-008: the translate view over the selected node, its filter, and a language to add.
+    bool translating;
+    bool untranslatedOnly;
+    string newLanguage = "";
+
+    sealed record AspectItem(string Value, string Text);
+
+    // The editor's language: the session's, or the model's own until one is chosen.
+    string Aspect => Session.Aspect ?? ModelEditing.CurrentAspect(Application.Model);
+
+    List<AspectItem> AspectItems() => ModelEditing.Aspects(Application.Model).Select(a => new AspectItem(a, a.Length == 0 ? "(default)" : a)).ToList();
+
+    void SetAspect(string value) {
+        Session.Aspect = value;
+        translating &= value.Length > 0;
+    }
+
+    void AddLanguage() => Run(() => {
+        var language = newLanguage.Trim();
+        if (language.Length == 0) throw new InvalidOperationException("Give the language's culture name, nl-NL for example.");
+        Session.Aspect = ModelEditing.AddAspect(Application.Model, language);
+        newLanguage = "";
+    }, "Language added; it is stored with its first saved value");
+
+    // The selected node's values in the editor's language.
+    IReadOnlyList<ModelValueRow> ValueRows() {
+        using (ModelEditing.Aspect(selected!, Session.Aspect)) return ModelEditing.Values(selected!);
+    }
+
+    // A pending edit counts as translated, so the filter does not hide what was just typed.
+    IEnumerable<LocalizationRow> LocalizationRows() =>
+        ModelEditing.LocalizableValues(selected!, Aspect).Where(r => !untranslatedOnly || !r.IsTranslated || Session.TryGetPending(r.Node, r.Name, out _, out _));
+
+    void Translate(IModelNode node, string name, string text) => Run(() => Session.SetText(node, name, text), null);
 
     // Checked here as well as on the action: the component must not trust how it was reached.
     protected override void OnParametersSet() => allowed = ModelEditorController.CanEditModel(Application);

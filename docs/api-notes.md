@@ -586,6 +586,30 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   (`Popup\Components\DropDown\DxDropDown.razor` 12, `Scripts\popup\portal.ts` 69-73), items as `li[role=option]`. The gate
   opens it from `.dxbl-edit-btn-dropdown` and picks the option from the page by role. No `SizeMode` is set: XAF cascades its
   size switcher to popup content (`DevExpress.ExpressApp.Blazor\Components\SizeModeContainer.razor` 6).
+- **Languages (MODELEDITOR-008).** A localizable value (`ModelValueInfo.IsLocalizable`) is stored per aspect: index 0 the
+  default language, one per name in `ModelApplicationBase.GetAspectNames()` (`Model/Core/ModelApplication.cs` 222-224). Which
+  aspect `GetValue`, `SetValue`, `ClearValue`, `HasValue` and `IsValueModified` hit is `GetValueCurrentAspectIndex`
+  (`ModelNode.cs` 848-863): the root's current aspect index, which is the model's `currentAspectIndex` set by
+  `SetCurrentAspect`, **or in XAF Blazor's warmed-up model the thread's UI culture**
+  (`UseCurrentUICultureToGetCurrentAspectIndex`, `ModelApplication.cs` 226-232, called in
+  `DevExpress.ExpressApp.AspNetCore/Services/Utils/ApplicationWarmUpService.cs` 169). `IsValueModified` is aspect-aware
+  (`HasValueInThisLayer`, 2402-2405), so a caption set in `nl-NL` reads as modified there and not in the default aspect
+  (`ModelEditorLocalizationTests`). The application's `CurrentAspectProvider` is a `CurrentAspectProviderFromCulture`
+  (`XafApplication.cs` 145) whose setter changes **`CultureInfo.DefaultThreadCurrentUICulture`**, the process-wide default,
+  as well as the thread's culture (`CurrentAspectProvider.cs` 80-90), and every Frame reacts to its
+  `CurrentAspectChanged` (`Frame.cs` 105-111, 303); the WinForms Localization window scopes the provider around each read
+  and write (`DevExpress.ExpressApp.Win/Core/ModelEditor/Localization/LocalizationItem.cs` `AspectScope`). The editor
+  scopes the thread's `CultureInfo.CurrentUICulture` and the model's `SetCurrentAspect` instead (`ModelEditing.Aspect`),
+  which covers both modes and touches nothing shared. A read in an aspect the model does not have falls back through the
+  parent culture to the default (`GetValueCoreDelegate.Invoke`, `ModelNode.cs` 2476-2492; `GetAspectIndex` 333-345).
+  `AddAspect` (368-379) checks the name with `new CultureInfo(name, false)`, which with ICU accepts almost anything, so the
+  editor requires a predefined culture first. A new aspect exists in the circuit's model only until it holds a value: the
+  database store writes one `ModelDifferenceAspect` row per aspect with XML (`ModelDifferenceDbStore.cs` 194-213) and the
+  next load adds an aspect per stored row (`ModelXmlWriter.cs` 178, 296). The languages a host lists in `Languages` become
+  aspects at startup (`AspNetCoreApplication.OnCustomizeLanguages`, `AspNetCoreApplication.cs` 94-103) and the request
+  cultures the host accepts; XAF Blazor's language switcher writes the `.AspNetCore.Culture` cookie and reloads
+  (`XafLanguageService.cs` 108-113), which the gate does directly. `ModelEditorHelper.HasValueInCurrentAspect` is public
+  (`Model/ModelEditorHelper.cs` 454), used for the translate view's translated mark.
 
 ## Conditional appearance (APPEAR-001)
 

@@ -131,7 +131,26 @@ keeps returning its old value. Could DevExpress consider the changes below, or a
   `PersistentPath`.
 - **Meanwhile.** The editor clears `GetHelperValueName(name)` as well.
 
+## 11. CurrentAspectProviderFromCulture's setter changes the process-wide default culture
+
+- **Behaviour.** `XafApplication.CurrentAspectProvider` is a `CurrentAspectProviderFromCulture` (`XafApplication.cs`
+  145). Its `CurrentAspect` setter sets `CultureInfo.DefaultThreadCurrentUICulture` as well as the current thread's UI
+  culture (`CurrentAspectProvider.cs` 80-90). In a Blazor Server host every circuit shares the process, so switching the
+  aspect through the provider, the way the WinForms Localization window's `AspectScope` does around each read and write
+  (`DevExpress.ExpressApp.Win/Core/ModelEditor/Localization/LocalizationItem.cs`), changes the default culture of every
+  thread started afterwards, in every circuit. The warmed-up model reads its aspect from the thread's UI culture anyway
+  (`UseCurrentUICultureToGetCurrentAspectIndex`, `ApplicationWarmUpService.cs` 169), so the provider is the wrong switch
+  there twice over.
+- **Repro.** `XafLayoutBuilder.Tests/ModelEditorLocalizationTests.cs`,
+  `TheAspectScope_RestoresTheThreadCulture_AndTheModelsAspect` asserts the editor's scope leaves
+  `DefaultThreadCurrentUICulture` alone; set the provider instead and it changes.
+- **Smallest change.** A public, per-call way to read or write a value in a named aspect (`GetValue(name, aspect)`,
+  `SetValue(name, aspect, value)`, `ClearValue(name, aspect)`), or a documented scope that touches the thread only.
+- **Meanwhile.** The editor scopes `CultureInfo.CurrentUICulture` and `ModelApplicationBase.SetCurrentAspect` around each
+  synchronous read or write (`ModelEditing.Aspect`), which serves both aspect modes.
+
 ## To verify before sending
 
 - Shared (administrator) differences: whether they can be edited through public API (MODELEDITOR-010).
-- Aspects on a warmed-up model (MODELEDITOR-008) may add items like item 1.
+- Aspects on a warmed-up model (MODELEDITOR-008): done, item 11; the value cache is per aspect (`TryGetValueFromCache`
+  takes the aspect index, `ModelNode.cs` 2514-2518), so item 1 gains nothing there.

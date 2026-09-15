@@ -44,7 +44,10 @@ using Microsoft.Playwright;
 //            offers the image names, the saved Criteria leave Order_ListView one row, a column's ToolTip is a text area, and a
 //            reset of the Criteria lists every order again; MODELEDITOR-007: a column's PropertyName left empty is marked
 //            required and Save is refused naming the node and the value, and closing the editor saves nothing;
-//            resetting a saved custom column's required PropertyName is refused and the column survives a reload
+//            resetting a saved custom column's required PropertyName is refused and the column survives a reload;
+//            MODELEDITOR-008: a language added in the editor is offered in its language combo, a caption translated to nl-NL
+//            lists in the translate view, is stored in the nl-NL aspect row, stays out of en-US and shows in nl-NL, and a
+//            saved reset in nl-NL takes it out of that row
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -680,6 +683,53 @@ try
     var resetStored = SqlScalar($"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'") ?? "";
     Assert(!resetStored.Contains(EditedCaption), "after the saved Reset no stored aspect of Admin's user model holds the caption");
 
+    // MODELEDITOR-008: localizable values per language. The language combo picks the aspect; a caption translated to nl-NL is
+    // stored in the nl-NL aspect row, stays out of the en-US application, and shows once the browser's culture is nl-NL (the
+    // request-culture cookie XAF's own language switcher writes). "Add" makes a language the host does not list.
+    Step("MODELEDITOR-008: a caption translated to nl-NL in the Model Editor shows in nl-NL and not in en-US");
+    const string DutchCaption = "Orders in het Nederlands";
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator(".xlb-new-language").FillAsync("de-DE");
+    await modelEditor.Locator(".xlb-add-language").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Language added" }).WaitForAsync(new() { Timeout = 10_000 });
+    await OpenComboList(modelEditor.Locator(".xlb-language"));
+    // The list is open before its items render; wait for the added one, then assert on what is there.
+    var addedOption = page.GetByRole(AriaRole.Option, new() { Name = "de-DE", Exact = true }).First;
+    try { await addedOption.WaitForAsync(new() { Timeout = 10_000 }); }
+    catch (TimeoutException) { /* the assertion below reports what the list offers */ }
+    Assert(await addedOption.IsVisibleAsync(), "the language added in the Model Editor is offered in its language combo");
+    await page.GetByRole(AriaRole.Option, new() { Name = "nl-NL", Exact = true }).First.ClickAsync();
+    // The rows are rendered again for the language; typing into the old input would be lost with it.
+    await modelEditor.Locator("table.xlb-values[data-aspect='nl-NL']").WaitForAsync(new() { Timeout = 10_000 });
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    await captionInput.FillAsync(DutchCaption);
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator(".xlb-translate").ClickAsync();
+    var translateRow = modelEditor.Locator("[data-translate='Views/Order_ListView|Caption']");
+    await translateRow.WaitForAsync(new() { Timeout = 10_000 });
+    Assert(await translateRow.Locator("input").InputValueAsync() == DutchCaption, "the translate view lists Order_ListView's Caption with the pending Dutch text");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-28-model-editor-translate.png") });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var dutchStored = SqlScalar($"SELECT CAST(a.Xml AS NVARCHAR(MAX)) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}' AND a.Name = 'nl-NL'") ?? "";
+    Assert(dutchStored.Contains(DutchCaption), "the Dutch caption is stored in the nl-NL aspect row of Admin's user model");
+    Assert(!(await page.InnerTextAsync("body")).Contains(DutchCaption), "in en-US Order_ListView keeps its English caption");
+    await SetCulture(page, "nl-NL");
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    Assert((await page.InnerTextAsync("body")).Contains(DutchCaption), "in nl-NL Order_ListView shows the Dutch caption");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-29-model-editor-dutch.png") });
+    await SetCulture(page, "en-US");
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    // A reset in nl-NL empties that aspect; its stored row is blanked like the en-US one above, so the caption stays gone.
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await PickComboItem(page, modelEditor.Locator(".xlb-language"), "nl-NL");
+    await modelEditor.Locator("table.xlb-values[data-aspect='nl-NL']").WaitForAsync(new() { Timeout = 10_000 });
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    var dutchReset = SqlScalar($"SELECT CAST(a.Xml AS NVARCHAR(MAX)) FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}' AND a.Name = 'nl-NL'") ?? "";
+    Assert(!dutchReset.Contains(DutchCaption), "after the saved reset the nl-NL aspect row no longer holds the Dutch caption");
+
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
@@ -1153,6 +1203,12 @@ static async Task PickComboItem(IPage page, ILocator scope, string text) {
     await OpenComboList(scope);
     await page.GetByRole(AriaRole.Option, new() { Name = text, Exact = true }).First.ClickAsync();
 }
+
+// MODELEDITOR-008: the browser's culture, through the request-culture cookie XAF Blazor's language switcher writes
+// (XafCultureInfoService.SetNewCultureAsync: CookieRequestCultureProvider.MakeCookieValue, XafLanguageService.cs 108-113).
+// The next navigation starts a circuit in that culture, which is the aspect its model reads.
+static Task SetCulture(IPage page, string culture) =>
+    page.Context.AddCookiesAsync([new Cookie { Name = ".AspNetCore.Culture", Value = $"c={culture}|uic={culture}", Url = BaseUrl }]);
 
 // Header captions of the grid on the active tab, without the filter button's accessibility text or the selection column.
 static Task<string[]> GridHeaders(IPage page) =>

@@ -303,7 +303,7 @@ public class WarmedUpModelTests(ApplicationModelFixture fixture) {
     // then each application's own model built from the same manager over its user layer (XafApplication.LoadUserDifferences
     // 1485-1519, ApplicationModelsManager.CreateModelApplication 418-429) and collapsed. `build` makes such a model over
     // the given user differences.
-    static void WithWarmedUpModels(Action<Func<ModelStoreBase, ModelApplicationBase>> test) {
+    internal static void WithWarmedUpModels(Action<Func<ModelStoreBase, ModelApplicationBase>> test) {
         var optimization = new ApplicationOptions().Optimization;
         var warmUp = optimization.WarmUpApplication;
         var lockHelper = ModelNodeLockHelper.Instance;
