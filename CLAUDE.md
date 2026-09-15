@@ -78,7 +78,8 @@ Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
   Every commit that changes behaviour adds a one-line entry, card id first, under `## Unreleased` in
   `CHANGELOG.md`. A feed push bumps `PackageVersion` (minor for features, patch for fixes only) and
   renames `Unreleased` to that version with the date. At session end, README's "Latest changes"
-  lists that session's lines; the detail stays in `SESSION_HANDOFF.md`.
+  is one line for that session plus links; the lines stay in `CHANGELOG.md`, the detail in
+  `SESSION_HANDOFF.md`.
 - **EF Core only, never XPO.**
 - **Verify every DevExpress API claim** in dxdocs or the installed source at
   `C:\Program Files\DevExpress 26.1\Components\Sources\DevExpress.ExpressApp`. Findings go into

@@ -79,34 +79,8 @@ That file is the sample's only layout source for `Order`; the sample module has 
 
 ## Latest changes
 
-Session of 2026-09-15: 0.3.0 pushed to GitHub Packages (Core, Module, Blazor and, for the first time, Appearance), then MODELEDITOR-008 and MODELEDITOR-010. Every version is in [CHANGELOG.md](CHANGELOG.md), the detail in
-[SESSION_HANDOFF.md](SESSION_HANDOFF.md).
-
-- MODELEDITOR-010: Edit Shared Model edits the administrator differences in a model of their own and saves them through the shared store; the module layers that store over every circuit's model at logon, so a shared edit shows to everyone at their next page load without a restart; Reload discards pending edits; closing with edits warns once. The host sets `XafModelEditorModule.SharedDifferences`.
-- MODELEDITOR-008: Model Editor languages: a language combo reads and writes localizable values per aspect without touching the circuit's culture, Add makes a new language, and Translate lists every localizable value under the node with its translation and an untranslated filter.
-- PKG-003: `System.Security.Cryptography.Xml` pinned to 10.0.12 in Blazor, ModelEditor and the sample module; DevExpress.ExpressApp.Blazor pulled in 9.0.0 with eight high-severity advisories (NU1903).
-- MODELEDITOR-003 (review): the Model Editor's buttons and inputs are DevExpress Blazor components, matching the rest of XAF Blazor; no stray "Model" caption beside the editor; long values wrap instead of pushing the editors out of view, the node's path and actions stay at the top while its values scroll, and View in Model opens at the top.
-- APPEAR-001: `XafLayoutBuilder.Appearance` add-on: conditional appearance rules in the builder (`AppearanceBuilder<T>`, `ISupportAppearanceRules`, `AppearanceRegistry`) with checked targets, startup diagnostics XLB006-008, JSON and export.
-- GROUP-001: `Column(..., groupIndex:)` and `.GroupPanel()` set a ListView's default grouping and show its group panel; the export keeps both.
-- MODELEDITOR-013: Model Editor tree nodes show the Visual Studio Model Editor's icons; an unknown image name no longer shows a broken image preview.
-- HIER-001: a derived class starts from its base's layout and columns with `Extend<Base>()` and adds with `InGroup(...)`.
-- LOGIN-001: the gate's login commits the user name before clicking Log In (XAF's editor posts on lost focus).
-- BAND-001: `.Band(id, b => ..., caption: ...)` puts a band header over adjacent columns (one level, as XAF Blazor renders).
-- E2E4-001: the gate drags Order Date in XAF's Blazor layout editor instead of writing the user-layer XAFML.
-- VIEW-001: views declared in code (`LayoutRegistry.AddDetailView<T>` / `AddListView<T>`) get their own layout or columns.
-- VIEW-001: a type's columns spec also shapes its nested ListViews, without the back-reference to the owner.
-- CACHE-001: XAF's model cache is WinForms-only; a Blazor host always runs the updaters.
-- 0.2.0 published to the local feed, with everything below.
-- EXPORT-001: exported ListViews print `.Hide(...)` only for columns the spec or a later layer hid.
-- SORT-001: `Column(..., sortIndex:)` sets sort priority independently of column order, and the export keeps it.
-- MODEL-001: the updaters and the exporter are unit tested against an Application Model built in-process.
-- NEST-001: columns may follow references, `Column(x => x.Customer.City)`, and export that way.
-- JSON-001: "Export Layout To JSON", "Download Layout JSON" and `LayoutRegistry.RegisterJson<T>`.
-- DIFF-001: a stored difference aimed at a replaced stock layout path is ignored, then deleted at the user's next save.
-- FREEZE-001: the gate proves an administrator's frozen column set keeps a later-added column hidden.
-- TEST-001: the gate covers a spec factory that throws a non-layout exception.
-- CASE-001: `docs/cases.md`, the intake route for layout cases from generated applications.
-- PKG-001: Core, Module and Blazor published as 0.1.0 to the local feed.
+Session of 2026-09-15: 0.3.0 released to GitHub Packages, then the Model Editor gained languages (MODELEDITOR-008) and Edit Shared Model (MODELEDITOR-010).
+One line per change is in [CHANGELOG.md](CHANGELOG.md), the detail in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
 ## Screenshots
 
