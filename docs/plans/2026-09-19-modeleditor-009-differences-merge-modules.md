@@ -102,7 +102,7 @@ All logic in `ModelEditing` / `ModelEditSession` / `SharedModelSession` (unit te
    before any foreign save (`RollbackAdded`), and `Saved` already records `StoredValueWrites` for its whole subtree, generated
    children included, so the replay holds real values. WinForms' use on a stock view (re-adding deleted generated nodes) is
    left out; Reset node covers it. No `writes` marker, no `DiscardedApplied` involvement.
-   Read in code on the way, **unverified, not filed**: after an Apply whose save threw, closing twice unsubscribes
+   (Reproduced on 2026-09-19 and filed as MODELEDITOR-016, #1757.) Read in code on the way: after an Apply whose save threw, closing twice unsubscribes
    `BeforeSave` without `Discard`, so the applied edits stay in the live user layer for XAF's deferred save
    (`ModelEditorController.cs` 114-121). Pre-existing (MODELEDITOR-010), needs a failed save first.
 5. **P2, a generator exception leaves the temporary sibling.** `GenerateContent` is wrapped: the parent's child ids are

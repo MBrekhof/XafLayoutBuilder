@@ -33,9 +33,11 @@ Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the
   level fixed here through the writable layer's own node (bold mark, Reset node, Merge). **Value level is open:
   MODELEDITOR-014 (#1755)**, where whether `ClearValue` is affected too is not measured yet. Support request item 15;
   item 14 is the merge API.
-- **Read in code, unverified, not filed:** after an Apply whose save threw, closing the editor twice unsubscribes
-  `BeforeSave` without `Discard`, so the applied edits would stay in the live user layer for XAF's deferred save
-  (`ModelEditorController.cs` 114-121). Needs a failed save first.
+- **Reproduced later the same day, MODELEDITOR-016 (#1757), open:** after a Save whose store write fails, closing the
+  editor twice ("close again to discard") unsubscribes `BeforeSave` without `Discard` (`ModelEditorController.cs` 114-121),
+  and XAF's deferred save stores the abandoned edit at the next logon. Measured with a throwaway gate step (a temporary
+  SQL check constraint made one save fail): nothing stored right after the failed save, the caption stored and shown after
+  log off and on. The recipe is on the card and becomes the gate step with the fix.
 - **Known leftover:** if the store refuses the user's own save after the shared save went through, the differences are in
   both records; for values a second Merge settles it, an added node's left-over copy needs an administrator to reset that
   user's differences (the refusal says so).
