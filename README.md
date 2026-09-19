@@ -83,7 +83,7 @@ That file is the sample's only layout source for `Order`; the sample module has 
 
 ## Latest changes
 
-Session of 2026-09-19: the Model Editor shows a node's differences as XML and the loaded modules, generates the content of a view added in it, and merges a user's differences into the shared model (MODELEDITOR-009).
+Session of 2026-09-19: the Model Editor shows a node's differences as XML and the loaded modules, generates the content of a view added in it, and merges a user's differences into the shared model (MODELEDITOR-009); a user's values on a node the shared model holds too are marked and can be reset (MODELEDITOR-014).
 One line per change is in [CHANGELOG.md](CHANGELOG.md), the detail in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
 ## Screenshots

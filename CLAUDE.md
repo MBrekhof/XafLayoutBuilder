@@ -26,7 +26,11 @@ view's current layout back to the same fluent C#.
   `LayoutCodePrinter.AppearanceExport` so the Module's exports carry rules without referencing the add-on.
 - `XafLayoutBuilder.ModelEditor`: MODELEDITOR-001 spike, a runtime Model Editor for XAF Blazor ("Edit Model",
   gated by `ModelOperationPermissionRequest`, so the role needs `CanEditModel`). No dependency on the builder;
-  `ModelEditing` holds the testable node and value logic, `ModelEditorComponent.razor` the UI.
+  `ModelEditing` holds the testable node and value logic, `ModelEditorComponent.razor` the UI. `SharedModel` edits the
+  shared differences in a model of its own, and the module layers that store below every user's differences. On a node
+  that layer holds too, DevExpress's `HasModification`, `IsValueModified`, `ClearValue` and `Undo` miss the user layer
+  (MODELEDITOR-014): ask the writable layer's own node (`ModelEditing.Writable`, `IsModified(model, node)`,
+  `UndoInLayer`), and test such code on a warmed-up model built over [shared layer, user layer].
 - `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
   into the catch-all group, and columns), `Order`
   (+ `Order.Layout.cs`, the start document's section 4 example verbatim, plus two appearance rules, APPEAR-001),

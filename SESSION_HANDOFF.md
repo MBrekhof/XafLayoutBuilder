@@ -1,9 +1,31 @@
 # Session handoff
 
-Updated 2026-09-19 (MODELEDITOR-009 in Review, MODELEDITOR-014 minted; before that 2026-09-15: 0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
-section 9.
+Updated 2026-09-19 (MODELEDITOR-009 and MODELEDITOR-014 in Review, MODELEDITOR-015 and -016 minted; before that
+2026-09-15: 0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences, both Done
+since). Session plan: `XafLayoutBuilder-START.md` section 9.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
+## Where things stand (end of 2026-09-19)
+
+- **Not pushed:** master is ahead of origin by 6dbad45 (MODELEDITOR-009), 2688a31 (MODELEDITOR-014), 05ad0fa and this
+  handoff commit. The owner has not said push. Public repository: no assistant attribution in commits.
+- **Board (project 32):** Review: MODELEDITOR-009 (#1701), MODELEDITOR-014 (#1755), waiting for the owner's Confirm Done.
+  Todo, unclaimed, in the order recommended: **MODELEDITOR-016 (#1757)** a failed Save followed by closing the editor still
+  stores the edit at the next logon (reproduced, recipe and design input on the card; it stores what the user was told is
+  discarded, so it goes first); **MODELEDITOR-015 (#1756)** a merge whose user-side save is refused leaves an added node's
+  copy that the editor cannot clean up (not reproduced, options on the card); MODELEDITOR-011 (layout designer),
+  MODELEDITOR-012 (packaging). The owner's: REL-001, DXSUPPORT-001 (the support request now has fifteen items, still a
+  draft to send), the phase 2 card, and RUNTIME-001 (#1688), still in Todo although decided (allow) on 2026-09-15.
+- **The loop, unchanged:** plan in `docs/plans/`, Codex plan review, tests red first, build, unit tests, E2E gate, Codex diff
+  review, fix and re-review, stop the broker after every review, commit with exact files. Gate and Codex never at the same
+  time. 283 unit tests, gate exit 0 on 2688a31.
+- **Left unreviewed:** the last MODELEDITOR-009 fix (nodes under a deleted node are not expected in the merged model) and
+  the MODELEDITOR-014 P3 fix (the application root) came after Codex's last pass on each card; both have red-proven tests.
+  From MODELEDITOR-010, still: its process-wide save lock was never re-reviewed, and a separate, stricter permission for
+  Edit Shared Model was not built (the owner's call).
+- **Codex on this machine is flaky,** see the note at the end of the MODELEDITOR-014 section below; a blocked run says
+  "setup refresh had errors" and has read nothing. Retry before concluding anything.
+
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 283 unit tests
 pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
