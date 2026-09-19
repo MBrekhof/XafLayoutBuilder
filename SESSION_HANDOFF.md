@@ -4,24 +4,36 @@ Updated 2026-09-19 (MODELEDITOR-009 and MODELEDITOR-014 in Review, MODELEDITOR-0
 2026-09-15: 0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences, both Done
 since). Session plan: `XafLayoutBuilder-START.md` section 9.
 
-## Where things stand (end of 2026-09-19)
+## Where things stand (end of 2026-09-19; pushed 2026-09-20)
 
-- **Not pushed:** master is ahead of origin by 6dbad45 (MODELEDITOR-009), 2688a31 (MODELEDITOR-014), 05ad0fa and this
-  handoff commit. The owner has not said push. Public repository: no assistant attribution in commits.
-- **Board (project 32):** Review: MODELEDITOR-009 (#1701), MODELEDITOR-014 (#1755), waiting for the owner's Confirm Done.
-  Todo, unclaimed, in the order recommended: **MODELEDITOR-016 (#1757)** a failed Save followed by closing the editor still
-  stores the edit at the next logon (reproduced, recipe and design input on the card; it stores what the user was told is
-  discarded, so it goes first); **MODELEDITOR-015 (#1756)** a merge whose user-side save is refused leaves an added node's
-  copy that the editor cannot clean up (not reproduced, options on the card); MODELEDITOR-011 (layout designer),
-  MODELEDITOR-012 (packaging). The owner's: REL-001, DXSUPPORT-001 (the support request now has fifteen items, still a
-  draft to send), the phase 2 card, and RUNTIME-001 (#1688), still in Todo although decided (allow) on 2026-09-15.
+- **Pushed:** everything through this handoff commit is on origin/master. Public repository: no assistant attribution in
+  commits, pull requests or issues.
+- **Board (project 32):** Review, waiting for the owner's Confirm Done, five cards, all of this session:
+  MODELEDITOR-009 (#1701), MODELEDITOR-014 (#1755), MODELEDITOR-016 (#1757), MODELEDITOR-015 (#1756) and
+  MODELEDITOR-011 (#1703). **The Model Editor's feature cards are all done.** Todo: **MODELEDITOR-012 (#1704)**, packaging,
+  which now also carries the repository split below. The owner's: REL-001, DXSUPPORT-001 (sixteen items, still a draft to
+  send), the phase 2 card, and RUNTIME-001 (#1688), still in Todo although decided (allow) on 2026-09-15.
+- **The owner wants the Model Editor in its own repository and board** (asked 2026-09-19, no go given yet; it belongs to
+  MODELEDITOR-012). The assessment: the code is at a clean boundary and the add-on does not reference the builder, so the
+  cut is trivial; **the harness is the work.** The editor's proof lives in this repo's gate (about fifteen steps against the
+  sample host, its seeded orders, Admin and User roles, and the sample Blazor module's `SharedDifferences` wiring), its unit
+  tests sit on `ApplicationModelFixture`, `WarmedUpModelTests` and `ModelTestTypes` which also serve the builder's own
+  tests, and `docs/api-notes.md` plus the support request mix both. Three routes were put to the owner: (1) full move with a
+  cloned sample host and the editor's gate steps, a day's work and nothing lost, recommended; (2) move the code and keep the
+  gate here against the package, cheap but the editor's proof then lives in another repo; (3) a minimal new sample with
+  thinner coverage. Recommended order: confirm the five Review cards first so the history closes here, decide the repository
+  name (SEC-001's "Xaf" naming question applies to a new public repo too), then do the split in its own session with a plan
+  and a Codex review.
 - **The loop, unchanged:** plan in `docs/plans/`, Codex plan review, tests red first, build, unit tests, E2E gate, Codex diff
   review, fix and re-review, stop the broker after every review, commit with exact files. Gate and Codex never at the same
-  time. 283 unit tests, gate exit 0 on 2688a31.
+  time. 290 unit tests, gate exit 0 on 6b62f7a.
 - **Left unreviewed:** the last MODELEDITOR-009 fix (nodes under a deleted node are not expected in the merged model) and
   the MODELEDITOR-014 P3 fix (the application root) came after Codex's last pass on each card; both have red-proven tests.
   From MODELEDITOR-010, still: its process-wide save lock was never re-reviewed, and a separate, stricter permission for
   Edit Shared Model was not built (the owner's call).
+- **Watch the tooling:** a python one-liner that opened `Program.cs` for writing and read it back in the same expression
+  emptied the file (the write truncates before the read runs). It was restored from the last commit and the step re-applied;
+  use the editing tools for a file that big, not string surgery.
 - **Codex on this machine is flaky,** see the note at the end of the MODELEDITOR-014 section below; a blocked run says
   "setup refresh had errors" and has read nothing. Retry before concluding anything.
 
