@@ -95,6 +95,13 @@ else {
                         <DxButton CssClass="xlb-reset-node" Text="@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")"
                                   RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ResetNode" />
                     }
+                    @* MODELEDITOR-015: the user's own copy of a node the model has of its own, the leftover of a merge whose
+                       save of the user's own record was refused. Reset node and Delete both answer that badly. *@
+                    @if (Session.CanDropCopy(selected)) {
+                        <DxButton CssClass="xlb-drop-copy" Text="@(Session.IsPendingDrop(selected) ? "Drop on save" : "Drop my copy")"
+                                  title="Take your own copy of this node out of your model differences; the one the model has of its own shows again"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="DropCopy" />
+                    }
                     @* MODELEDITOR-009: the WinForms editor's Generate Content, Show Differences and Merge Differences. *@
                     @if (Session.CanGenerateContent(selected)) {
                         <DxButton CssClass="xlb-generate" Text="Generate content" title="Run the node's generators: a new view's columns, items and layout"
@@ -552,6 +559,13 @@ else {
 
     void ResetNode() => Run(() => Session.ResetNode(selected!), null);
 
+    // MODELEDITOR-015. The save that follows checks the stored record, as a merge's does: this is the recovery from a save
+    // that was refused in silence, and a second refusal must not pass unnoticed (Codex plan review).
+    void DropCopy() => Run(() => {
+        Session.DropCopy(selected!);
+        verifyUserRecord = true;
+    }, "Your copy is dropped on save");
+
     void GenerateContent() => Run(() => {
         Session.GenerateContent(selected!);
         expanded.Add(ModelEditing.Path(selected!));
@@ -619,8 +633,8 @@ else {
             }
             StoredAspectCleanup.ClearEmptied(Application, Session.EmptiedAspects);
             if (verifyStored && !StoredAspectCleanup.UserRecordHolds(Application))
-                throw new InvalidOperationException("Merged into the shared model, but your own model differences were not stored (saved from another tab, " +
-                    "or changed by an administrator?), so the values are in both now. Reload the page and merge again.");
+                throw new InvalidOperationException("Your own model differences were not stored (saved from another tab, or changed by an administrator?). " +
+                    "What you merged or dropped is still in them. Reload the page and try again.");
         }
         Session.Saved();
         Navigation.NavigateTo(Navigation.Uri, forceLoad: true);

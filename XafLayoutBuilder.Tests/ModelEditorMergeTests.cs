@@ -212,6 +212,118 @@ public class ModelEditorMergeTests(ApplicationModelFixture fixture) {
         Assert.Equal(["Views"], nodes);
     });
 
+    // MODELEDITOR-015: a merge whose user-side save was refused leaves the user's own copy of an added node over the shared
+    // one. Merge refuses it, Reset node is not offered for a node the user added, and Delete would write a tombstone that
+    // hides the shared node: Drop my copy empties the user layer's own node, which the writer then leaves out altogether.
+    [Fact]
+    public void CanDropCopy_OnlyForTheUsersOwnCopyOfANodeAnotherLayerHoldsToo() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var model = Layered(manager, AddedColumn("Extra"), AddedColumn("Extra"));
+        var columns = ContactListView(model).Columns;
+        var session = new ModelEditSession { Model = model };
+
+        Assert.True(session.CanDropCopy(columns["Extra"]!));
+        Assert.False(session.CanDropCopy(columns["Phone"]!)); // generated, not the user's own: Reset node
+
+        var onlyMine = Layered(manager, null, AddedColumn("Extra"));
+        var mine = ContactListView(onlyMine).Columns["Extra"]!;
+        Assert.False(new ModelEditSession { Model = onlyMine }.CanDropCopy(mine)); // nothing below it: Delete is the answer
+
+        var adding = new ModelEditSession { Model = model };
+        var justAdded = adding.AddChild(columns, typeof(IModelColumn), "AddedNow");
+        Assert.False(adding.CanDropCopy(justAdded)); // added in this session: Delete removes it outright
+    });
+
+    [Fact]
+    public void DropCopy_TakesTheNodeOutOfTheUserLayer_AndTheSharedOneShowsAgain() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var shared = AddedColumn("Extra", width: 42);
+        var model = Layered(manager, shared, AddedColumn("Extra", width: 7));
+        var session = new ModelEditSession { Model = model };
+
+        session.DropCopy(ContactListView(model).Columns["Extra"]!);
+        Assert.True(session.HasPendingEdits);
+        session.Apply(model.LastLayer);
+
+        var userXml = new ModelXmlWriter().WriteToString(model.LastLayer, 0);
+        Assert.DoesNotContain("Extra", userXml);
+        Assert.DoesNotContain("Removed", userXml);
+        var next = ContactListView(Layered(manager, shared, userXml.Length == 0 ? null : userXml)).Columns["Extra"]!;
+        Assert.Equal(42, next.Width); // the shared column, not the user's own
+    });
+
+    // Why Drop my copy exists: Delete on the same node writes a tombstone, and the shared node goes with it.
+    [Fact]
+    public void Delete_OnTheUsersOwnCopy_HidesTheSharedNodeToo() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var shared = AddedColumn("Extra");
+        var model = Layered(manager, shared, AddedColumn("Extra"));
+        var session = new ModelEditSession { Model = model };
+
+        session.Delete(ContactListView(model).Columns["Extra"]!);
+        session.Apply(model.LastLayer);
+
+        var userXml = new ModelXmlWriter().WriteToString(model.LastLayer, 0);
+        Assert.Contains("Removed", userXml);
+        Assert.Null(ContactListView(Layered(manager, shared, userXml)).Columns["Extra"]);
+    });
+
+    // Why Reset node is not the answer either: it is offered here (CanResetNode asks the merged node, which carries no mark of
+    // its own), but Undo keeps the layer node's IsNewNode (Codex, MODELEDITOR-009), so the user's record keeps an empty node
+    // of its own. Drop my copy takes it out.
+    [Fact]
+    public void ResetNode_OnTheUsersOwnCopy_LeavesAnEmptyNodeOfItsOwnBehind() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var model = Layered(manager, AddedColumn("Extra"), AddedColumn("Extra", width: 7));
+        var session = new ModelEditSession { Model = model };
+        Assert.True(session.CanResetNode(ContactListView(model).Columns["Extra"]!));
+
+        session.ResetNode(ContactListView(model).Columns["Extra"]!);
+        session.Apply(model.LastLayer);
+
+        var userXml = new ModelXmlWriter().WriteToString(model.LastLayer, 0);
+        Assert.DoesNotContain("Width", userXml); // the values are gone
+        Assert.Contains("Extra", userXml);       // the node itself is not
+    });
+
+    // Codex plan review: a lower layer whose node is itself a deletion. Measured: the node counts as held by one layer then,
+    // so Drop my copy is not offered; there is nothing below to show again, and Delete is the answer.
+    [Fact]
+    public void DropCopy_IsNotOfferedWhenTheLayerBelowOnlyDeletesTheNode() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var shared = $"<Application><Views><ListView Id=\"{ViewId}\"><Columns><ColumnInfo Id=\"Phone\" Removed=\"True\" /></Columns></ListView></Views></Application>";
+        var model = Layered(manager, shared, AddedColumn("Phone"));
+        var session = new ModelEditSession { Model = model };
+
+        Assert.False(session.CanDropCopy(ContactListView(model).Columns["Phone"]!));
+        Assert.Throws<InvalidOperationException>(() => session.DropCopy(ContactListView(model).Columns["Phone"]!));
+    });
+
+    // Codex diff review: a pending drop is a change to the saved model like a node reset, so the edits that are refused
+    // beside a pending reset are refused beside it too.
+    [Fact]
+    public void WhileADropIsPending_ALookupEditAndACloneOfThatNodeAreRefused() => WarmedUpModelTests.WithWarmedUpManager(manager => {
+        var model = Layered(manager, AddedColumn("Extra"), AddedColumn("Extra", width: 7));
+        var view = ContactListView(model);
+        var session = new ModelEditSession { Model = model };
+        session.DropCopy(view.Columns["Extra"]!);
+
+        // A lookup's choices are worked out from the saved model, which the drop changes.
+        Assert.Throws<InvalidOperationException>(() => session.SetText(view, "DetailView", "Views/ModelTestContact_DetailView"));
+        // A clone would copy the values the drop takes away.
+        Assert.Throws<InvalidOperationException>(() => session.Clone(view.Columns["Extra"]!, "ExtraCopy"));
+        Assert.Null(view.Columns["ExtraCopy"]);
+    });
+
+    static string AddedColumn(string id, int width = 42) =>
+        $"<Application><Views><ListView Id=\"{ViewId}\"><Columns><ColumnInfo Id=\"{id}\" PropertyName=\"Email\" IsNewNode=\"True\" Width=\"{width}\" /></Columns></ListView></Views></Application>";
+
+    // A circuit's model over the shared differences and the user's own, both given as XML.
+    static ModelApplicationBase Layered(ApplicationModelManager manager, string? sharedXml, string? userXml) {
+        var shared = new StringModelStore();
+        if (sharedXml is not null) shared.Add("", sharedXml);
+        var user = new StringModelStore();
+        if (userXml is not null) user.Add("", userXml);
+        var model = manager.CreateModelApplication([manager.CreateLayerByStore("SharedDiff", shared), manager.CreateLayerByStore("UserDiff", user)]);
+        model.Collapse();
+        return model;
+    }
+
     [Fact]
     public void GenerateContent_IsOfferedForViews_NotForColumns() {
         var view = fixture.Class<ModelTestContact>().DefaultListView;

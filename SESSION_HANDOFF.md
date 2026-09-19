@@ -76,6 +76,21 @@ Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the
 cannot express and by narrowing Generate content), a diff review (one P1, one P2) and a re-review (one P2), all fixed;
 the last fix was not re-reviewed again. RUNTIME-001 (#1688) is still in Todo although decided (allow) on 2026-09-15.
 
+### MODELEDITOR-015 (same session): Drop my copy
+
+The leftover of a merge whose save of the user's own record is refused in silence (a newer stored `Version`, or a denied
+aspect write; `ModelDifferenceDbStore.cs` 181, 209). For values both records then hold the same thing and a second Merge
+settles it after a reload. For **a node the user added** they were stuck: Merge refuses it ("shadows a node the model has
+of its own"), Reset node leaves an empty node of their own behind, and Delete writes a tombstone that hides the model's
+node. `ModelEditing.DropFromLayer` (`Undo()` + the public `SetIsNewNode(false)` on the writable layer's own node) leaves
+the node out of the stored XML altogether, so the model's own node shows again; the button is "Drop my copy", offered by
+`ModelEditSession.CanDropCopy` exactly where that applies, and it pends until Save like a node reset. The Save after it
+checks the stored record, as a merge's does (Codex). Gate: a column is added and saved, `Version` is bumped in SQL so the
+merge's user-side save is refused, both records then hold the column, Drop my copy and Save clear the user's copy and the
+shared column stays in the grid; the step clears both records afterwards. 5 unit tests (289 in total), gate exit 0. Codex's diff
+review: three P2s fixed (a lookup edit and a Clone slipped past a pending drop; the gate step's cleanup now runs in a
+`finally`). Plan: `docs/plans/2026-09-19-modeleditor-015-drop-my-copy.md`.
+
 ### MODELEDITOR-014 (same session): values on a node the shared differences hold too
 
 The value-level half of the bug MODELEDITOR-009 found. Measured in four configurations (`docs/api-notes.md`): only when

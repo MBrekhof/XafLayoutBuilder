@@ -57,7 +57,8 @@ using Microsoft.Playwright;
 //            fills the columns of a ListView added in the editor, which closing without Save takes away again
 //            MODELEDITOR-014: a value Admin sets on a node the shared record holds offers Reset, and the saved Reset takes it
 //            out of Admin's record; MODELEDITOR-016: after a Save whose store write fails, an edit discarded by closing the
-//            editor twice, or by Reload, is not stored at the next logon
+//            editor twice, or by Reload, is not stored at the next logon; MODELEDITOR-015: after a merge whose save of the
+//            user's own record was refused, Drop my copy takes the user's own copy out and the shared column stays
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -938,6 +939,58 @@ try
     var stillThere = discarded.Where(d => d.ShownAfterDiscard || d.Stored || d.Shown).ToList();
     Assert(stillThere.Count == 0, "a discarded edit after a failed Save is gone from the page at once and is not stored at the next logon; still there: "
         + string.Join("; ", stillThere.Select(d => $"'{d.Marker}' discarded by {d.How} (on the reloaded page: {d.ShownAfterDiscard}, stored after logon: {d.Stored}, shown after logon: {d.Shown})")));
+
+    // MODELEDITOR-015: Merge saves the shared record first and then the user's own, which the database store refuses in
+    // silence when a newer Version is stored (ModelDifferenceDbStore.cs 181). A column the user added is then in both records,
+    // where Merge refuses it and Delete would hide the shared one behind a tombstone: Drop my copy takes the user's copy out.
+    Step("MODELEDITOR-015: after a merge whose save of the user's own record was refused, Drop my copy clears the leftover");
+    const string LeftoverColumn = "MergeLeftover";
+    // The step bumps a version and merges a column into the shared record; a failure anywhere inside must not leave that in
+    // the sample database for the next manual run (Codex diff review). The gate's own start-up clears it too.
+    try
+    {
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
+    await PickComboItem(page, modelEditor.Locator(".xlb-new-type"), "Column");
+    await modelEditor.Locator(".xlb-new-id").FillAsync(LeftoverColumn);
+    await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
+    await modelEditor.Locator(".xlb-add").ClickAsync();
+    await modelEditor.Locator($"[data-selected='Views/Order_ListView/Columns/{LeftoverColumn}']").WaitForAsync(new() { Timeout = 10_000 });
+    var leftoverProperty = modelEditor.Locator("tr[data-value='PropertyName'] input");
+    await leftoverProperty.FillAsync("Notes");
+    await leftoverProperty.PressAsync("Tab");
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    Assert((SqlScalar(adminRows) ?? "").Contains(LeftoverColumn), "the column Admin added is in Admin's own record");
+
+    // The refusal: a stored Version newer than the one this circuit loaded.
+    Sql($"UPDATE ModelDifferences SET Version = Version + 100 WHERE UserId = '{adminId}'");
+    modelEditor = await OpenModelEditorAt(page, $"Views/Order_ListView/Columns/{LeftoverColumn}");
+    await modelEditor.Locator(".xlb-merge").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "were not stored" }).WaitForAsync(new() { Timeout = 20_000 });
+    Assert((SqlScalar(SharedRows) ?? "").Contains(LeftoverColumn), "the merge reached the shared record");
+    Assert((SqlScalar(adminRows) ?? "").Contains(LeftoverColumn), "and Admin's own copy is still there: the leftover this card is about");
+    // The refused merge left its writes in the live model, so closing discards them and reloads (MODELEDITOR-016).
+    await ClosePopup(page);
+    await page.GetByText("Unsaved edits").First.WaitForAsync(new() { Timeout = 10_000 });
+    await page.RunAndWaitForNavigationAsync(() => ClosePopup(page), new() { Timeout = 30_000 });
+    await page.GetByText("ORD-001", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+    await WaitForNoLoading(page);
+
+    modelEditor = await OpenModelEditorAt(page, $"Views/Order_ListView/Columns/{LeftoverColumn}");
+    Assert(await modelEditor.Locator(".xlb-drop-copy").CountAsync() == 1, "Drop my copy is offered for the user's own copy of a node the model has of its own");
+    await modelEditor.Locator(".xlb-drop-copy").ClickAsync();
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    Assert(!(SqlScalar(adminRows) ?? "").Contains(LeftoverColumn), "after Drop my copy and Save, Admin's record no longer holds the column");
+    Assert((SqlScalar(SharedRows) ?? "").Contains(LeftoverColumn), "the shared record still holds it");
+    Assert((await GridHeaders(page)).Contains("Notes"), "and the column the shared model holds still shows in the grid");
+    }
+    finally
+    {
+        // Both records go, so the steps that follow start from the builder's own layout again.
+        Sql($"DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId IN ('{adminId}', ''); DELETE FROM ModelDifferences WHERE UserId IN ('{adminId}', '');");
+    }
+    await LogOff(page);
+    await Login(page);
+    await OpenListView(page, "Order_ListView", "ORD-001");
 
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.

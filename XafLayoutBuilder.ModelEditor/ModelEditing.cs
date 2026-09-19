@@ -751,6 +751,27 @@ public static class ModelEditing {
     }
 
     /// <summary>
+    /// MODELEDITOR-015: takes the user's own copy of the node out of the writable layer, so its store no longer holds it.
+    /// <see cref="ModelNode.Undo"/> clears the layer node's values and children (609-637) and keeps its own marks, which
+    /// <see cref="ModelNode.SetIsNewNode"/> (684, public) then takes; a node left with neither is not written at all
+    /// (ModelXmlWriter.IsNotEmptyNode, ModelXmlWriter.cs 84-95). Unlike <c>Remove</c> it writes no tombstone, so a node a
+    /// lower layer holds shows again at the next page load instead of being hidden (measured, ModelEditorMergeTests).
+    /// </summary>
+    public static void DropFromLayer(ModelApplicationBase model, IModelNode node) {
+        if (Writable(model, node) is not { } writable) return;
+        writable.Undo();
+        writable.SetIsNewNode(false);
+    }
+
+    /// <summary>
+    /// Whether the writable layer holds the node as one the user added while another layer holds a node of that id: the
+    /// leftover of a merge whose user-side save was refused (MODELEDITOR-015). The layers holding a node are
+    /// <see cref="ModelNode.EnumerateAllLayers"/> (3469-3496), as MODELEDITOR-009's merge refusal counts them.
+    /// </summary>
+    public static bool IsShadowingCopy(ModelApplicationBase? model, IModelNode node) =>
+        model is not null && Writable(model, node) is { IsNewNode: true } writable && writable.EnumerateAllLayers().Count() > 1;
+
+    /// <summary>
     /// What Merge Differences moves into the shared differences: the writable layer's XML per language, pruned to the node's
     /// path. The WinForms editor moves the node with ModelNode.MoveNodeToOtherLayer (3552-3605), which is internal and refuses a
     /// layer of another model, and XAF Blazor's shared differences are no layer a circuit can write (MODELEDITOR-010); XML is
@@ -789,7 +810,7 @@ public static class ModelEditing {
         // a node of this id too, a module's since the user added theirs, say (Codex plan review 2).
         if (layerNode.IsNewNode && layerNode.EnumerateAllLayers().Count() > 1)
             throw new InvalidOperationException($"Your {Path(node)} shadows a node the model has of its own, and deleting yours would hide that one too. " +
-                "An administrator can reset your differences for it.");
+                "Use Drop my copy to take yours out (MODELEDITOR-015).");
         var layer = model.LastLayer;
         var writer = new ModelXmlWriter();
         var xml = Enumerable.Range(0, layer.AspectCount)
@@ -1088,6 +1109,8 @@ public sealed class ModelEditSession {
     readonly List<IModelNode> added = [];
     readonly HashSet<IModelNode> deletes = [];
     readonly HashSet<IModelNode> nodeResets = [];
+    // MODELEDITOR-015: nodes whose copy in the writable layer is dropped on Apply.
+    readonly HashSet<IModelNode> drops = [];
     // Values the editor cleared on added nodes or nodes under them, which a warmed-up model still returns from its cache (Codex review).
     readonly HashSet<(IModelNode Node, string Name)> cleared = [];
     // Lookup values the editor set on added nodes or nodes under them (Codex review 5).
@@ -1105,7 +1128,7 @@ public sealed class ModelEditSession {
         // The clone copies the model as it is, while the editor shows the source with its pending edits, and what a pending
         // reset leaves is known only once the model is built again. So a source with pending edits is saved first (Codex review).
         if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [source])) || deletes.Any(d => IsAtOrUnder(d, [source]))
-            || nodeResets.Any(r => IsAtOrUnder(r, [source])))
+            || nodeResets.Any(r => IsAtOrUnder(r, [source])) || drops.Any(d => IsAtOrUnder(d, [source])))
             throw new InvalidOperationException($"Save the pending edits of {ModelEditing.Path(source)} before cloning it.");
         var node = ModelEditing.Clone(source, id);
         added.Add(node);
@@ -1174,7 +1197,7 @@ public sealed class ModelEditSession {
         if (!CanResetNode(node))
             throw new InvalidOperationException($"{ModelEditing.Path(node)} exists only in your model differences; delete it instead of resetting it.");
         if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [node])) || deletes.Any(d => IsAtOrUnder(d, [node]))
-            || added.Any(a => IsAtOrUnder(a, [node])))
+            || added.Any(a => IsAtOrUnder(a, [node])) || drops.Any(d => IsAtOrUnder(d, [node])))
             throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before resetting it.");
         nodeResets.Add(node);
     }
@@ -1186,7 +1209,8 @@ public sealed class ModelEditSession {
     void ThrowIfLookupConflict(IModelNode node, string name) {
         // On an added node too: its lookup edit is written at once, but a view marked for deletion is still offered (Codex review 5).
         if (ModelEditing.IsLookupValue(node, name)
-            && (pending.Keys.Any(k => !(ReferenceEquals(k.Node, node) && k.Name == name)) || deletes.Count > 0 || nodeResets.Count > 0))
+            && (pending.Keys.Any(k => !(ReferenceEquals(k.Node, node) && k.Name == name)) || deletes.Count > 0 || nodeResets.Count > 0
+                || drops.Count > 0))
             throw new InvalidOperationException($"Save the pending edits first: the choices of {name} are worked out from the saved model.");
         if (!IsAddedOrUnder(node)) ThrowIfPendingLookup((node, name));
     }
@@ -1206,6 +1230,8 @@ public sealed class ModelEditSession {
     void ThrowIfUnderPendingReset(IModelNode node) {
         if (nodeResets.Any(r => IsAtOrUnder(node, [r])))
             throw new InvalidOperationException($"{ModelEditing.Path(node)} is reset on save; save before editing it.");
+        if (drops.Any(d => IsAtOrUnder(node, [d])))
+            throw new InvalidOperationException($"Your copy of {ModelEditing.Path(node)} is dropped on save; save before editing it.");
     }
 
     /// <summary>
@@ -1215,6 +1241,26 @@ public sealed class ModelEditSession {
     public bool CanResetNode(IModelNode node) => !IsAddedOrUnder(node) && !((ModelNode)node).IsNewNode;
 
     public bool IsPendingNodeReset(IModelNode node) => nodeResets.Contains(node);
+
+    /// <summary>
+    /// MODELEDITOR-015: whether the node is the user's own copy over a node the model has of its own, which is the one case
+    /// Reset node (an added node keeps no values to take back) and Delete (a tombstone would hide the node below) both
+    /// answer badly. A node added in this session is removed outright by Delete instead.
+    /// </summary>
+    public bool CanDropCopy(IModelNode node) => !IsAddedOrUnder(node) && ModelEditing.IsShadowingCopy(Model, node);
+
+    /// <summary>Drops that copy on Apply, so the stored differences no longer hold the node and the one below shows.</summary>
+    public void DropCopy(IModelNode node) {
+        ThrowIfPendingLookup();
+        if (!CanDropCopy(node))
+            throw new InvalidOperationException($"{ModelEditing.Path(node)} is not a copy of your own over a node the model has of its own.");
+        if (pending.Keys.Any(k => IsAtOrUnder(k.Node, [node])) || deletes.Any(d => IsAtOrUnder(d, [node]))
+            || added.Any(a => IsAtOrUnder(a, [node])) || nodeResets.Any(r => IsAtOrUnder(r, [node])))
+            throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before dropping your copy.");
+        drops.Add(node);
+    }
+
+    public bool IsPendingDrop(IModelNode node) => drops.Contains(node);
 
     /// <summary>Moves the node one place up or down among its shown siblings, as Index edits that count earlier moves (Codex review).</summary>
     public void Move(IModelNode node, bool up) {
@@ -1248,6 +1294,7 @@ public sealed class ModelEditSession {
         foreach (var key in pending.Keys.Where(k => !ModelEditing.IsInModel(k.Node)).ToList()) pending.Remove(key);
         deletes.RemoveWhere(n => !ModelEditing.IsInModel(n));
         nodeResets.RemoveWhere(n => !ModelEditing.IsInModel(n));
+        drops.RemoveWhere(n => !ModelEditing.IsInModel(n));
     }
 
     /// <summary>Set by the editor around its own model save, which keeps the nodes it added.</summary>
@@ -1257,7 +1304,7 @@ public sealed class ModelEditSession {
     /// MODELEDITOR-010: whether anything is not saved yet: a pending value edit, reset, delete or node reset, an added node, or
     /// edits Apply wrote to the model whose save then failed (Codex review).
     /// </summary>
-    public bool HasPendingEdits => pending.Count > 0 || deletes.Count > 0 || nodeResets.Count > 0 || added.Count > 0 || writes.Count > 0;
+    public bool HasPendingEdits => pending.Count > 0 || deletes.Count > 0 || nodeResets.Count > 0 || drops.Count > 0 || added.Count > 0 || writes.Count > 0;
 
     /// <summary>Set once closing with pending edits was refused; the next close discards them (ModelEditorController).</summary>
     public bool CloseWarned { get; set; }
@@ -1278,6 +1325,7 @@ public sealed class ModelEditSession {
         pending.Clear();
         deletes.Clear();
         nodeResets.Clear();
+        drops.Clear();
         CloseWarned = false;
         var applied = writes.Count > 0;
         writes.Clear();
@@ -1383,6 +1431,13 @@ public sealed class ModelEditSession {
             writes.Add((node, write));
         }
         nodeResets.Clear();
+        // MODELEDITOR-015: the user's own copy of a node the model has of its own.
+        foreach (var node in drops.Where(n => !IsDeleted(n))) {
+            Action write = () => { if (model is not null) ModelEditing.DropFromLayer(model, node); };
+            write();
+            writes.Add((node, write));
+        }
+        drops.Clear();
         // Only the outermost deleted nodes; their children go with them.
         foreach (var node in deletes.Where(n => n.Parent is null || !IsDeleted(n.Parent)).ToList()) {
             node.Remove();

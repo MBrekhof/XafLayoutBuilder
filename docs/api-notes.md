@@ -689,6 +689,15 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   `Delete` removes a node physically only when no other layer holds one of that id and leaves a tombstone otherwise
   (`CanRemoveNode` 737-761, `_Delete` 771-791); the layers holding a node are `EnumerateAllLayers()` on the layer's node
   (3469-3496, public).
+- **Taking the user's own copy of a node out of a layer (MODELEDITOR-015).** `Remove()` on the writable layer's own node
+  writes a tombstone when another layer holds a node of that id (`CanRemoveNode`, `_Delete`, `Model/Core/ModelNode.cs`
+  737-791), and that tombstone hides the other layer's node too: measured over [shared layer with an added column, user
+  layer with its own copy], the merged model then had no column at all. `Undo()` (609-637) followed by the public
+  `SetIsNewNode(false)` (684) leaves the layer node with neither values nor marks, and `ModelXmlWriter.IsNotEmptyNode`
+  (`Model/ModelXmlWriter.cs` 84-95) then leaves it out of the store's XML altogether, so the node below shows again with its
+  values at the next page load (`ModelEditing.DropFromLayer`). `Undo` alone keeps the node's `IsNewNode`, so the record
+  keeps an empty node of the user's own. A node whose only twin below is a deletion is counted by `EnumerateAllLayers` as
+  held by one layer, so it is not offered (there is nothing to bring back).
 - **HasModification and Undo miss the user layer when a layer in between holds the node (MODELEDITOR-009, measured in
   `ModelEditorMergeTests`).** Model: shared layer with `<ColumnInfo Id="Phone" Caption=... />`, user layer on top, collapsed.
   After `phone.Width = 123` the user layer's XML holds the width and `GetValue` returns it, but on the merged node

@@ -6,6 +6,7 @@ version the packages on the feed carry. Ids are ContextBoard cards; the detail i
 
 ## Unreleased
 
+- MODELEDITOR-015: "Drop my copy" in the Model Editor takes a user's own copy of a node out of their model differences when the model has a node of its own there, which is what a merge whose save of the user's record was refused leaves behind; Delete would have hidden the model's node behind a tombstone, and Reset node left an empty node of the user's own.
 - MODELEDITOR-016: after a Save whose database write fails, an edit discarded by closing the Model Editor is no longer stored by XAF's deferred save at the next logon (closing now discards and reloads the page as Reload does, and nothing of that circuit's user model is stored); Reload right after a failed Save is no longer refused with "your model was saved elsewhere".
 - MODELEDITOR-014: a value a user sets on a node the shared differences hold too is bold and offers Reset, and its Reset (or an empty text) is saved; XAF's own `IsValueModified` and `ClearValue` miss the user's layer there. The replay after Save no longer drops a value's other languages when it clears one.
 - MODELEDITOR-009: Model Editor Differences (the node's differences as XML, per language), Modules (the loaded modules), Generate content for a view added in the editor, and Merge to shared, which moves a node's saved differences from the user's own record into the shared one; a node's bold mark and Reset node now work when the shared differences hold the node too.
