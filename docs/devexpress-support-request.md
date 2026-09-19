@@ -177,6 +177,31 @@ keeps returning its old value. Could DevExpress consider the changes below, or a
 - **Meanwhile.** The editor reads the other aspects' stored values first and writes them back after the clear
   (`ModelEditing.Reset`).
 
+## 14. Merge Differences cannot reach a layer of another model, or a store
+
+- **Behaviour.** `ModelEditorHelper.MoveNodeToOtherLayer` (`Model/ModelEditorHelper.cs` 393-409) finds its target with the
+  internal `ModelNode.GetModuleLayerById` and moves with the internal `ModelNode.MoveNodeToOtherLayer`
+  (`Model/Core/ModelNode.cs` 3552-3605), which refuses a layer of another model (3565). In XAF Blazor the shared
+  differences are not a layer a circuit's model can write (item 12), so a user's differences cannot be promoted with it.
+- **Repro.** None needed: the target layer cannot be obtained with public API.
+- **Smallest change.** A public `ModelNode.MoveNodeToOtherLayer(node, targetLayer, moveInfo)` that accepts a layer built by
+  the same `ApplicationModelManager`, or a store-level "merge these differences" on `ModelDifferenceStore`.
+- **Meanwhile.** The editor writes the user layer's XML per aspect, prunes it to the node and reads it into the shared
+  layer before that layer joins its model (`ModelEditing.DifferencesForMerge`, `MergeInto`). XML read over a layer is no
+  structural move, so a replaced node and an added or deleted node the shared layer already holds are refused.
+
+## 15. HasModification, IsValueModified and Undo miss the writable layer when a layer in between holds the node
+
+- **Behaviour.** In a collapsed model built over [extra differences layer, user layer] (what `AddExtraDiffStore` gives a
+  circuit), a node that the extra layer holds too reports `HasModification` and `IsValueModified(name)` false for values the
+  user layer holds, and `Undo()` does nothing; `GetValue` returns the user's value and the user layer's XML holds it. The
+  same calls on the user layer's own node (`GetNodeInThisLayer`) answer correctly, and its `Undo()` clears the differences.
+- **Repro.** `XafLayoutBuilder.Tests/ModelEditorMergeTests.cs`,
+  `Merge_MovesValuesIntoTheSharedStore_PerAspect_AndKeepsWhatTheSharedStoreHeld` (the two `IsModified` asserts).
+- **Smallest change.** `GetWritableLayer` (1252-1265) resolving the last layer's node for such a node as it does for one the
+  extra layer does not hold.
+- **Meanwhile.** The editor asks the writable layer's own node (`ModelEditing.IsModified(model, node)`, `UndoInLayer`).
+
 ## To verify before sending
 
 - Shared (administrator) differences: done, item 12 (MODELEDITOR-010).

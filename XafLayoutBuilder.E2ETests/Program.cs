@@ -50,7 +50,11 @@ using Microsoft.Playwright;
 //            saved reset in nl-NL takes it out of that row; MODELEDITOR-010: a caption saved through Edit Shared Model is
 //            stored in the shared record, shows to Admin after the reload and to User at the next logon, Admin's own editor
 //            shows it below the user layer, Reload drops a pending edit, closing with an edit is refused once and the second
-//            close discards it, and a saved reset in the shared editor takes the caption out of the shared record
+//            close discards it, and a saved reset in the shared editor takes the caption out of the shared record;
+//            MODELEDITOR-009: Differences shows the saved caption as XML, Modules lists the builder's module, Merge to shared
+//            moves the caption from Admin's record to the shared one and User sees it, a second merge over the node the
+//            shared record now holds works too (the node is bold, its differences leave Admin's record), and Generate content
+//            fills the columns of a ListView added in the editor, which closing without Save takes away again
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -792,6 +796,70 @@ try
     Assert(!sharedReset.Contains(SharedCaption), "after the saved reset the shared record no longer holds the caption");
     Assert(!(await page.InnerTextAsync("body")).Contains(SharedCaption), "after the reset Order_ListView shows its own caption again");
 
+    // MODELEDITOR-009: the node's differences as XML, the loaded modules, Merge to shared (the user's saved differences move into
+    // the shared record, shared first) and Generate content on a view added in the editor.
+    Step("MODELEDITOR-009: differences XML, loaded modules, Merge to shared twice, Generate content on an added ListView");
+    const string MergedCaption = "Orders merged for everyone";
+    const string MergedAgainCaption = "Orders merged twice";
+    const string SharedRows = "SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = ''";
+    var adminRows = $"SELECT STRING_AGG(CAST(a.Xml AS NVARCHAR(MAX)), '') FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = '{adminId}'";
+    foreach (var (caption, screenshot) in new[] { (MergedCaption, true), (MergedAgainCaption, false) })
+    {
+        modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+        captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+        await captionInput.FillAsync(caption);
+        await captionInput.PressAsync("Tab");
+        await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+        await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+        Assert((SqlScalar(adminRows) ?? "").Contains(caption), $"'{caption}' is saved in Admin's own differences first");
+        modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+        // The second time the shared record holds the node too, where XAF's own HasModification misses the user's differences.
+        Assert(await modelEditor.Locator("[data-node='Views/Order_ListView'].xlb-modified").CountAsync() == 1, $"the node with Admin's '{caption}' is bold in the tree");
+        if (screenshot)
+        {
+            await modelEditor.Locator(".xlb-differences-toggle").ClickAsync();
+            // The circuit's language is en-US, so that is the aspect the caption was saved in, not the default one.
+            var differencesXml = await modelEditor.Locator("pre.xlb-differences").First.InnerTextAsync();
+            Assert(differencesXml.Contains($"Caption=\"{caption}\""), $"Differences shows the caption as XML (got: {differencesXml})");
+            await modelEditor.Locator(".xlb-modules-toggle").ClickAsync();
+            await modelEditor.Locator("tr[data-module='XafLayoutBuilderModule']").WaitForAsync(new() { Timeout = 10_000 });
+            Assert(await modelEditor.Locator("tr[data-module]").CountAsync() > 3, "Modules lists the loaded modules");
+            await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-32-model-editor-differences.png") });
+        }
+        await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001", ".xlb-merge");
+        Assert((SqlScalar(SharedRows) ?? "").Contains(caption), $"after Merge to shared the shared record holds '{caption}'");
+        Assert(!(SqlScalar(adminRows) ?? "").Contains(caption), $"and Admin's own differences no longer hold '{caption}'");
+        Assert((await page.InnerTextAsync("body")).Contains(caption), $"after the reload Admin sees '{caption}' from the shared layer");
+    }
+    Assert(!(SqlScalar(SharedRows) ?? "").Contains(MergedCaption), "the second merge replaced the first caption in the shared record");
+    await LogOff(page);
+    await Login(page, "User");
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    Assert((await page.InnerTextAsync("body")).Contains(MergedAgainCaption), "User, at the next logon, sees the merged caption");
+    await LogOff(page);
+    await Login(page);
+    await OpenListView(page, "Order_ListView", "ORD-001");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView", shared: true);
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    Assert(!(SqlScalar(SharedRows) ?? "").Contains(MergedAgainCaption), "the shared reset takes the merged caption out again");
+
+    modelEditor = await OpenModelEditorAt(page, "Views");
+    await PickComboItem(page, modelEditor.Locator(".xlb-new-type"), "ListView");
+    await modelEditor.Locator(".xlb-new-id").FillAsync("Order_Generated_ListView");
+    await modelEditor.Locator(".xlb-new-id").PressAsync("Tab");
+    await modelEditor.Locator(".xlb-add").ClickAsync();
+    await modelEditor.Locator("[data-selected='Views/Order_Generated_ListView']").WaitForAsync(new() { Timeout = 10_000 });
+    await PickComboItem(page, modelEditor.Locator("tr[data-value='ModelClass']"), "BOModel/XafLayoutBuilder.Sample.Module.BusinessObjects.Order");
+    await modelEditor.Locator(".xlb-generate").ClickAsync();
+    await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Content generated" }).WaitForAsync(new() { Timeout = 15_000 });
+    await modelEditor.Locator("[data-expand='Views/Order_Generated_ListView/Columns']").ClickAsync();
+    await modelEditor.Locator("[data-node='Views/Order_Generated_ListView/Columns/Number']").WaitForAsync(new() { Timeout = 10_000 });
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-33-model-editor-generate-content.png") });
+    await CloseModelEditor(page, modelEditor);
+    Assert(!(SqlScalar(adminRows) ?? "").Contains("Order_Generated_ListView"), "closing without Save stores nothing of the generated view");
+
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
@@ -1433,9 +1501,9 @@ static async Task<ILocator> OpenModelEditorAt(IPage page, string nodePath, bool 
 
 // The Model Editor's Save reloads the page (MODELEDITOR-002). Waits for that navigation itself, so a Save that did not
 // reload fails here instead of being covered by a page load of the gate's own.
-static async Task SaveModelEditorAndWaitForReload(IPage page, ILocator editor, string seededText)
+static async Task SaveModelEditorAndWaitForReload(IPage page, ILocator editor, string seededText, string button = ".xlb-save")
 {
-    await page.RunAndWaitForNavigationAsync(() => editor.Locator(".xlb-save").ClickAsync(), new() { Timeout = 30_000 });
+    await page.RunAndWaitForNavigationAsync(() => editor.Locator(button).ClickAsync(), new() { Timeout = 30_000 });
     await page.GetByText(seededText, new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
     await WaitForNoLoading(page);
 }

@@ -75,15 +75,15 @@ That file is the sample's only layout source for `Order`; the sample module has 
   `BuildAppearanceRules()`, with compile-checked member targets and layout group ids checked at startup,
   where XAF's `[Appearance]` attribute silently ignores a target that does not exist.
 - **A runtime Model Editor, for now.** `XafLayoutBuilder.ModelEditor` is "Edit Model" in XAF Blazor: the
-  model tree, values, node actions, languages and shared differences, edited in the running app instead of
-  the Windows-only Model Editor. It is the second answer to the same support ticket, but it does not use the
+  model tree, values, node actions, languages, shared differences and merging a user's differences into them,
+  edited in the running app instead of the Windows-only Model Editor. It is the second answer to the same support ticket, but it does not use the
   builder and will probably move to a repository of its own once it is packaged (MODELEDITOR-012).
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
 ## Latest changes
 
-Session of 2026-09-15: 0.3.0 released to GitHub Packages, then the Model Editor gained languages (MODELEDITOR-008) and Edit Shared Model (MODELEDITOR-010).
+Session of 2026-09-19: the Model Editor shows a node's differences as XML and the loaded modules, generates the content of a view added in it, and merges a user's differences into the shared model (MODELEDITOR-009).
 One line per change is in [CHANGELOG.md](CHANGELOG.md), the detail in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
 ## Screenshots

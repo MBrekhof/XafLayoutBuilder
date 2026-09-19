@@ -38,6 +38,15 @@ public sealed record FilterField(string FieldName, string Caption, Type Type, bo
 public sealed record LocalizationRow(IModelNode Node, string Name, string DefaultText, string TranslatedText, bool IsTranslated);
 
 /// <summary>
+/// What Merge Differences moves (MODELEDITOR-009): the node's ids, the user layer's XML per language pruned to the node, the
+/// ids of the added and deleted nodes in it, which the shared layer must not hold already, whether the node itself was
+/// added by the user, who then deletes it where a generated node is reset, and the ids of every node in it that is not a
+/// deletion, which the shared model must still hold once merged (SharedModelSession.FirstMissing).
+/// </summary>
+public sealed record MergeDifferences(IReadOnlyList<string> Ids, IReadOnlyList<(string Aspect, string Xml)> Xml,
+    IReadOnlyList<IReadOnlyList<string>> Structural, bool IsNewNode, IReadOnlyList<IReadOnlyList<string>> Nodes);
+
+/// <summary>
 /// The editor's model logic, kept out of the component so it runs against an in-process model in tests. Reads go through
 /// every layer; writes and resets go to the node's writable layer, which in a running application is the current user's
 /// differences (ModelNode.SetValue 2598-2601, ClearValue 2368-2383, IsValueModified 899-903). Verified API: docs/api-notes.md.
@@ -670,6 +679,168 @@ public static class ModelEditing {
         return EmptyAspects(layer).Except(before).ToList();
     }
 
+    // MODELEDITOR-009: the node's differences as XML, Merge Differences and Generate Content.
+
+    // The node in the model's writable layer itself, found by ids as ModelEditorHelper.GetNodeInLayer finds it by path
+    // (ModelEditorHelper.cs 350-353: it never creates); null when the layer holds nothing of the node.
+    static List<ModelNode>? LayerChain(ModelApplicationBase model, IModelNode node) {
+        var chain = new List<ModelNode>();
+        ModelNode? current = model.LastLayer;
+        foreach (var id in Ids(node)) {
+            if ((current = current.GetNodeInThisLayer(id)) is null) return null;
+            chain.Add(current);
+        }
+        return chain;
+    }
+
+    /// <summary>
+    /// The node's differences in the writable layer as XML, one entry per language that holds any ("" the default language):
+    /// the WinForms editor's Show Differences (ModelEditorViewController.cs 795-805), which shows the current aspect only.
+    /// </summary>
+    public static IReadOnlyList<(string Aspect, string Xml)> DifferencesXml(ModelApplicationBase model, IModelNode node) {
+        if (LayerChain(model, node) is not { Count: > 0 } chain) return [];
+        var layer = model.LastLayer;
+        var writer = new ModelXmlWriter();
+        return Enumerable.Range(0, layer.AspectCount)
+            .Select(i => (Aspect: layer.GetAspect(i), Xml: writer.WriteToString(chain[^1], i)))
+            .Where(x => !HoldsNothing(x.Xml, chain[^1].KeyValueName))
+            .ToList();
+    }
+
+    // A list node is always written with its key, so a node without differences in a language is an element with nothing else.
+    static bool HoldsNothing(string xml, string? key) {
+        if (xml.Length == 0) return true;
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(xml);
+        var element = document.DocumentElement!;
+        return !element.HasChildNodes && element.Attributes.Cast<System.Xml.XmlAttribute>().All(a => a.Name == key);
+    }
+
+    /// <summary>
+    /// Whether the model's writable layer holds differences of the node, asked of the layer's own node. ModelNode.HasModification
+    /// and Undo on the merged node miss them when a layer in between holds the node too, as the shared differences do below a
+    /// user's (measured in ModelEditorMergeTests: HasModification false, Undo without effect, with Width set in the user layer).
+    /// </summary>
+    public static bool IsModified(ModelApplicationBase model, IModelNode node) =>
+        LayerChain(model, node) is { Count: > 0 } chain && chain[^1].HasModification;
+
+    /// <summary>Takes back the node's differences in the model's writable layer (ModelNode.Undo, 609-637), on the layer's own node.</summary>
+    public static void UndoInLayer(ModelApplicationBase model, IModelNode node) {
+        if (LayerChain(model, node) is { Count: > 0 } chain) chain[^1].Undo();
+    }
+
+    /// <summary>
+    /// What Merge Differences moves into the shared differences: the writable layer's XML per language, pruned to the node's
+    /// path. The WinForms editor moves the node with ModelNode.MoveNodeToOtherLayer (3552-3605), which is internal and refuses a
+    /// layer of another model, and XAF Blazor's shared differences are no layer a circuit can write (MODELEDITOR-010); XML is
+    /// what every store reads a layer from. Reading it over a layer is no structural move (Codex plan review), so what it
+    /// cannot express is refused here: a node under one the user added, a replaced node (deleted and added again), and an
+    /// added node the model also has of its own, whose Delete would leave a tombstone hiding the merged node (CanRemoveNode,
+    /// ModelNode.cs 737-761). Called outside a shared session's scope: it reads the circuit's model.
+    /// </summary>
+    public static MergeDifferences DifferencesForMerge(ModelApplicationBase model, IModelNode node) {
+        if (LayerChain(model, node) is not { Count: > 0 } chain)
+            throw new InvalidOperationException($"{Path(node)} has no differences of your own to merge.");
+        var ids = Ids(node);
+        for (var i = 0; i < chain.Count - 1; i++) {
+            if (chain[i].IsNewNode)
+                throw new InvalidOperationException($"{string.Join("/", ids.Take(i + 1))} is a node you added; merge that node instead.");
+        }
+        var layerNode = chain[^1];
+        var structural = new List<IReadOnlyList<string>>();
+        var nodes = new List<IReadOnlyList<string>>();
+        // Deleted: the node or one above it is a deletion. A deleted node keeps the differences under it (ModelNode._Delete,
+        // 771-791, only sets the flags), and the merged model holds none of those nodes (Codex re-review).
+        var stack = new Stack<(ModelNode Node, IReadOnlyList<string> Ids, bool Deleted)>([(layerNode, ids, false)]);
+        while (stack.Count > 0) {
+            var (current, currentIds, underDeleted) = stack.Pop();
+            var deleted = underDeleted || current.IsRemovedNode;
+            if (current.IsNewNode && current.IsRemovedNode)
+                throw new InvalidOperationException($"{string.Join("/", currentIds)} replaces a node of the model (deleted and added again); make that change in Edit Shared Model.");
+            if (current.IsNewNode || current.IsRemovedNode) structural.Add(currentIds);
+            if (!deleted) nodes.Add(currentIds);
+            for (var i = 0; i < current.NodeCountInThisLayer; i++) {
+                var child = current.GetNodeInThisLayer(i);
+                stack.Push((child, [.. currentIds, child.Id], deleted));
+            }
+        }
+        // The layers that hold the node (ModelNode.EnumerateAllLayers, 3469-3496): more than the user's own means the model has
+        // a node of this id too, a module's since the user added theirs, say (Codex plan review 2).
+        if (layerNode.IsNewNode && layerNode.EnumerateAllLayers().Count() > 1)
+            throw new InvalidOperationException($"Your {Path(node)} shadows a node the model has of its own, and deleting yours would hide that one too. " +
+                "An administrator can reset your differences for it.");
+        var layer = model.LastLayer;
+        var writer = new ModelXmlWriter();
+        var xml = Enumerable.Range(0, layer.AspectCount)
+            .Select(i => (Aspect: layer.GetAspect(i), Xml: PrunedTo(chain, writer.WriteToString(layer, i))))
+            .Where(x => x.Xml.Length > 0)
+            .ToList();
+        return new(ids, xml, structural, layerNode.IsNewNode, nodes);
+    }
+
+    // The layer's XML as its store writes it, cut down to the path: siblings dropped, ancestors left with their key only. The
+    // keys are the writer's own; it omits them for some nodes (Codex plan review).
+    static string PrunedTo(IReadOnlyList<ModelNode> chain, string layerXml) {
+        if (layerXml.Length == 0) return "";
+        var document = new System.Xml.XmlDocument();
+        document.LoadXml(layerXml);
+        var current = document.DocumentElement!;
+        current.Attributes.RemoveAll();
+        for (var i = 0; i < chain.Count; i++) {
+            var layerNode = chain[i];
+            var key = layerNode.KeyValueName;
+            var match = current.ChildNodes.OfType<System.Xml.XmlElement>().FirstOrDefault(e => e.Name == layerNode.GetXmlName()
+                && (string.IsNullOrEmpty(key) || !e.HasAttribute(key) || e.GetAttribute(key) == layerNode.Id));
+            if (match is null) return ""; // this language holds nothing of the node
+            foreach (var other in current.ChildNodes.Cast<System.Xml.XmlNode>().Where(n => n != match).ToList()) current.RemoveChild(other);
+            if (i < chain.Count - 1) {
+                foreach (var attribute in match.Attributes.Cast<System.Xml.XmlAttribute>().Where(a => a.Name != key).ToList()) match.Attributes.Remove(attribute);
+            }
+            current = match;
+        }
+        return document.OuterXml;
+    }
+
+    /// <summary>
+    /// Reads the differences into the shared layer, before it joins its model, as its store read the rest
+    /// (ModelXmlReader.ReadFromString; ApplicationModelsManager.cs 411 loads stores the same way). A node of the layer is
+    /// reused, so values merge per language. An added or deleted node the shared layer itself already holds is refused: the
+    /// native move clears or removes the target there (ModelNode.cs 3751-3810), reading XML over it does not. ponytail:
+    /// stricter than the move for a deletion over a shared node that only holds values.
+    /// </summary>
+    public static void MergeInto(ModelApplicationBase sharedLayer, MergeDifferences differences) {
+        foreach (var ids in differences.Structural) {
+            ModelNode? found = sharedLayer;
+            foreach (var id in ids) {
+                if ((found = found.GetNodeInThisLayer(id)) is null) break;
+            }
+            if (found is not null)
+                throw new InvalidOperationException($"The shared model has differences of its own for {string.Join("/", ids)}, which you added or deleted; make that change in Edit Shared Model.");
+        }
+        var reader = new ModelXmlReader();
+        foreach (var (aspect, xml) in differences.Xml) reader.ReadFromString(sharedLayer, aspect, xml);
+    }
+
+    /// <summary>Whether the WinForms editor offers Generate Content for the node (ModelEditorHelper.IsGenerateContentNode, 231-241): views and a DetailView's layout.</summary>
+    public static bool IsGenerateContentNode(IModelNode node) => ModelEditorHelper.IsGenerateContentNode((ModelNode)node);
+
+    /// <summary>
+    /// Runs the node's generators again and merges what they generate into it (ModelEditorHelper.GenerateContent, 242-257).
+    /// The helper works through a temporary sibling it deletes only when nothing throws, so a sibling left behind is removed
+    /// here (Codex plan review).
+    /// </summary>
+    public static void GenerateContent(IModelNode node) {
+        var parent = node.Parent;
+        var before = Enumerable.Range(0, parent.NodeCount).Select(i => Id(parent.GetNode(i))).ToHashSet();
+        try {
+            ModelEditorHelper.GenerateContent((ModelNode)node);
+        }
+        finally {
+            foreach (var leftover in Enumerable.Range(0, parent.NodeCount).Select(parent.GetNode).Where(n => !before.Contains(Id(n))).ToList())
+                leftover.Remove();
+        }
+    }
+
     /// <summary>The value the text stands for, (false, _) for a clear; throws when it is none. Changes nothing.</summary>
     internal static (bool Set, object? Value) ParseText(IModelNode node, string name, string text) => Parse((ModelNode)node, name, text);
 
@@ -890,6 +1061,7 @@ public sealed class ModelEditSession {
     readonly List<IModelNode> added = [];
     readonly HashSet<IModelNode> deletes = [];
     readonly HashSet<IModelNode> nodeResets = [];
+    readonly Dictionary<IModelNode, ModelApplicationBase> resetModels = [];
     // Values the editor cleared on added nodes or nodes under them, which a warmed-up model still returns from its cache (Codex review).
     readonly HashSet<(IModelNode Node, string Name)> cleared = [];
     // Lookup values the editor set on added nodes or nodes under them (Codex review 5).
@@ -912,6 +1084,25 @@ public sealed class ModelEditSession {
         var node = ModelEditing.Clone(source, id);
         added.Add(node);
         return node;
+    }
+
+    /// <summary>
+    /// MODELEDITOR-009, Generate Content. ponytail: only for a node added in this session, or under one. The generated nodes are
+    /// written at once; there they go with the node on close or before a foreign save (RollbackAdded), and Saved records the
+    /// node's whole subtree for the replay. On a stock view the WinForms editor also offers it, to bring back deleted
+    /// generated nodes; Reset node does that here.
+    /// </summary>
+    public bool CanGenerateContent(IModelNode node) => ModelEditing.IsGenerateContentNode(node) && IsAddedOrUnder(node);
+
+    public void GenerateContent(IModelNode node) {
+        if (!CanGenerateContent(node))
+            throw new InvalidOperationException("Content is generated for a view added in this editor session only.");
+        // The generators read the model, which does not hold the pending edits yet (Codex plan review).
+        if (pending.Count > 0 || deletes.Count > 0 || nodeResets.Count > 0)
+            throw new InvalidOperationException("Save the pending edits first: the content is generated from the saved model.");
+        if (MissingRequired(node) is { Count: > 0 } missing)
+            throw new InvalidOperationException($"{ModelEditing.Path(node)}: {string.Join(", ", missing)} required before its content can be generated.");
+        ModelEditing.GenerateContent(node);
     }
 
     /// <summary>
@@ -951,7 +1142,8 @@ public sealed class ModelEditSession {
     public bool IsPendingDelete(IModelNode node) => deletes.Contains(node);
 
     /// <summary>Takes back every difference of the node on Apply (ModelNode.Undo, ModelNode.cs 609-637).</summary>
-    public void ResetNode(IModelNode node) {
+    /// <param name="model">The node's model: the reset then runs on the writable layer's own node (ModelEditing.UndoInLayer).</param>
+    public void ResetNode(IModelNode node, ModelApplicationBase? model = null) {
         ThrowIfPendingLookup();
         if (!CanResetNode(node))
             throw new InvalidOperationException($"{ModelEditing.Path(node)} exists only in your model differences; delete it instead of resetting it.");
@@ -959,6 +1151,7 @@ public sealed class ModelEditSession {
             || added.Any(a => IsAtOrUnder(a, [node])))
             throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before resetting it.");
         nodeResets.Add(node);
+        if (model is not null) resetModels[node] = model;
     }
 
     // A lookup's choices are worked out from the model as it is, and can depend on other values, of the node or elsewhere (a
@@ -1060,6 +1253,7 @@ public sealed class ModelEditSession {
         pending.Clear();
         deletes.Clear();
         nodeResets.Clear();
+        resetModels.Clear();
         CloseWarned = false;
         var applied = writes.Count > 0;
         writes.Clear();
@@ -1159,7 +1353,7 @@ public sealed class ModelEditSession {
         }
         pending.Clear();
         foreach (var node in nodeResets.Where(n => !IsDeleted(n))) {
-            Action write = () => ((ModelNode)node).Undo();
+            Action write = resetModels.Remove(node, out var model) ? () => ModelEditing.UndoInLayer(model, node) : () => ((ModelNode)node).Undo();
             write();
             writes.Add((node, write));
         }

@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated 2026-09-15 (0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
+Updated 2026-09-19 (MODELEDITOR-009 in Review, MODELEDITOR-014 minted; before that 2026-09-15: 0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences in Review; MODELEDITOR-013 tree icons, GROUP-001 grouping, APPEAR-001 appearance rules and the MODELEDITOR-003 review fix, all in Review). Session plan: `XafLayoutBuilder-START.md`
 section 9.
 
 **State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 98 unit tests
@@ -8,13 +8,51 @@ pass, and the E2E gate exits 0 with every assertion from section 8 plus the roun
 startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
 Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
 
+## Session 2026-09-19: MODELEDITOR-009 (differences XML, modules, Generate content, Merge to shared)
+
+Plan with both Codex plan-review rounds and the diff review: `docs/plans/2026-09-19-modeleditor-009-differences-merge-modules.md`.
+Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the Model Editor section).
+
+- **Differences** shows what the writable layer holds of the node as XML, one block per language; **Modules** lists
+  `Application.Modules`. In the running app a caption is saved in the circuit's language (en-US), not the default aspect.
+- **Generate content** (`ModelEditorHelper.GenerateContent`, works on a collapsed model) is offered only on a node added in
+  the current session, or under one: there the generated nodes go with the node on close and `Saved` records the subtree
+  for the replay. On a stock view WinForms offers it too; Reset node covers that here. A sibling the helper leaves behind
+  when a generator throws is removed.
+- **Merge to shared** moves a node's saved differences from the user's record into the shared one. WinForms' route
+  (`ModelNode.MoveNodeToOtherLayer`) is internal and refuses a layer of another model, so the editor moves XML: the user
+  layer written per aspect, pruned to the node's path (the writer's own keys), read into the shared layer before it joins
+  its model (`SharedModelSession`'s `preload`), saved with the MODELEDITOR-010 `Persist` (snapshot, verify, version bump).
+  Shared first, then Reset node (or Delete for a node the user added) and the user's own save, whose stored record is
+  checked. Refused, because XML read over a layer is no structural move: a node under one the user added, a replaced node,
+  an added node the model also has of its own (its Delete would leave a tombstone), an added or deleted node the shared
+  layer already holds, and any node of the subtree the shared model no longer has. Not done: several nodes at once, a
+  choice of values, a merge into Model.xafml.
+- **Bug found in the existing editor, reproduced in a test:** once the shared differences hold a node, XAF reports the
+  user's own differences on it as unmodified (`HasModification`, `IsValueModified` false) and `Undo()` does nothing. Node
+  level fixed here through the writable layer's own node (bold mark, Reset node, Merge). **Value level is open:
+  MODELEDITOR-014 (#1755)**, where whether `ClearValue` is affected too is not measured yet. Support request item 15;
+  item 14 is the merge API.
+- **Read in code, unverified, not filed:** after an Apply whose save threw, closing the editor twice unsubscribes
+  `BeforeSave` without `Discard`, so the applied edits would stay in the live user layer for XAF's deferred save
+  (`ModelEditorController.cs` 114-121). Needs a failed save first.
+- **Known leftover:** if the store refuses the user's own save after the shared save went through, the differences are in
+  both records; for values a second Merge settles it, an added node's left-over copy needs an administrator to reset that
+  user's differences (the refusal says so).
+- Screenshot 17 was retaken from this gate run (the open step of 2026-09-15); e2e-32 (differences and modules) and e2e-33
+  (generated columns) are new and not in the README.
+
+15 unit tests (277 in total), gate exit 0. Codex: two plan-review rounds (five P1s, settled by refusing what the XML route
+cannot express and by narrowing Generate content), a diff review (one P1, one P2) and a re-review (one P2), all fixed;
+the last fix was not re-reviewed again. RUNTIME-001 (#1688) is still in Todo although decided (allow) on 2026-09-15.
+
 ## Session 2026-09-15: release 0.3.0 and MODELEDITOR-008
 
 **Docs follow-up (2026-09-15, after the session):** README's "Latest changes" is one line per session plus links (the
 rule is in CLAUDE.md); the Model Editor is named as the second answer to the ticket that will probably move to its own
 repository once packaged; screenshots 14-17 (translate, shared model, shared as user, validation) copied from the gate's
-e2e-28/30/31/27. **Open:** the gate now scrolls to the PropertyName row before e2e-27; after the next gate run copy
-`e2e-27-model-editor-required-reset.png` over `docs/screenshots/17-model-editor-validation.png`.
+e2e-28/30/31/27. The gate scrolls to the PropertyName row before e2e-27; screenshot 17 was retaken from the gate run of
+2026-09-19.
 
 PKG-003 (1b9d5d2): `System.Security.Cryptography.Xml` 10.0.12 pinned in Blazor, ModelEditor and the sample module; the
 DevExpress Blazor package pulled in 9.0.0 with eight NU1903 advisories. Release 0.3.0 (fc76eb5): Core, Module, Blazor and,

@@ -94,6 +94,10 @@ and model-only classes in the Win assembly that can be ported: `ExtendModelInter
 
 ## Differences, merge, modules (MODELEDITOR-009)
 
+Done 2026-09-19: Differences (every language, not only the current one), Modules, Generate content (on a node added in
+the session only) and Merge to shared (user differences into the shared record, since Model.xafml is not writable in a
+deployed Blazor host; one node at a time, no choice of values). Facts and refusals: `docs/api-notes.md`.
+
 - Show differences XML: VC 1080, 2187 → `ModelEditorHelper.GetNodeInLayer(node, LastLayer).Xml`, current aspect only.
 - Merge Differences: VC 2140-2157, 2289-2319 → `ModelEditorHelper.MoveNodeToOtherLayer` (393, (Never)) → internal
   `ModelNode.MoveNodeToOtherLayer` (3552) into the application `Model.xafml` store (`WinApplication.cs` 503-508);

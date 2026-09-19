@@ -38,14 +38,7 @@ internal static class StoredAspectCleanup {
 
     /// <summary>The same for a given store and record: the shared record has user id "" (MODELEDITOR-010).</summary>
     public static void ClearEmptied(XafApplication application, ModelDifferenceDbStore store, string userIdText, int layerVersion, IReadOnlyCollection<string> emptied) {
-        if (emptied.Count == 0) return;
-        // ponytail: the store's ModelDifferenceType is internal, so the application's one persistent IModelDifference class
-        // stands in for it; with more than one the cleanup is skipped (the stale row stays until someone clears it).
-        var types = application.TypesInfo.PersistentTypes
-            .Where(t => t.IsPersistent && !t.IsAbstract && typeof(IModelDifference).IsAssignableFrom(t.Type))
-            .ToList();
-        if (types.Count != 1) return;
-        var type = types[0].Type;
+        if (emptied.Count == 0 || DifferenceType(application) is not { } type) return;
         using var objectSpace = store.CreateObjectSpaceHandler(application, type);
         if (ModelDifferenceDbStore.FindModelDifference(objectSpace, type, userIdText, store.ContextId) is not { } difference
             || !StoreAcceptsSaveFrom(difference, layerVersion)) return;
@@ -57,6 +50,31 @@ internal static class StoredAspectCleanup {
             }
         }
         if (changed) objectSpace.CommitChanges();
+    }
+
+    // ponytail: the store's ModelDifferenceType is internal, so the application's one persistent IModelDifference class
+    // stands in for it; with more than one the cleanup is skipped (the stale row stays until someone clears it).
+    static Type? DifferenceType(XafApplication application) {
+        var types = application.TypesInfo.PersistentTypes
+            .Where(t => t.IsPersistent && !t.IsAbstract && typeof(IModelDifference).IsAssignableFrom(t.Type))
+            .ToList();
+        return types.Count == 1 ? types[0].Type : null;
+    }
+
+    /// <summary>
+    /// MODELEDITOR-009: whether the user's stored record holds the user layer after a save; true when that cannot be told. The
+    /// database store refuses a save in silence (ModelDifferenceDbStore.cs 181, 209), and after a merge that leaves the merged
+    /// differences in both layers, which the editor then says (Codex plan review 2).
+    /// </summary>
+    public static bool UserRecordHolds(XafApplication application) {
+        if (((ModelApplicationBase)application.Model).LastLayer is not { } userLayer
+            || !Stores.TryGetValue(application, out var store)
+            || application.Security?.UserId is not { } userId
+            || DifferenceType(application) is not { } type) return true;
+        using var objectSpace = store.CreateObjectSpaceHandler(application, type);
+        var rows = SharedModel.StoredRows(ModelDifferenceDbStore.FindModelDifference(objectSpace, type,
+            ModelDifferenceDbStore.UserIdTypeConverter.ConvertToInvariantString(userId) ?? "", store.ContextId));
+        return SharedModel.StoredHolds(userLayer, aspect => rows.GetValueOrDefault(aspect));
     }
 
     /// <summary>

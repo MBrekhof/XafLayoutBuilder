@@ -661,6 +661,37 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   in `BlazorApplication.LoadUserDifferences`), unless the user-store event answers with no store: `SaveModelChanges`
   saves nothing then (`XafApplication.cs` 2497-2506; `CreateUserModelDifferenceStore` 408-414 takes `Handled` with a
   null `Store`).
+- **Differences XML, Generate Content, Merge Differences (MODELEDITOR-009).** The WinForms editor shows
+  `ModelEditorHelper.GetNodeInLayer(node, LastLayer).Xml` (`ModelEditorViewController.cs` 795-805); `GetNodeInLayer` is
+  `FindNodeByPath(path, layer, inThisLayer: true, false)` and never creates (`Model/ModelEditorHelper.cs` 71-94, 350-353),
+  `ModelNode.Xml` writes the current aspect only (`Model/Core/ModelNode.cs` 3501-3503). The editor walks the layer by ids
+  (`GetNodeInThisLayer`, 1096) and writes every aspect with `ModelXmlWriter.WriteToString(node, aspectIndex)`
+  (`Model/ModelXmlWriter.cs` 108); a list node is always written with its key, so an element with nothing but its key
+  holds nothing. A collapsed node's `Root` is not the circuit's model (its `LastLayer` is null, measured), so these take
+  the model as an argument. `ModelEditorHelper.IsGenerateContentNode` (231-241) is true for a node with a child list
+  whose generator carries a visible `[ModelGenerateContentAction]`: `ModelListViewNodesGenerator.cs` 95,
+  `ModelDetailViewNodesGenerator.cs` 64, `ModelDetailViewLayoutNodesGenerator.cs` 49. `GenerateContent` (242-257) works
+  through a temporary sibling that it deletes only when nothing throws; it works on a collapsed model (test). Merge
+  Differences in WinForms is `ModelEditorHelper.MoveNodeToOtherLayer` (393-409) into a module layer of the same model
+  (`ModelNode.GetModuleLayerById`, internal, 3529) through the internal `ModelNode.MoveNodeToOtherLayer` (3552-3605), which
+  throws "The node and the layer belong to different models" for any other layer (3565). The shared differences are no
+  layer a circuit can write, so the editor moves XML instead: the user layer written per aspect as its store writes it,
+  pruned to the node's path, read into the shared layer with `ModelXmlReader.ReadFromString` (347) before that layer
+  joins its model, the way `ApplicationModelsManager` loads stores before attaching layers (411). `AddChildNodeFromXml`
+  reuses a node the layer holds (3396-3399), so values merge per aspect, and sets only the flags the XML carries
+  (`IsNewNode`; a deletion is written as `Removed="True"`), where the native move clears a replaced target and removes a
+  deleted new one (3751-3810): a replaced node and an added or deleted node the shared layer already holds are refused.
+  `Delete` removes a node physically only when no other layer holds one of that id and leaves a tombstone otherwise
+  (`CanRemoveNode` 737-761, `_Delete` 771-791); the layers holding a node are `EnumerateAllLayers()` on the layer's node
+  (3469-3496, public).
+- **HasModification and Undo miss the user layer when a layer in between holds the node (MODELEDITOR-009, measured in
+  `ModelEditorMergeTests`).** Model: shared layer with `<ColumnInfo Id="Phone" Caption=... />`, user layer on top, collapsed.
+  After `phone.Width = 123` the user layer's XML holds the width and `GetValue` returns it, but on the merged node
+  `HasModification` and `IsValueModified("Width")` are false and `Undo()` changes nothing; without the shared layer's
+  node all three work. On the user layer's own node (`GetNodeInThisLayer` down the path) `HasModification` is true and
+  `Undo()` clears the differences. The editor asks the layer's node for a node's bold mark, Reset node and Merge
+  (`ModelEditing.IsModified(model, node)`, `UndoInLayer`). The value-level calls (`IsValueModified`, `ClearValue`) on the
+  merged node are still used for a value's bold mark and Reset: MODELEDITOR-014 (#1755).
 
 ## Conditional appearance (APPEAR-001)
 

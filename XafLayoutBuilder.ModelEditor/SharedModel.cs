@@ -99,10 +99,11 @@ public static class SharedModel {
             : application.CreateObjectSpace(type);
 
     /// <summary>Opens a session over the application's shared differences, in the application's current language.</summary>
-    public static SharedModelSession Open(XafApplication application) {
+    /// <param name="preload">Differences to read into the shared layer first (MODELEDITOR-009, ModelEditing.MergeInto).</param>
+    public static SharedModelSession Open(XafApplication application, Action<ModelApplicationBase>? preload = null) {
         var store = CreateStore(application) ?? throw new InvalidOperationException("XafModelEditorModule.SharedDifferences is not set.");
         return new SharedModelSession(((IApplicationModelManagerProvider)application).GetModelManager(), store,
-            ((ModelApplicationBase)application.Model).CurrentAspect, application);
+            ((ModelApplicationBase)application.Model).CurrentAspect, application, preload);
     }
 }
 
@@ -133,13 +134,18 @@ public sealed class SharedModelSession : IDisposable {
     public ModelDifferenceStore Store => store;
 
     /// <param name="application">The application whose database the store writes, for the check after a save; null skips it (the tests).</param>
-    public SharedModelSession(ApplicationModelManager manager, ModelDifferenceStore store, string currentAspect, XafApplication? application = null) {
+    /// <param name="preload">MODELEDITOR-009: reads more differences into the shared layer before it joins the model, as a
+    /// store loads them (ModelEditing.MergeInto); it must not touch the circuit's model, whose storage is swapped out here.</param>
+    public SharedModelSession(ApplicationModelManager manager, ModelDifferenceStore store, string currentAspect, XafApplication? application = null,
+        Action<ModelApplicationBase>? preload = null) {
         this.store = store;
         this.application = application;
         using (Enter()) {
             // Just the store's differences: a node added to the layer beforehand, as XafApplication.LoadUserDifferences adds
             // Options and Views to the user layer (1503-1511), made the warmed-up unchangeable layer reset a node it must not.
+            // Differences read from XML are what the store itself gives the layer.
             layer = manager.CreateLayerByStore("SharedDiff", store);
+            preload?.Invoke(layer);
             Model = manager.CreateModelApplication([layer]);
             // Collapsed as XAF collapses every circuit's model (XafApplication.SetupModelApplication 491-505): values come from a
             // cache, and a reset shows its old value until the reload after Save, as in the user model (MODELEDITOR-002).
@@ -158,6 +164,26 @@ public sealed class SharedModelSession : IDisposable {
     /// (ValueManagerContext.cs 55-66, 91-97).
     /// </summary>
     public IDisposable Enter() => ValueManagerContext.IsActive ? new StorageScope(storage) : NoScope.Instance;
+
+    /// <summary>
+    /// MODELEDITOR-009: whether the session's model holds a node of these ids. A merged difference for a node the shared model
+    /// lost since the user's circuit was built would be unusable, and the user's own copy is reset right after (Codex plan review 2).
+    /// </summary>
+    public bool HasNode(IReadOnlyList<string> ids) => Run(() => {
+        IModelNode? node = Model;
+        foreach (var id in ids) {
+            if ((node = node.GetNode(id)) is null) return false;
+        }
+        return true;
+    });
+
+    /// <summary>
+    /// The first of the merged nodes the session's model does not hold, as a path; null when it holds them all. A difference
+    /// for a node the shared model lost since the user's circuit was built, at any depth, is dropped as unusable when the
+    /// model is built, and the user's copy is reset right after the merge (Codex diff review).
+    /// </summary>
+    public string? FirstMissing(IEnumerable<IReadOnlyList<string>> nodes) =>
+        nodes.FirstOrDefault(ids => !HasNode(ids)) is { } missing ? string.Join("/", missing) : null;
 
     public void Run(Action action) {
         using (Enter()) action();
