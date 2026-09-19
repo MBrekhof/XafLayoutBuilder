@@ -55,7 +55,13 @@ Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the
   level fixed here through the writable layer's own node (bold mark, Reset node, Merge). **Value level is open:
   MODELEDITOR-014 (#1755)**, where whether `ClearValue` is affected too is not measured yet. Support request item 15;
   item 14 is the merge API.
-- **Reproduced later the same day, MODELEDITOR-016 (#1757), open:** after a Save whose store write fails, closing the
+- **MODELEDITOR-016 (#1757), fixed the same day, in Review:** `ModelEditorController.SuppressUserModelSave` stops the
+  circuit storing its user model at all, and both ways of discarding (Reload, and the second close) use it and reload the
+  page; the guard used to hang off the popup's view, so closing lost it. The gate step (a check constraint makes one save
+  fail) was red first and found a second bug on the way: Reload right after a failed Save was refused by the
+  stale-selection guard and did nothing until a second click (`Run(..., checkSelection: false)` now). Codex's plan review:
+  no P1s, two revisions taken (the shared editor must not suppress the user's model; the gate must prove the close
+  reloads). Plan: `docs/plans/2026-09-19-modeleditor-016-failed-save-then-close.md`. **Was, before the fix:** after a Save whose store write fails, closing the
   editor twice ("close again to discard") unsubscribes `BeforeSave` without `Discard` (`ModelEditorController.cs` 114-121),
   and XAF's deferred save stores the abandoned edit at the next logon. Measured with a throwaway gate step (a temporary
   SQL check constraint made one save fail): nothing stored right after the failed save, the caption stored and shown after

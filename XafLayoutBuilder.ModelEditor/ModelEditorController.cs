@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.AspNetCore.Components;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
 using DevExpress.ExpressApp.Blazor;
@@ -114,12 +115,50 @@ public sealed class ModelEditorController : ViewController<ObjectView> {
         view.Closed += (_, _) => {
             application.CreateCustomUserModelDifferenceStore -= beforeSave;
             if (view.IsDisposed) return;
+            var discardedApplied = false;
             foreach (var editor in view.GetItems<ModelEditorPropertyEditor>()) {
-                editor.InModel(editor.Session.RollbackAdded);
+                // MODELEDITOR-016: Discard, not RollbackAdded alone. A Save whose store write failed leaves its edits in the
+                // live model, and closing the popup is the second way of discarding them (the first close warns).
+                editor.InModel(() => {
+                    if (editor.Session.Discard() && editor.Shared is null) discardedApplied = true;
+                });
                 editor.Shared?.Dispose();
+            }
+            // Those edits cannot be taken out of a warmed-up model, so this circuit's user model must not be stored at all, and
+            // the page reloads as Reload does: the new circuit builds its model from what is stored.
+            if (discardedApplied) {
+                SuppressUserModelSave(application);
+                ReloadPage(application);
             }
         };
         application.ShowViewStrategy.ShowViewInPopupWindow(view);
+    }
+
+    /// <summary>
+    /// MODELEDITOR-016: nothing of this circuit's user model is stored from now on. Its edits were written to the live model by
+    /// an Apply whose save then failed and were discarded afterwards; a warmed-up model cannot take them back, so the only way
+    /// not to store them is to store nothing (SaveModelChanges saves nothing without a store, XafApplication.cs 2497-2506;
+    /// CreateUserModelDifferenceStore 408-414 takes Handled with a null Store). Every later save of this application is
+    /// suppressed, the deferred one XAF flushes at the circuit's close or the user's next logon included, so the page reloads
+    /// right after. ponytail, as MODELEDITOR-010 already accepted for Reload: the circuit's other runtime customisations since
+    /// its last save go with them.
+    /// </summary>
+    public static void SuppressUserModelSave(XafApplication application) =>
+        application.CreateCustomUserModelDifferenceStore += (_, e) => {
+            e.Store = null;
+            e.Handled = true;
+        };
+
+    // The same full reload the editor's Save and Reload do, from outside the component. A circuit whose browser is already
+    // gone cannot navigate; the suppression above is what makes that safe (Codex plan review).
+    static void ReloadPage(XafApplication application) {
+        try {
+            if (application.ServiceProvider?.GetService(typeof(NavigationManager)) is NavigationManager navigation)
+                navigation.NavigateTo(navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex) {
+            Tracing.Tracer.LogError(ex);
+        }
     }
 
     // ponytail: a view disposed without Closed leaves the handler subscribed until the application goes; it does nothing then.
@@ -129,15 +168,8 @@ public sealed class ModelEditorController : ViewController<ObjectView> {
             if (editor.Session.Saving) continue;
             // A shared session's nodes and edits live in its own model, which no user-model save touches.
             if (editor.Shared is not null) continue;
-            // Edits an Apply wrote to the user layer and Reload then discarded cannot be taken out of the live model; this
-            // circuit's user model must not be stored at all then (SaveModelChanges saves nothing without a store,
-            // XafApplication.cs 2497-2506), the reload's deferred flush included. The next circuit reads what is stored (Codex
-            // review 2). ponytail: the circuit's other runtime customisations since its last save go with them.
-            if (editor.Session.DiscardedApplied) {
-                e.Store = null;
-                e.Handled = true;
-                continue;
-            }
+            // Edits an Apply wrote and Reload or a close then discarded are handled by SuppressUserModelSave, which outlives
+            // this popup (MODELEDITOR-016); this handler only runs while the editor is open.
             editor.Session.RollbackAdded();
             editor.Session.ReplaySaved();
         }

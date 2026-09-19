@@ -660,7 +660,12 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   an Apply had already written to the user layer would still be stored by XAF's deferred save at the reload (the flush
   in `BlazorApplication.LoadUserDifferences`), unless the user-store event answers with no store: `SaveModelChanges`
   saves nothing then (`XafApplication.cs` 2497-2506; `CreateUserModelDifferenceStore` 408-414 takes `Handled` with a
-  null `Store`).
+  null `Store`). **MODELEDITOR-016:** that guard must outlive the popup. It used to hang off the popup's view
+  (`Session.DiscardedApplied`, read by a handler the view's `Closed` unsubscribes), so closing the editor lost it, and XAF's
+  deferred save stored the discarded edit at the user's next logon (reproduced in the gate: a check constraint on
+  `ModelDifferenceAspects` makes one save fail). `ModelEditorController.SuppressUserModelSave` subscribes a handler for the
+  rest of the application's life instead, and both ways of discarding, Reload and the second close, use it and then reload
+  the page. A failed *shared* save leaves the user's own model alone and does not suppress it.
 - **Differences XML, Generate Content, Merge Differences (MODELEDITOR-009).** The WinForms editor shows
   `ModelEditorHelper.GetNodeInLayer(node, LastLayer).Xml` (`ModelEditorViewController.cs` 795-805); `GetNodeInLayer` is
   `FindNodeByPath(path, layer, inThisLayer: true, false)` and never creates (`Model/ModelEditorHelper.cs` 71-94, 350-353),

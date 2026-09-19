@@ -56,7 +56,8 @@ using Microsoft.Playwright;
 //            shared record now holds works too (the node is bold, its differences leave Admin's record), and Generate content
 //            fills the columns of a ListView added in the editor, which closing without Save takes away again
 //            MODELEDITOR-014: a value Admin sets on a node the shared record holds offers Reset, and the saved Reset takes it
-//            out of Admin's record
+//            out of Admin's record; MODELEDITOR-016: after a Save whose store write fails, an edit discarded by closing the
+//            editor twice, or by Reload, is not stored at the next logon
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -107,6 +108,8 @@ try
         // MODELEDITOR-010: the shared record (UserId '') too, which the shared store recreates from Model.xafml at the next logon;
         // its empty UserId is why the joins above convert with TRY_CONVERT.
         Sql("DELETE a FROM ModelDifferenceAspects a JOIN ModelDifferences d ON d.ID = a.OwnerID WHERE d.UserId = ''; DELETE FROM ModelDifferences WHERE UserId = '';");
+        // MODELEDITOR-016: the constraint that step uses to make a save fail, left behind by a run that aborted inside it.
+        Sql(DropFailSaveConstraint());
     }
     // 4060: the catalog does not exist yet. 208: it exists but the schema does not. Either way this is the first run
     // on this machine and the sample is about to create both; anything else is a real connection or permission fault.
@@ -879,6 +882,63 @@ try
     await CloseModelEditor(page, modelEditor);
     Assert(!(SqlScalar(adminRows) ?? "").Contains("Order_Generated_ListView"), "closing without Save stores nothing of the generated view");
 
+    // MODELEDITOR-016: Save writes the edits into the live model before it stores them, and a warmed-up model cannot take them
+    // back. When the store write fails and the user then discards, by closing twice or with Reload, XAF's deferred save of the
+    // user model (circuit close, the same user's next logon) must not store them. A check constraint makes one save fail.
+    Step("MODELEDITOR-016: after a failed Save, an edit discarded by closing or by Reload is not stored at the next logon");
+    var discarded = new List<(string Marker, string How, bool ShownAfterDiscard, bool Stored, bool Shown)>();
+    foreach (var (marker, byClosing) in new[] { ("FAILSAVE closed", true), ("FAILSAVE reloaded", false) })
+    {
+        modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+        captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+        await captionInput.FillAsync(marker);
+        await captionInput.PressAsync("Tab");
+        await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+        Sql("ALTER TABLE ModelDifferenceAspects WITH NOCHECK ADD CONSTRAINT CK_XLB_FailSave CHECK (Xml NOT LIKE '%FAILSAVE%')");
+        try
+        {
+            await modelEditor.Locator(".xlb-save").ClickAsync();
+            await modelEditor.Locator(".xlb-model-editor-message", new() { HasText = "Cannot save" }).WaitForAsync(new() { Timeout = 20_000 });
+        }
+        finally
+        {
+            Sql(DropFailSaveConstraint());
+        }
+        Assert(!(SqlScalar(adminRows) ?? "").Contains(marker), $"the failed Save stored nothing of '{marker}'");
+        // Both ways of discarding reload the page, so the new circuit builds its model from what is stored: the edit leaves
+        // the screen, and the wait proves the reload happened (Codex plan review; OpenListView would navigate by itself).
+        if (byClosing)
+        {
+            await ClosePopup(page);
+            await page.GetByText("Unsaved edits").First.WaitForAsync(new() { Timeout = 10_000 });
+            await page.RunAndWaitForNavigationAsync(() => ClosePopup(page), new() { Timeout = 30_000 });
+        }
+        else
+        {
+            try
+            {
+                await page.RunAndWaitForNavigationAsync(() => modelEditor.Locator(".xlb-reload").ClickAsync(), new() { Timeout = 30_000 });
+            }
+            catch (TimeoutException)
+            {
+                // The editor refuses an action by reporting it, so say what it reported rather than "navigation timed out".
+                throw new Exception($"Reload did not reload the page after a failed Save; the editor says: '{await modelEditor.Locator(".xlb-model-editor-message").InnerTextAsync()}'");
+            }
+        }
+        await page.GetByText("ORD-001", new() { Exact = true }).First.WaitForAsync(new() { Timeout = 30_000 });
+        await WaitForNoLoading(page);
+        var shownAfterDiscard = (await page.InnerTextAsync("body")).Contains(marker);
+        await LogOff(page);
+        await Login(page);
+        await OpenListView(page, "Order_ListView", "ORD-001");
+        discarded.Add((marker, byClosing ? "closing the editor twice" : "Reload", shownAfterDiscard,
+            (SqlScalar(adminRows) ?? "").Contains(marker), (await page.InnerTextAsync("body")).Contains(marker)));
+    }
+    // One assertion over both ways of discarding, so a failing run reports both rather than stopping at the first.
+    var stillThere = discarded.Where(d => d.ShownAfterDiscard || d.Stored || d.Shown).ToList();
+    Assert(stillThere.Count == 0, "a discarded edit after a failed Save is gone from the page at once and is not stored at the next logon; still there: "
+        + string.Join("; ", stillThere.Select(d => $"'{d.Marker}' discarded by {d.How} (on the reloaded page: {d.ShownAfterDiscard}, stored after logon: {d.Stored}, shown after logon: {d.Shown})")));
+
     // MODELEDITOR-004: a column added in the editor, with its required PropertyName and an Index, shows after Save; deleting it
     // in the editor takes it away again.
     modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView/Columns");
@@ -1431,6 +1491,9 @@ static int Sql(string sql, params (string Name, string Value)[] parameters) => R
     foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value);
     return cmd.ExecuteNonQuery();
 });
+
+// MODELEDITOR-016: the check constraint that makes one model save fail, dropped when it exists.
+static string DropFailSaveConstraint() => "IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_XLB_FailSave') ALTER TABLE ModelDifferenceAspects DROP CONSTRAINT CK_XLB_FailSave";
 
 static string? SqlScalar(string sql) => Retry<string?>(() =>
 {

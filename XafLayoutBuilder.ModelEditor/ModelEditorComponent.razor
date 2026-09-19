@@ -627,17 +627,26 @@ else {
     }
 
     void Reload() => Run(() => {
-        // Edits a failed save left in the model come out only with the page: the new circuit reads what is stored.
-        if (Session.Discard()) Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        // Nothing here touches the selected node, so the guard below must not refuse it: after a failed Save the model's node
+        // instances are not the ones the tree handed out, and the first Reload click was answered with "your model was saved
+        // elsewhere" and did nothing (the second worked). Found by the MODELEDITOR-016 gate step.
+        // Edits a failed save left in the model come out only with the page: the new circuit reads what is stored. Nothing of
+        // this circuit's user model may be stored meanwhile (MODELEDITOR-016); a failed shared save leaves the user's own model
+        // alone, so it does not suppress it (Codex plan review).
+        if (Session.Discard()) {
+            if (Shared is null) ModelEditorController.SuppressUserModelSave(Application);
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
         refusals++;
-    }, "Unsaved edits discarded");
+    }, "Unsaved edits discarded", checkSelection: false);
 
     // Text that is no value of its type, a calculator that throws, a failed save: reported, not thrown into the circuit.
-    void Run(Action action, string? done) {
+    /// <param name="checkSelection">False for an action that does not use the selected node (Reload).</param>
+    void Run(Action action, string? done, bool checkSelection = true) {
         using var _ = Shared?.Enter();
         try {
             // A save of this user's model from elsewhere removed the nodes added here (ModelEditorController).
-            if (selected is not null && !ModelEditing.IsInModel(selected)) {
+            if (checkSelection && selected is not null && !ModelEditing.IsInModel(selected)) {
                 selected = null;
                 throw new InvalidOperationException("Your model was saved elsewhere, which removed the nodes added here. Select a node.");
             }
