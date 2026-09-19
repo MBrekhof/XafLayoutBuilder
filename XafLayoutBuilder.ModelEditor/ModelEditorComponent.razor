@@ -361,7 +361,7 @@ else {
 
     // The selected node's values in the editor's language.
     IReadOnlyList<ModelValueRow> ValueRows() {
-        using (ModelEditing.Aspect(selected!, Session.Aspect)) return ModelEditing.Values(selected!);
+        using (ModelEditing.Aspect(selected!, Session.Aspect)) return ModelEditing.Values(selected!, Model);
     }
 
     // A pending edit counts as translated, so the filter does not hide what was just typed.
@@ -550,7 +550,7 @@ else {
     // Up/Down becomes Index edits renumbering the shown siblings (ModelEditSession.Move).
     void Move(bool up) => Run(() => Session.Move(selected!, up), null);
 
-    void ResetNode() => Run(() => Session.ResetNode(selected!, Model), null);
+    void ResetNode() => Run(() => Session.ResetNode(selected!), null);
 
     void GenerateContent() => Run(() => {
         Session.GenerateContent(selected!);
@@ -571,7 +571,7 @@ else {
             shared.Persist(() => { });
         }
         if (differences.IsNewNode) Session.Delete(node);
-        else Session.ResetNode(node, Model);
+        else Session.ResetNode(node);
         // From here on every save of this editor checks the stored record, a Save after a refused merge too (Codex diff review).
         verifyUserRecord = true;
         SaveUserModel(verifyStored: true);

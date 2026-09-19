@@ -46,6 +46,25 @@ Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the
 cannot express and by narrowing Generate content), a diff review (one P1, one P2) and a re-review (one P2), all fixed;
 the last fix was not re-reviewed again. RUNTIME-001 (#1688) is still in Todo although decided (allow) on 2026-09-15.
 
+### MODELEDITOR-014 (same session): values on a node the shared differences hold too
+
+The value-level half of the bug MODELEDITOR-009 found. Measured in four configurations (`docs/api-notes.md`): only when
+the shared layer holds the very node are `IsValueModified` false and `ClearValue` without effect on the merged node, so a
+value the user set there was not bold, had no Reset, and a pending Reset or an empty text saved nothing. A node gives no
+reliable route to its model, so the session holds it (`ModelEditSession.Model`, set by `ModelEditorPropertyEditor`; it
+replaces 009's `ResetNode(node, model)` parameter) and `ModelEditing.Writable(model, node)` gives the layer's own node for
+`Values`, `Reset`, `SetText` and `StoredValueWrites`. Codex's plan review was clean but for one P2, reproduced red first: the
+replay cleared with `ClearValue`, which drops every language of a value; it resets through `ModelEditing.Reset` now. Gate:
+after the merges, Admin's own caption on Order_ListView offers Reset and the saved Reset takes it out of Admin's record.
+Codex's diff review: one P3 (the application root taken for missing from the layer), fixed test first. 6 unit tests (283
+in total), gate exit 0. Plan: `docs/plans/2026-09-19-modeleditor-014-value-level-layer-node.md`. MODELEDITOR-015 (#1756) is the merge leftover
+(user-side save refused after the shared save), carded on the owner's word.
+
+**Codex on this machine:** its Windows sandbox setup fails on a 283-character path in the Codex desktop app's runtime cache
+(`AppData\Local\OpenAI\Codex\runtimes\cua_node\...`, `~/.codex/.sandbox/sandbox.<date>.log`); the npm CLI's helper
+(0.155.1) cannot open it and a run then reports "setup refresh had errors" before reading anything. Intermittent: a
+fallback to the desktop app's helper usually gets through. Retry; `npm i -g @openai/codex@latest` is the likely fix, untested.
+
 ## Session 2026-09-15: release 0.3.0 and MODELEDITOR-008
 
 **Docs follow-up (2026-09-15, after the session):** README's "Latest changes" is one line per session plus links (the

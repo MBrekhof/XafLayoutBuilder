@@ -289,20 +289,21 @@ public static class ModelEditing {
         }
     }
 
-    internal static IReadOnlyList<(IModelNode Node, Action Write)> StoredValueWrites(IModelNode root) {
+    internal static IReadOnlyList<(IModelNode Node, Action Write)> StoredValueWrites(IModelNode root, ModelApplicationBase? model = null) {
         var writes = new List<(IModelNode, Action)>();
         foreach (var node in Subtree(root).Cast<ModelNode>()) {
             // A localizable value is stored per aspect (MODELEDITOR-008); the others live in the default aspect only.
             var stored = new Dictionary<(string Name, string? Aspect), object?>();
             foreach (var (info, aspect) in ValueAspects(node)) {
                 using var _ = Aspect(node, aspect);
-                if (node.IsValueModified(info.Name)) stored[(info.Name, aspect)] = node.GetValue(info.Name);
+                if (Writable(model, node)?.IsValueModified(info.Name) ?? false) stored[(info.Name, aspect)] = node.GetValue(info.Name);
             }
             writes.Add((node, () => {
                 foreach (var (info, aspect) in ValueAspects(node)) {
                     using var _ = Aspect(node, aspect);
                     if (stored.TryGetValue((info.Name, aspect), out var value)) node.SetValue(info.Name, value);
-                    else if (node.IsValueModified(info.Name)) node.ClearValue(info.Name);
+                    // Reset, not ClearValue: a clear drops the value in every language, the stored ones too (Codex plan review).
+                    else if (Writable(model, node)?.IsValueModified(info.Name) ?? false) Reset(node, info.Name, model);
                 }
             }));
         }
@@ -598,8 +599,11 @@ public static class ModelEditing {
         .Order(StringComparer.Ordinal)
         .ToList());
 
-    public static IReadOnlyList<ModelValueRow> Values(IModelNode node) =>
-        VisibleValues((ModelNode)node).Select(v => Row((ModelNode)node, v)).ToList();
+    /// <param name="model">The node's model, for a value's modified mark (<see cref="Writable"/>).</param>
+    public static IReadOnlyList<ModelValueRow> Values(IModelNode node, ModelApplicationBase? model = null) {
+        var writable = Writable(model, node);
+        return VisibleValues((ModelNode)node).Select(v => Row((ModelNode)node, v, writable)).ToList();
+    }
 
     // The values the grid shows, by name. The WinForms grid's rules (ModelAttributesPropertyGridHelper.CalculatePropertyVisible,
     // 505-540): Index is not offered for the root or a node right under it, and [ModelHideProperties] hides named values.
@@ -620,10 +624,10 @@ public static class ModelEditing {
     /// Writes a value typed as text. Empty text sets an optional reference to none and clears any other value that is not a
     /// string, so the layers below apply again.
     /// </summary>
-    public static void SetText(IModelNode node, string name, string text) {
+    public static void SetText(IModelNode node, string name, string text, ModelApplicationBase? model = null) {
         var modelNode = (ModelNode)node;
         if (Parse(modelNode, name, text) is (true, var value)) modelNode.SetValue(name, value);
-        else Reset(node, name);
+        else Reset(node, name, model);
     }
 
     /// <summary>
@@ -632,20 +636,23 @@ public static class ModelEditing {
     /// ClearValue of the value's own name does not reach (ModelNode.cs 2368-2390), so that one is cleared too (MODELEDITOR-005
     /// gate, docs/devexpress-support-request.md item 10).
     /// </summary>
-    public static void Reset(IModelNode node, string name) {
+    /// <param name="model">The node's model: the value is then cleared on the writable layer's own node (<see cref="Writable"/>).
+    /// Writes stay on the merged node, whose SetValue reaches the user layer in every measured configuration.</param>
+    public static void Reset(IModelNode node, string name, ModelApplicationBase? model = null) {
         var modelNode = (ModelNode)node;
+        if (Writable(model, node) is not { } writable) return; // the layer holds nothing of the node
         // ClearValue drops the value with every language it holds (ClearValueInThisLayer removes the whole IModelValue, ModelNode.cs
         // 2385-2391), so a reset in one language keeps the others' values by writing them back (MODELEDITOR-010, Codex review 3;
         // docs/devexpress-support-request.md item 13).
         var others = IsLocalizable(node, name)
             ? Aspects(node).Where(a => a != CurrentAspect(node)).Select(a => {
                 using var _ = Aspect(node, a);
-                return (Aspect: a, Stored: modelNode.IsValueModified(name), Value: modelNode.GetValue(name));
+                return (Aspect: a, Stored: writable.IsValueModified(name), Value: modelNode.GetValue(name));
             }).Where(v => v.Stored).ToList()
             : [];
-        modelNode.ClearValue(name);
+        writable.ClearValue(name);
         if (!string.IsNullOrEmpty(modelNode.GetValueInfo(name)?.PersistentPath))
-            modelNode.ClearValue(ModelValuePersistentPathCalculator.GetHelperValueName(name));
+            writable.ClearValue(ModelValuePersistentPathCalculator.GetHelperValueName(name));
         foreach (var (aspect, _, value) in others) {
             using var _ = Aspect(node, aspect);
             // Forced: SetValue skips a value equal to the one the warmed-up cache still holds after the clear (SetValue<T>,
@@ -692,6 +699,20 @@ public static class ModelEditing {
         }
         return chain;
     }
+
+    /// <summary>
+    /// MODELEDITOR-014: the node to ask about, and clear, what the writable layer holds: the layer's own node when the model is
+    /// given (null when the layer holds nothing of the node), the merged node otherwise. ModelNode.GetWritableLayer (1252-1265)
+    /// stands behind HasModification, IsValueModified, Undo and ClearValue, and on the merged node it misses the user layer
+    /// when a layer in between holds the node too: IsValueModified false, ClearValue without effect (measured,
+    /// ModelEditorLayeredValueTests). A node gives no reliable route to its model (its Application's LastLayer was null, another
+    /// layer or the user layer, measured), so callers that have the model pass it.
+    /// </summary>
+    static ModelNode? Writable(ModelApplicationBase? model, IModelNode node) =>
+        model is null ? (ModelNode)node
+        : LayerChain(model, node) is not { } chain ? null
+        : chain.Count == 0 ? model.LastLayer // the application root has no ids and is the layer itself (Codex diff review)
+        : chain[^1];
 
     /// <summary>
     /// The node's differences in the writable layer as XML, one entry per language that holds any ("" the default language):
@@ -870,7 +891,7 @@ public static class ModelEditing {
 
     // Strings, primitives and enums are editable, and references and types that have a lookup list (MODELEDITOR-005).
     // ponytail: a type without a list and criteria stay read-only until they get their own editors (MODELEDITOR-006).
-    static ModelValueRow Row(ModelNode node, ModelValueInfo info) {
+    static ModelValueRow Row(ModelNode node, ModelValueInfo info, ModelNode? writable) {
         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
         var readOnly = Helper.IsReadOnly(node, info.Name);
         var editor = SpecialEditor(node, info.Name);
@@ -890,7 +911,7 @@ public static class ModelEditing {
         string[]? choices = !editable ? null
             : lookup is not null ? lookup.Select(Format).ToArray()
             : type == typeof(bool) ? ["True", "False"] : type.IsEnum ? Enum.GetNames(type) : null;
-        return new(info.Name, info.PropertyType, text, node.IsValueModified(info.Name), editable, choices,
+        return new(info.Name, info.PropertyType, text, writable?.IsValueModified(info.Name) ?? false, editable, choices,
             Category: Helper.GetPropertyAttribute<CategoryAttribute>(node, info.Name)?.Category,
             Description: Helper.GetPropertyDescription(node, info.Name),
             IsRequired: Helper.IsRequired(node, info.Name),
@@ -981,6 +1002,12 @@ public sealed class ModelEditSession {
     /// </summary>
     public string? Aspect { get; set; }
 
+    /// <summary>
+    /// MODELEDITOR-014: the model the session edits, set by the editor (ModelEditorPropertyEditor). Resets and the modified
+    /// marks then go through the writable layer's own node (ModelEditing.Writable); null keeps DevExpress's own calls.
+    /// </summary>
+    public ModelApplicationBase? Model { get; set; }
+
     // The aspect an edit of the value goes to: a localizable value's is the editor's language, any other value's the default.
     string EffectiveAspect(IModelNode node, string name) =>
         ModelEditing.IsLocalizable(node, name) ? Aspect ?? ModelEditing.CurrentAspect(node) : "";
@@ -1011,7 +1038,7 @@ public sealed class ModelEditSession {
         }
         if (IsAddedOrUnder(node)) {
             pending.Remove(Key(node, name));
-            using (Scoped(node, name)) ModelEditing.SetText(node, name, text);
+            using (Scoped(node, name)) ModelEditing.SetText(node, name, text, Model);
             // Written at once, yet chosen from a model without the pending edits: later edits check it like a pending one.
             if (ModelEditing.IsLookupValue(node, name)) addedLookups.Add((node, name));
             // Empty text clears the value, or sets an optional reference to none (ModelEditing.SetText); cleared only counts
@@ -1028,7 +1055,7 @@ public sealed class ModelEditSession {
         // ponytail: on an added node a warmed-up model shows the cleared value until the reload (ClearValue skips the cache).
         if (IsAddedOrUnder(node)) {
             pending.Remove(Key(node, name));
-            using (Scoped(node, name)) ModelEditing.Reset(node, name);
+            using (Scoped(node, name)) ModelEditing.Reset(node, name, Model);
             cleared.Add((node, name));
         }
         else pending[Key(node, name)] = (null, null);
@@ -1061,7 +1088,6 @@ public sealed class ModelEditSession {
     readonly List<IModelNode> added = [];
     readonly HashSet<IModelNode> deletes = [];
     readonly HashSet<IModelNode> nodeResets = [];
-    readonly Dictionary<IModelNode, ModelApplicationBase> resetModels = [];
     // Values the editor cleared on added nodes or nodes under them, which a warmed-up model still returns from its cache (Codex review).
     readonly HashSet<(IModelNode Node, string Name)> cleared = [];
     // Lookup values the editor set on added nodes or nodes under them (Codex review 5).
@@ -1143,7 +1169,7 @@ public sealed class ModelEditSession {
 
     /// <summary>Takes back every difference of the node on Apply (ModelNode.Undo, ModelNode.cs 609-637).</summary>
     /// <param name="model">The node's model: the reset then runs on the writable layer's own node (ModelEditing.UndoInLayer).</param>
-    public void ResetNode(IModelNode node, ModelApplicationBase? model = null) {
+    public void ResetNode(IModelNode node) {
         ThrowIfPendingLookup();
         if (!CanResetNode(node))
             throw new InvalidOperationException($"{ModelEditing.Path(node)} exists only in your model differences; delete it instead of resetting it.");
@@ -1151,7 +1177,6 @@ public sealed class ModelEditSession {
             || added.Any(a => IsAtOrUnder(a, [node])))
             throw new InvalidOperationException($"Save the pending edits under {ModelEditing.Path(node)} before resetting it.");
         nodeResets.Add(node);
-        if (model is not null) resetModels[node] = model;
     }
 
     // A lookup's choices are worked out from the model as it is, and can depend on other values, of the node or elsewhere (a
@@ -1253,7 +1278,6 @@ public sealed class ModelEditSession {
         pending.Clear();
         deletes.Clear();
         nodeResets.Clear();
-        resetModels.Clear();
         CloseWarned = false;
         var applied = writes.Count > 0;
         writes.Clear();
@@ -1299,7 +1323,7 @@ public sealed class ModelEditSession {
     /// <summary>The applied edits are saved and their emptied aspects blanked; the nodes added are part of the model now.</summary>
     public void Saved() {
         // An added or cloned node's own values count as saved edits: a clone carries values nobody edited (Codex review).
-        foreach (var node in added) savedWrites.AddRange(ModelEditing.StoredValueWrites(node));
+        foreach (var node in added) savedWrites.AddRange(ModelEditing.StoredValueWrites(node, Model));
         savedWrites.AddRange(writes);
         writes.Clear();
         emptiedAspects.Clear();
@@ -1336,6 +1360,7 @@ public sealed class ModelEditSession {
 
     // Values first, then node resets, then deletes; nothing is written to a node that goes.
     void WritePending() {
+        var model = Model;
         // Every text becomes its value before anything is written, so a refusal cannot come after a first write has reached
         // the live model (Codex review).
         var values = pending
@@ -1347,13 +1372,13 @@ public sealed class ModelEditSession {
             var scope = ModelEditing.IsLocalizable(node, name) ? aspect : null;
             Action write = set
                 ? () => { using (ModelEditing.Aspect(node, scope)) ModelEditing.SetValue(node, name, value); }
-                : () => { using (ModelEditing.Aspect(node, scope)) ModelEditing.Reset(node, name); };
+                : () => { using (ModelEditing.Aspect(node, scope)) ModelEditing.Reset(node, name, model); };
             write();
             writes.Add((node, write));
         }
         pending.Clear();
         foreach (var node in nodeResets.Where(n => !IsDeleted(n))) {
-            Action write = resetModels.Remove(node, out var model) ? () => ModelEditing.UndoInLayer(model, node) : () => ((ModelNode)node).Undo();
+            Action write = model is not null ? () => ModelEditing.UndoInLayer(model, node) : () => ((ModelNode)node).Undo();
             write();
             writes.Add((node, write));
         }

@@ -690,8 +690,18 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   `HasModification` and `IsValueModified("Width")` are false and `Undo()` changes nothing; without the shared layer's
   node all three work. On the user layer's own node (`GetNodeInThisLayer` down the path) `HasModification` is true and
   `Undo()` clears the differences. The editor asks the layer's node for a node's bold mark, Reset node and Merge
-  (`ModelEditing.IsModified(model, node)`, `UndoInLayer`). The value-level calls (`IsValueModified`, `ClearValue`) on the
-  merged node are still used for a value's bold mark and Reset: MODELEDITOR-014 (#1755).
+  (`ModelEditing.IsModified(model, node)`, `UndoInLayer`). MODELEDITOR-014 measured the value level in four
+  configurations (shared layer empty, holding the view only, holding a sibling column, holding the column itself): only
+  in the last are `IsValueModified` false and `ClearValue` without effect on the merged node, the width staying in the
+  user layer's XML; `ModelEditorHelper.HasValueInCurrentAspect` was right in all four. One root,
+  `ModelNode.GetWritableLayer` (1252-1265), stands behind all four calls (885, 899, 609, 2378-2383). A node gives no
+  reliable route to its model: `node.Application` was the collapsed root with a null `LastLayer`, the same with another
+  layer as `LastLayer`, or the circuit's model, depending on the configuration, so the editor's session holds the model
+  (`ModelEditSession.Model`) and `ModelEditing.Writable(model, node)` gives the layer's own node for a value's modified
+  mark, Reset, an empty text and the replay. Writes (`SetValue`) reached the user layer in all four. `IsValueModified` is
+  per aspect there: false inside an nl-NL scope for a caption stored in the default language only, while `ClearValue`
+  inside that scope still dropped the default caption (item 13 of the support request), so the replay resets through
+  `ModelEditing.Reset`, which writes the other languages back.
 
 ## Conditional appearance (APPEAR-001)
 

@@ -190,17 +190,20 @@ keeps returning its old value. Could DevExpress consider the changes below, or a
   layer before that layer joins its model (`ModelEditing.DifferencesForMerge`, `MergeInto`). XML read over a layer is no
   structural move, so a replaced node and an added or deleted node the shared layer already holds are refused.
 
-## 15. HasModification, IsValueModified and Undo miss the writable layer when a layer in between holds the node
+## 15. HasModification, IsValueModified, Undo and ClearValue miss the writable layer when a layer in between holds the node
 
 - **Behaviour.** In a collapsed model built over [extra differences layer, user layer] (what `AddExtraDiffStore` gives a
   circuit), a node that the extra layer holds too reports `HasModification` and `IsValueModified(name)` false for values the
-  user layer holds, and `Undo()` does nothing; `GetValue` returns the user's value and the user layer's XML holds it. The
+  user layer holds, and `Undo()` and `ClearValue(name)` do nothing; `GetValue` returns the user's value and the user layer's
+  XML holds it. Not so when the extra layer holds only the node's parent or a sibling (measured in four configurations). The
   same calls on the user layer's own node (`GetNodeInThisLayer`) answer correctly, and its `Undo()` clears the differences.
 - **Repro.** `XafLayoutBuilder.Tests/ModelEditorMergeTests.cs`,
-  `Merge_MovesValuesIntoTheSharedStore_PerAspect_AndKeepsWhatTheSharedStoreHeld` (the two `IsModified` asserts).
+  `Merge_MovesValuesIntoTheSharedStore_PerAspect_AndKeepsWhatTheSharedStoreHeld` (the two `IsModified` asserts), and
+  `ModelEditorLayeredValueTests.cs` (`IsValueModified`, `ClearValue`).
 - **Smallest change.** `GetWritableLayer` (1252-1265) resolving the last layer's node for such a node as it does for one the
   extra layer does not hold.
-- **Meanwhile.** The editor asks the writable layer's own node (`ModelEditing.IsModified(model, node)`, `UndoInLayer`).
+- **Meanwhile.** The editor asks the writable layer's own node (`ModelEditing.IsModified(model, node)`, `UndoInLayer`,
+  `Writable`).
 
 ## To verify before sending
 

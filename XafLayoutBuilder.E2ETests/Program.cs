@@ -55,6 +55,8 @@ using Microsoft.Playwright;
 //            moves the caption from Admin's record to the shared one and User sees it, a second merge over the node the
 //            shared record now holds works too (the node is bold, its differences leave Admin's record), and Generate content
 //            fills the columns of a ListView added in the editor, which closing without Save takes away again
+//            MODELEDITOR-014: a value Admin sets on a node the shared record holds offers Reset, and the saved Reset takes it
+//            out of Admin's record
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -832,6 +834,23 @@ try
         Assert((await page.InnerTextAsync("body")).Contains(caption), $"after the reload Admin sees '{caption}' from the shared layer");
     }
     Assert(!(SqlScalar(SharedRows) ?? "").Contains(MergedCaption), "the second merge replaced the first caption in the shared record");
+    // MODELEDITOR-014: the shared record holds Order_ListView now. XAF's own IsValueModified and ClearValue miss the user's
+    // layer on such a node, so the editor asks the layer's own node: Admin's own caption offers Reset, and the saved Reset
+    // takes it out of Admin's record.
+    const string OwnCaption = "Orders, my own caption";
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    captionInput = modelEditor.Locator("tr[data-value='Caption'] input");
+    await captionInput.FillAsync(OwnCaption);
+    await captionInput.PressAsync("Tab");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    Assert((SqlScalar(adminRows) ?? "").Contains(OwnCaption), "Admin's own caption over the shared one is saved in Admin's record");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_ListView");
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-reset").ClickAsync();
+    await modelEditor.Locator("tr[data-value='Caption'] .xlb-pending").WaitForAsync(new() { Timeout = 10_000 });
+    await SaveModelEditorAndWaitForReload(page, modelEditor, "ORD-001");
+    Assert(!(SqlScalar(adminRows) ?? "").Contains(OwnCaption), "a saved Reset of a value on a node the shared record holds takes it out of Admin's record");
+    Assert((await page.InnerTextAsync("body")).Contains(MergedAgainCaption), "and the list shows the shared caption again");
     await LogOff(page);
     await Login(page, "User");
     await OpenListView(page, "Order_ListView", "ORD-001");

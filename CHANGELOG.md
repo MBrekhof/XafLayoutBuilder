@@ -6,6 +6,7 @@ version the packages on the feed carry. Ids are ContextBoard cards; the detail i
 
 ## Unreleased
 
+- MODELEDITOR-014: a value a user sets on a node the shared differences hold too is bold and offers Reset, and its Reset (or an empty text) is saved; XAF's own `IsValueModified` and `ClearValue` miss the user's layer there. The replay after Save no longer drops a value's other languages when it clears one.
 - MODELEDITOR-009: Model Editor Differences (the node's differences as XML, per language), Modules (the loaded modules), Generate content for a view added in the editor, and Merge to shared, which moves a node's saved differences from the user's own record into the shared one; a node's bold mark and Reset node now work when the shared differences hold the node too.
 - MODELEDITOR-010: Edit Shared Model edits the administrator differences in a model of their own and saves them through the shared store; the module layers that store over every circuit's model at logon, so a shared edit shows to everyone at their next page load without a restart; Reload discards pending edits; closing with edits warns once. The host sets `XafModelEditorModule.SharedDifferences`.
 - MODELEDITOR-008: Model Editor languages: a language combo reads and writes localizable values per aspect without touching the circuit's culture, Add makes a new language, and Translate lists every localizable value under the node with its translation and an untranslated filter.

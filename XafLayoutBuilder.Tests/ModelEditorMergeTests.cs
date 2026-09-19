@@ -68,8 +68,8 @@ public class ModelEditorMergeTests(ApplicationModelFixture fixture) {
         Assert.Contains("Caption=\"Telefoon\"", store.Xml["nl-NL"]);
 
         // The user side: the node's differences leave the user layer.
-        var session = new ModelEditSession();
-        session.ResetNode(phone, userModel);
+        var session = new ModelEditSession { Model = userModel };
+        session.ResetNode(phone);
         session.Apply(userModel.LastLayer);
         Assert.Empty(ModelEditing.DifferencesXml(userModel, phone));
         Assert.False(ModelEditing.IsModified(userModel, phone));

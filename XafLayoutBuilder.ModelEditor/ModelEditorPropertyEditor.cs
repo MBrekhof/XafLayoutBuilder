@@ -42,9 +42,11 @@ public sealed class ModelEditorPropertyEditor(Type objectType, IModelMemberViewI
     protected override IComponentModel CreateComponentModel() {
         var window = CurrentObject as ModelEditorWindow;
         if (window is { Shared: true } && Shared is null) Shared = SharedModel.Open(application!);
+        // MODELEDITOR-014: the session reads and resets values on the writable layer's own node, which needs the model.
+        Session.Model = Shared?.Model ?? (ModelApplicationBase)application!.Model;
         return new ModelEditorComponentModel {
             Application = application!,
-            Model = Shared?.Model ?? (ModelApplicationBase)application!.Model,
+            Model = Session.Model,
             Session = Session,
             Shared = Shared,
             StartViewId = window?.StartViewId,
