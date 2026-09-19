@@ -76,6 +76,24 @@ Facts with file and line: `docs/api-notes.md` (two new bullets at the end of the
 cannot express and by narrowing Generate content), a diff review (one P1, one P2) and a re-review (one P2), all fixed;
 the last fix was not re-reviewed again. RUNTIME-001 (#1688) is still in Todo although decided (allow) on 2026-09-15.
 
+### MODELEDITOR-011 (same session): the layout designer
+
+The card asked to reuse XAF Blazor's layout editor from the Model Editor. **The plan's first premise was wrong** and
+Codex's review caught it with three P1s, each verified in the 26.1 source and then measured: a DetailView needs **no
+business object** (`CreateDetailView` passes null on purpose), `ToggleCustomizationMode` and
+`LayoutEditorConfirmationController.LayoutEditorInstance` are public, and the editor's helper types are public (I had read
+internal *properties* as internal *types*). So the feature is the real thing rather than the "open the view" fallback:
+"Customize layout" on a DetailView node or its Layout node opens that view in a popup **built with no record**, read-only,
+with `CustomizationFormEnabled` set, and the form's own context menu starts XAF's layout editor over the builder's layout.
+Two facts had to be measured: the view **must be root** (`DisableNestedLayoutEditorController` switches customization off
+for nested views, and the context menu then has no Customize Layout), and the designer must be read-only or a root
+DetailView offers Save and New, from which a user could create an empty record (Codex). Not offered in the shared editor:
+the layout editor saves through the user's own differences, so a shared customization would land in the administrator's
+model (Codex P1). Not done: starting customization for the user (no public moment to call it, support request item 16);
+a columns designer for a ListView (the WinForms one is internal; a running list has its column chooser). Reset Layout is
+Reset node. 1 unit test (290 in total), gate exit 0 with five assertions, screenshots e2e-34 and e2e-35.
+Plan: `docs/plans/2026-09-19-modeleditor-011-customize-in-the-view.md`.
+
 ### MODELEDITOR-015 (same session): Drop my copy
 
 The leftover of a merge whose save of the user's own record is refused in silence (a newer stored `Version`, or a denied

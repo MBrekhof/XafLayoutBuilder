@@ -4,6 +4,7 @@ using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
 using DevExpress.ExpressApp.Blazor;
 using DevExpress.ExpressApp.Editors;
+using DevExpress.ExpressApp.Model;
 using DevExpress.ExpressApp.Security;
 using DevExpress.Persistent.Base;
 
@@ -131,6 +132,31 @@ public sealed class ModelEditorController : ViewController<ObjectView> {
                 ReloadPage(application);
             }
         };
+        application.ShowViewStrategy.ShowViewInPopupWindow(view);
+    }
+
+    /// <summary>
+    /// MODELEDITOR-011: opens the view in a popup with XAF Blazor's own layout editor available, which is the nearest thing
+    /// to the WinForms Model Editor's designer: that one is a WinForms control over the model, while XAF Blazor's works on a
+    /// running view (LayoutEditor takes the rendered layout component). The view is built without an object, which
+    /// CreateDetailView allows (XafApplication.cs 2242-2249, DetailView.cs 194-207), so nothing is fetched or created; the
+    /// layout is what is being edited. CustomizationFormEnabled (BlazorLayoutManager.cs 64-67) makes the editor available,
+    /// and the form's own context menu starts it, as in any other view.
+    /// </summary>
+    public static void ShowLayoutDesigner(XafApplication application, IModelDetailView modelDetailView) {
+        if (modelDetailView.ModelClass?.TypeInfo?.Type is not { } type)
+            throw new InvalidOperationException($"{modelDetailView.Id} has no class to build a view for.");
+        var objectSpace = application.CreateObjectSpace(type);
+        // Root, not nested: DisableNestedLayoutEditorController (Blazor/Layout/LayoutEditor) switches customization off for a
+        // nested DetailView that is not the main window's edit view, and the form's context menu then has no Customize Layout.
+        var view = application.CreateDetailView(objectSpace, modelDetailView, true);
+        view.Caption = $"Customize layout: {modelDetailView.Id}";
+        // Read-only: the view shows the layout, not data, and a root DetailView in edit mode would offer Save and New, from
+        // which a user could create an empty record (Codex diff review). Customization is the layout manager's, not the
+        // view's edit mode, so the layout editor still runs.
+        view.ViewEditMode = ViewEditMode.View;
+        if (view.LayoutManager is DevExpress.ExpressApp.Blazor.Layout.BlazorLayoutManager manager) manager.CustomizationFormEnabled = true;
+        view.Closed += (_, _) => objectSpace.Dispose();
         application.ShowViewStrategy.ShowViewInPopupWindow(view);
     }
 

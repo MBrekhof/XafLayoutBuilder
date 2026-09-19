@@ -95,6 +95,15 @@ else {
                         <DxButton CssClass="xlb-reset-node" Text="@(Session.IsPendingNodeReset(selected) ? "Reset on save" : "Reset node")"
                                   RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ResetNode" />
                     }
+                    @* MODELEDITOR-011: XAF Blazor's layout editor works on a running view, so the designer is that view opened
+                       with its layout editor available, rather than a designer over the node. *@
+                    @* Not in the shared editor: the layout editor saves through the application's own user differences
+                       (LayoutEditorConfirmationController calls Application.SaveModelChanges), so a layout customized there
+                       would land in the administrator's own model rather than the shared one (Codex diff review). *@
+                    @if (Shared is null && ModelEditing.DetailViewToCustomize(selected) is not null) {
+                        <DxButton CssClass="xlb-customize-layout" Text="Customize layout" title="Open this view with XAF's layout editor available"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="CustomizeLayout" />
+                    }
                     @* MODELEDITOR-015: the user's own copy of a node the model has of its own, the leftover of a merge whose
                        save of the user's own record was refused. Reset node and Delete both answer that badly. *@
                     @if (Session.CanDropCopy(selected)) {
@@ -565,6 +574,12 @@ else {
         Session.DropCopy(selected!);
         verifyUserRecord = true;
     }, "Your copy is dropped on save");
+
+    // MODELEDITOR-011. The designer saves the layout itself, so the editor's own pending edits must be saved or dropped first.
+    void CustomizeLayout() => Run(() => {
+        if (Session.HasPendingEdits) throw new InvalidOperationException("Save or Reload your edits first: the layout editor saves the model itself.");
+        ModelEditorController.ShowLayoutDesigner(Application, ModelEditing.DetailViewToCustomize(selected!)!);
+    }, null);
 
     void GenerateContent() => Run(() => {
         Session.GenerateContent(selected!);

@@ -59,6 +59,8 @@ using Microsoft.Playwright;
 //            out of Admin's record; MODELEDITOR-016: after a Save whose store write fails, an edit discarded by closing the
 //            editor twice, or by Reload, is not stored at the next logon; MODELEDITOR-015: after a merge whose save of the
 //            user's own record was refused, Drop my copy takes the user's own copy out and the shared column stays
+//   MODELEDITOR-011 Customize layout on a DetailView's Layout node opens that view without a record and with no Save and New,
+//            and XAF's own layout editor runs over the builder's layout there
 //   FREEZE-001 with --extra-column, Notes is a fourth column; after an administrator froze the column set it stays hidden
 //   NEST-001 with --nested-column, Order_ListView shows Customer.City as a fourth column filled with each customer's city,
 //            and the export prints it as .Column(x => x.Customer.City)
@@ -939,6 +941,56 @@ try
     var stillThere = discarded.Where(d => d.ShownAfterDiscard || d.Stored || d.Shown).ToList();
     Assert(stillThere.Count == 0, "a discarded edit after a failed Save is gone from the page at once and is not stored at the next logon; still there: "
         + string.Join("; ", stillThere.Select(d => $"'{d.Marker}' discarded by {d.How} (on the reloaded page: {d.ShownAfterDiscard}, stored after logon: {d.Stored}, shown after logon: {d.Shown})")));
+
+    // MODELEDITOR-011: the WinForms Model Editor opens a layout designer on a view's Layout node. XAF Blazor's layout editor
+    // works on a running view, so the editor opens that view in a popup, built without a record (CreateDetailView takes a null
+    // object), with its layout editor available; the form's own context menu starts it, as anywhere else in XAF.
+    Step("MODELEDITOR-011: Customize layout opens the view without a record, and XAF's layout editor runs over it");
+    modelEditor = await OpenModelEditorAt(page, "Views/Order_DetailView/Layout");
+    Assert(await modelEditor.Locator(".xlb-customize-layout").CountAsync() == 1, "Customize layout is offered on a DetailView's Layout node");
+    await modelEditor.Locator(".xlb-customize-layout").ClickAsync();
+    // Two popups are open now (the Model Editor is still behind it), so the designer is found by its own caption.
+    var designerPopup = page.Locator(".dxbl-popup").Filter(new() { HasText = "Customize layout: Order_DetailView" }).First;
+    await designerPopup.WaitForAsync(new() { Timeout = 15_000 });
+    var designer = designerPopup.Locator(".detail-view-content").First;
+    await designer.WaitForAsync(new() { Timeout = 15_000 });
+    await WaitForNoLoading(page);
+    var designerText = await designer.InnerTextAsync();
+    Assert(designerText.Contains("Live group caption") && designerText.Contains("Order Date"),
+        $"the designer shows the form the builder declares, with no record in it (got: {designerText.ReplaceLineEndings(" | ")[..Math.Min(200, designerText.Length)]})");
+    // The designer shows the layout, not data: no Save and New to create a record from (Codex diff review).
+    Assert(await designerPopup.GetByRole(AriaRole.Button, new() { Name = "Save and New" }).CountAsync() == 0,
+        "the designer offers no Save and New, so no business record can be created from it");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-34-model-editor-layout-designer.png") });
+    // Form area, not a control: the strip between the two group panels. The offset is tried rather than assumed, so a layout
+    // change does not silently move the click onto the Lines grid, which takes it (Codex diff review).
+    var designerBox = await designer.BoundingBoxAsync() ?? throw new Exception("the designer form has no bounding box");
+    var customizeLayout = page.GetByText("Customize Layout", new() { Exact = true }).First;
+    foreach (var offset in new[] { 112, 96, 128, 60, 160 })
+    {
+        await page.Mouse.ClickAsync(designerBox.X + designerBox.Width / 2, designerBox.Y + offset, new() { Button = MouseButton.Right });
+        await page.WaitForTimeoutAsync(600);
+        if (await customizeLayout.IsVisibleAsync()) break;
+        await page.Keyboard.PressAsync("Escape");
+        await page.WaitForTimeoutAsync(200);
+    }
+    Assert(await customizeLayout.IsVisibleAsync(), "the designer form's own context menu offers Customize Layout");
+    await customizeLayout.ClickAsync();
+    var designerEditor = page.Locator(".xaf-layouteditor-menu").First;
+    await designerEditor.GetByText("Layout Tree View", new() { Exact = true }).WaitForAsync(new() { Timeout = 15_000 });
+    // The tree fills in after the window opens (E2E 4 waits the same way).
+    await page.WaitForFunctionAsync("() => /Live group caption/.test(document.querySelector('.xaf-layouteditor-menu')?.innerText ?? '')",
+        null, new() { Timeout = 15_000 });
+    var designerTree = await designerEditor.InnerTextAsync();
+    Assert(designerTree.Contains("Live group caption") && designerTree.Contains("Order Date"),
+        $"XAF's layout editor runs over the builder's layout (tree: {designerTree.ReplaceLineEndings(" | ")})");
+    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, "e2e-35-model-editor-layout-designer-editor.png") });
+    await designerEditor.Locator("button").First.ClickAsync(); // the Customization window's close button, as E2E 4 closes it
+    await designerEditor.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 10_000 });
+    await designerPopup.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).First.ClickAsync();
+    await designerPopup.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = 15_000 });
+    await CloseModelEditor(page, modelEditor);
+    await OpenListView(page, "Order_ListView", "ORD-001");
 
     // MODELEDITOR-015: Merge saves the shared record first and then the user's own, which the database store refuses in
     // silence when a newer Version is stored (ModelDifferenceDbStore.cs 181). A column the user added is then in both records,

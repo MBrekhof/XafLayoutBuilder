@@ -689,6 +689,19 @@ Paths under `DevExpress.ExpressApp\` unless another assembly is named.
   `Delete` removes a node physically only when no other layer holds one of that id and leaves a tombstone otherwise
   (`CanRemoveNode` 737-761, `_Delete` 771-791); the layers holding a node are `EnumerateAllLayers()` on the layer's node
   (3469-3496, public).
+- **A DetailView needs no business object, and its layout editor needs a root view (MODELEDITOR-011).**
+  `XafApplication.CreateDetailView(objectSpace, detailViewId, isRoot)` passes a null object on purpose
+  (`XafApplication.cs` 2242-2249) and `DetailView`'s constructor accepts `obj == null` (`DetailView.cs` 194-207), so a view
+  can be built to show a layout and nothing else: measured, the whole form renders from the builder's layout with every
+  editor empty, which is what the WinForms designer does with fake data. `BlazorLayoutManager.CustomizationFormEnabled`
+  (`Blazor/Layout/BlazorLayoutManager.cs` 64-67) makes the layout editor available, and **the view must be root**:
+  `DisableNestedLayoutEditorController` (`Blazor/Layout/LayoutEditor`) targets `Nesting.Nested` and switches customization
+  off for a nested DetailView that is not the main window's edit view, so the form's context menu then has no Customize
+  Layout (measured). `LayoutEditor` itself is public and takes the running layout component (`LayoutEditor.razor.cs` 58-68);
+  `BlazorLayoutManager.LayoutEditorCreated` and `.LayoutEditor` are internal (111-115), and the public
+  `LayoutEditorConfirmationController.LayoutEditorInstance` (45-69) is set only after the editor has rendered, so there is
+  no clean moment to call the public `ToggleCustomizationMode` (208-213) from outside: the user starts it from the form's
+  own context menu, as anywhere in XAF (support request item 16).
 - **Taking the user's own copy of a node out of a layer (MODELEDITOR-015).** `Remove()` on the writable layer's own node
   writes a tombstone when another layer holds a node of that id (`CanRemoveNode`, `_Delete`, `Model/Core/ModelNode.cs`
   737-791), and that tombstone hides the other layer's node too: measured over [shared layer with an added column, user

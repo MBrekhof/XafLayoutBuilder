@@ -94,4 +94,18 @@ public class ModelEditorTreeTests(ApplicationModelFixture fixture) {
         var found = ModelEditing.Search(fixture.Model, "modeltestorder_listview", limit: 10);
         Assert.Contains(found, n => ModelEditing.Path(n) == "Views/ModelTestOrder_ListView");
     }
+
+    // MODELEDITOR-011: which view the layout designer opens for the selected node.
+    [Fact]
+    public void DetailViewToCustomize_IsTheViewTheNodeIsOrBelongsTo() {
+        var detail = fixture.Class<ModelTestOrder>().DefaultDetailView;
+        var list = OrderListView;
+
+        Assert.Same(detail, ModelEditing.DetailViewToCustomize(detail));
+        Assert.Same(detail, ModelEditing.DetailViewToCustomize(detail.Layout));
+        Assert.Null(ModelEditing.DetailViewToCustomize(list));
+        Assert.Null(ModelEditing.DetailViewToCustomize(list.Columns));
+        Assert.Null(ModelEditing.DetailViewToCustomize(list.Columns["Number"]!));
+        Assert.Null(ModelEditing.DetailViewToCustomize(fixture.Class<ModelTestOrder>()));
+    }
 }

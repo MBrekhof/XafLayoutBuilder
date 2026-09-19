@@ -119,6 +119,11 @@ deployed Blazor host; one node at a time, no choice of values). Facts and refusa
 
 ## Layout designer (MODELEDITOR-011)
 
+Done 2026-09-19: "Customize layout" on a DetailView node or its Layout node opens that view in a popup, built with no
+record, with XAF's own layout editor available; the form's context menu starts it. Reset Layout is Reset node. A columns
+designer for a ListView is not built (the WinForms one is internal, and a running list already has its column chooser).
+Facts: `docs/api-notes.md`.
+
 - `ModelEditorControl.ShowLayoutIfNeed` (513-525): `IModelViewLayout` → `ModelEditorLayoutManagerProvider` (WinLayoutManager
   with a customization form, writes with `layoutManager.SaveModel()`); `IModelColumns` → internal `GridListEditorDesigner`
   with fake data; Reset Layout = `ModelNode.Undo()` on the layout node (VC 700-720). Fully [W]. XAF Blazor has its own

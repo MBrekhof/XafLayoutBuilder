@@ -205,6 +205,18 @@ keeps returning its old value. Could DevExpress consider the changes below, or a
 - **Meanwhile.** The editor asks the writable layer's own node (`ModelEditing.IsModified(model, node)`, `UndoInLayer`,
   `Writable`).
 
+## 16. No public way to start the Blazor layout editor on a view a module just showed
+
+- **Behaviour.** A module can open a DetailView with `CustomizationFormEnabled = true` (`BlazorLayoutManager.cs` 64-67) so
+  XAF's layout editor is available, but starting it needs the `LayoutEditor` instance, and
+  `BlazorLayoutManager.LayoutEditorCreated` and `.LayoutEditor` are internal (111-115). The public handle,
+  `LayoutEditorConfirmationController.LayoutEditorInstance` (`Layout/LayoutEditor/LayoutEditorConfirmationController.cs`
+  45-69), is set only when the editor has rendered, which is after the view is shown, so there is no event to act on.
+- **Repro.** Show a DetailView from a controller with customization enabled and try to open its layout editor in code.
+- **Smallest change.** A public `LayoutEditorCreated` on `BlazorLayoutManager`, or a `StartCustomization()` on the view's
+  layout manager.
+- **Meanwhile.** The user starts it from the form's own context menu (Customize Layout), as anywhere else in XAF.
+
 ## To verify before sending
 
 - Shared (administrator) differences: done, item 12 (MODELEDITOR-010).

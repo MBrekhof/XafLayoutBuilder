@@ -84,6 +84,17 @@ public static class ModelEditing {
         }
     }
 
+    /// <summary>
+    /// MODELEDITOR-011: the DetailView whose layout the node is, for the designer: the node itself when it is a DetailView,
+    /// or the DetailView a Layout node belongs to. Null for anything else, a ListView's columns and a DashboardView's layout
+    /// included (a dashboard is no object view, so it has no class to build a view for).
+    /// </summary>
+    public static IModelDetailView? DetailViewToCustomize(IModelNode node) => node switch {
+        IModelDetailView view => view,
+        IModelViewLayout { Parent: IModelDetailView view } => view,
+        _ => null,
+    };
+
     /// <summary>Whether the node's type can have children at all; known without generating them.</summary>
     public static bool CanHaveChildren(IModelNode node) => ((ModelNode)node).NodeInfo.GetChildrenTypes().Count > 0;
 
