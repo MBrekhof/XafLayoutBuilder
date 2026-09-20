@@ -38,7 +38,6 @@ public class Startup {
                 .Add<XafLayoutBuilder.Sample.Module.SampleModule>()
                 .Add<XafLayoutBuilder.Blazor.XafLayoutBuilderBlazorModule>()
                 .Add<XafLayoutBuilder.Appearance.XafLayoutBuilderAppearanceModule>()
-                .Add<XafLayoutBuilder.ModelEditor.XafModelEditorModule>()
                 .Add<SampleBlazorModule>();
             builder.ObjectSpaceProviders
                 .AddSecuredEFCore(options => {

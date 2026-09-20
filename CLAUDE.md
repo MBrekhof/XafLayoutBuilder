@@ -24,13 +24,10 @@ view's current layout back to the same fluent C#.
   `ConditionalAppearanceModule`. `AppearanceRegistry` + resolver, `AppearanceRulesUpdater` (BOModel | Class |
   AppearanceRules, XLB006), `AppearanceStartupCheck` (XLB006-008) and `AppearanceExporter`, which fills
   `LayoutCodePrinter.AppearanceExport` so the Module's exports carry rules without referencing the add-on.
-- `XafLayoutBuilder.ModelEditor`: MODELEDITOR-001 spike, a runtime Model Editor for XAF Blazor ("Edit Model",
-  gated by `ModelOperationPermissionRequest`, so the role needs `CanEditModel`). No dependency on the builder;
-  `ModelEditing` holds the testable node and value logic, `ModelEditorComponent.razor` the UI. `SharedModel` edits the
-  shared differences in a model of its own, and the module layers that store below every user's differences. On a node
-  that layer holds too, DevExpress's `HasModification`, `IsValueModified`, `ClearValue` and `Undo` miss the user layer
-  (MODELEDITOR-014): ask the writable layer's own node (`ModelEditing.Writable`, `IsModified(model, node)`,
-  `UndoInLayer`), and test such code on a warmed-up model built over [shared layer, user layer].
+- The runtime Model Editor that grew here (MODELEDITOR-001 onwards) moved to
+  [XafModelEditor](https://github.com/MBrekhof/XafModelEditor) on 2026-09-20 (MODELEDITOR-012), with its tests, its gate
+  steps and its docs. It never depended on the builder. Both repositories pin the same DevExpress version and both gates
+  use port :5100, so they never run at the same time; their LocalDB catalogs are separate.
 - `XafLayoutBuilder.Sample.Module`: `Customer` (+ `Customer.Layout.cs`, a detail layout that opts
   into the catch-all group, and columns), `Order`
   (+ `Order.Layout.cs`, the start document's section 4 example verbatim, plus two appearance rules, APPEAR-001),
@@ -44,7 +41,7 @@ view's current layout back to the same fluent C#.
   fixture; `XafLayoutBuilder:EnableExport` in appsettings.Development.json enables the export.
 - `XafLayoutBuilder.Tests`: xUnit against Core, the Module's resolver and registry (the Module grants
   `InternalsVisibleTo`), and the updaters and exporter against an Application Model built in-process
-  (`ApplicationModelFixture`, the Model Editor's `DesignerModelFactory` path, no host or database). Test
+  (`ApplicationModelFixture`, over DevExpress's `DesignerModelFactory`, no host or database). Test
   business classes there must be top-level public `[DomainComponent]` classes, or XAF gives them no views.
   Rendering, the user layer and the Blazor actions are covered by the E2E gate.
 - `XafLayoutBuilder.E2ETests`: console app, C# Playwright, the phase gate. Its file header lists

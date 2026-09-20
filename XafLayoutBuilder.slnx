@@ -3,7 +3,6 @@
   <Project Path="XafLayoutBuilder.Blazor/XafLayoutBuilder.Blazor.csproj" />
   <Project Path="XafLayoutBuilder.Core/XafLayoutBuilder.Core.csproj" />
   <Project Path="XafLayoutBuilder.E2ETests/XafLayoutBuilder.E2ETests.csproj" />
-  <Project Path="XafLayoutBuilder.ModelEditor/XafLayoutBuilder.ModelEditor.csproj" />
   <Project Path="XafLayoutBuilder.Module/XafLayoutBuilder.Module.csproj" />
   <Project Path="XafLayoutBuilder.Sample.Blazor.Server/XafLayoutBuilder.Sample.Blazor.Server.csproj" />
   <Project Path="XafLayoutBuilder.Sample.Module/XafLayoutBuilder.Sample.Module.csproj" />

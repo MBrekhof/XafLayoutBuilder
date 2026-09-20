@@ -29,10 +29,6 @@ public sealed class SampleBlazorModule : ModuleBase {
     /// </summary>
     public static bool FreezeOrderColumnsFixture { get; set; }
 
-    public SampleBlazorModule() {
-        // MODELEDITOR-010: where the shared (administrator) differences live, the type and context id the store above gets.
-        XafLayoutBuilder.ModelEditor.XafModelEditorModule.SharedDifferences = new(typeof(ModelDifference), "Blazor");
-    }
     public override IEnumerable<ModuleUpdater> GetModuleUpdaters(IObjectSpace objectSpace, Version versionFromDB) {
         return ModuleUpdater.EmptyModuleUpdaters;
     }

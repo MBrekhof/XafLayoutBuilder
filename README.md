@@ -74,16 +74,16 @@ That file is the sample's only layout source for `Order`; the sample module has 
   conditional appearance (font and back colour, font style, enabled, visibility) next to its layout in
   `BuildAppearanceRules()`, with compile-checked member targets and layout group ids checked at startup,
   where XAF's `[Appearance]` attribute silently ignores a target that does not exist.
-- **A runtime Model Editor, for now.** `XafLayoutBuilder.ModelEditor` is "Edit Model" in XAF Blazor: the
-  model tree, values, node actions, languages, shared differences and merging a user's differences into them,
-  edited in the running app instead of the Windows-only Model Editor. It is the second answer to the same support ticket, but it does not use the
-  builder and will probably move to a repository of its own once it is packaged (MODELEDITOR-012).
+- **A runtime Model Editor lives next door.** "Edit Model" in XAF Blazor -- the model tree, values, node
+  actions, languages, shared differences and merging -- grew here as the second answer to the same support ticket.
+  It never used the builder, so on 2026-09-20 it moved to its own repository,
+  [XafModelEditor](https://github.com/MBrekhof/XafModelEditor) (MODELEDITOR-012).
 - **A skill for agents.** [`skills/xaf-layout-builder/SKILL.md`](skills/xaf-layout-builder/SKILL.md)
   documents the whole API surface for Claude Code, so an agent writes C# instead of XAFML.
 
 ## Latest changes
 
-Session of 2026-09-19: the Model Editor shows a node's differences as XML and the loaded modules, generates the content of a view added in it, and merges a user's differences into the shared model (MODELEDITOR-009); a user's values on a node the shared model holds too are marked and can be reset (MODELEDITOR-014).
+Session of 2026-09-20: the runtime Model Editor moved to [XafModelEditor](https://github.com/MBrekhof/XafModelEditor), with its tests, its gate steps and its docs; this repository keeps the builder, its four packages, 157 unit tests and its own gate (MODELEDITOR-012).
 One line per change is in [CHANGELOG.md](CHANGELOG.md), the detail in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 
 ## Screenshots
@@ -104,12 +104,6 @@ From the E2E gate's run on the sample.
 | Opting out of the strict rule: whatever the layout does not mention lands in one group. | `groupIndex:` and `.GroupPanel()`: the list opens grouped by Customer, with the group panel shown. |
 | ![Appearance rule in a ListView](docs/screenshots/11-appearance-listview.png) | ![Appearance rule on a layout group](docs/screenshots/12-appearance-detailview.png) |
 | Appearance add-on: a rule makes Globex's order numbers bold and dark red. | A layout rule colours the Header group's caption. |
-| ![Model Editor](docs/screenshots/13-model-editor.png) | ![Translate view](docs/screenshots/14-model-editor-translate.png) |
-| The runtime Model Editor for XAF Blazor (View in Model): model tree with icons, DevExpress editors and node actions. | Languages: the Translate view lists every localizable value under the node, here Order_ListView's caption in nl-NL, still unsaved. |
-| ![Edit Shared Model](docs/screenshots/15-model-editor-shared.png) | ![Shared caption as another user](docs/screenshots/16-model-editor-shared-as-user.png) |
-| Edit Shared Model: Admin changes the caption in the administrator differences. | User, at the next logon, sees "Orders for everyone" without a host restart. |
-| ![Validation on Save](docs/screenshots/17-model-editor-validation.png) | |
-| Save refuses a required reset and names the node, so a broken model is never stored. | |
 
 ## Run it
 
@@ -296,7 +290,6 @@ XafLayoutBuilder.Core/                  builder, LayoutSpec records, JSON, C# pr
 XafLayoutBuilder.Module/                generator updaters, registry, startup check, exporter, export action
 XafLayoutBuilder.Blazor/                optional Blazor add-on: Copy Layout To Clipboard, Download Layout File
 XafLayoutBuilder.Appearance/            optional add-on: conditional appearance rules (XAF's Conditional Appearance module)
-XafLayoutBuilder.ModelEditor/           runtime Model Editor for XAF Blazor, Edit Model (will probably move to its own repository)
 XafLayoutBuilder.Sample.Module/         Customer, Order (+ lines, attachments), ServiceOrder : Order
 XafLayoutBuilder.Sample.Blazor.Server/  XAF Blazor host from the DevExpress 26.1 template
 XafLayoutBuilder.Tests/                 xUnit tests for Core and the Module's resolver and registry

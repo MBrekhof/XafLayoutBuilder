@@ -1,46 +1,42 @@
 # Session handoff
 
-Updated 2026-09-19 (MODELEDITOR-009 and MODELEDITOR-014 in Review, MODELEDITOR-015 and -016 minted; before that
-2026-09-15: 0.3.0 pushed to GitHub Packages, MODELEDITOR-008 languages and MODELEDITOR-010 shared differences, both Done
-since). Session plan: `XafLayoutBuilder-START.md` section 9.
+Updated 2026-09-20 (MODELEDITOR-012: the runtime Model Editor split out into its own repository; before that
+2026-09-19: MODELEDITOR-009, -011, -014, -015 and -016, all Done since). Session plan:
+`XafLayoutBuilder-START.md` section 9.
 
-## Where things stand (end of 2026-09-19; pushed 2026-09-20)
+## Where things stand (end of 2026-09-20)
 
-- **Pushed:** everything through this handoff commit is on origin/master. Public repository: no assistant attribution in
-  commits, pull requests or issues.
-- **Board (project 32):** Review, waiting for the owner's Confirm Done, five cards, all of this session:
-  MODELEDITOR-009 (#1701), MODELEDITOR-014 (#1755), MODELEDITOR-016 (#1757), MODELEDITOR-015 (#1756) and
-  MODELEDITOR-011 (#1703). **The Model Editor's feature cards are all done.** Todo: **MODELEDITOR-012 (#1704)**, packaging,
-  which now also carries the repository split below. The owner's: REL-001, DXSUPPORT-001 (sixteen items, still a draft to
-  send), the phase 2 card, and RUNTIME-001 (#1688), still in Todo although decided (allow) on 2026-09-15.
-- **The owner wants the Model Editor in its own repository and board** (asked 2026-09-19, no go given yet; it belongs to
-  MODELEDITOR-012). The assessment: the code is at a clean boundary and the add-on does not reference the builder, so the
-  cut is trivial; **the harness is the work.** The editor's proof lives in this repo's gate (about fifteen steps against the
-  sample host, its seeded orders, Admin and User roles, and the sample Blazor module's `SharedDifferences` wiring), its unit
-  tests sit on `ApplicationModelFixture`, `WarmedUpModelTests` and `ModelTestTypes` which also serve the builder's own
-  tests, and `docs/api-notes.md` plus the support request mix both. Three routes were put to the owner: (1) full move with a
-  cloned sample host and the editor's gate steps, a day's work and nothing lost, recommended; (2) move the code and keep the
-  gate here against the package, cheap but the editor's proof then lives in another repo; (3) a minimal new sample with
-  thinner coverage. Recommended order: confirm the five Review cards first so the history closes here, decide the repository
-  name (SEC-001's "Xaf" naming question applies to a new public repo too), then do the split in its own session with a plan
-  and a Codex review.
-- **The loop, unchanged:** plan in `docs/plans/`, Codex plan review, tests red first, build, unit tests, E2E gate, Codex diff
-  review, fix and re-review, stop the broker after every review, commit with exact files. Gate and Codex never at the same
-  time. 290 unit tests, gate exit 0 on 6b62f7a.
-- **Left unreviewed:** the last MODELEDITOR-009 fix (nodes under a deleted node are not expected in the merged model) and
-  the MODELEDITOR-014 P3 fix (the application root) came after Codex's last pass on each card; both have red-proven tests.
-  From MODELEDITOR-010, still: its process-wide save lock was never re-reviewed, and a separate, stricter permission for
-  Edit Shared Model was not built (the owner's call).
-- **Watch the tooling:** a python one-liner that opened `Program.cs` for writing and read it back in the same expression
-  emptied the file (the write truncates before the read runs). It was restored from the last commit and the step re-applied;
-  use the editing tools for a file that big, not string surgery.
-- **Codex on this machine is flaky,** see the note at the end of the MODELEDITOR-014 section below; a blocked run says
-  "setup refresh had errors" and has read nothing. Retry before concluding anything.
+- **The runtime Model Editor is gone from this repository.** It moved to
+  [XafModelEditor](https://github.com/MBrekhof/XafModelEditor) (private, `main`) on 2026-09-20, MODELEDITOR-012, with
+  its 133 unit tests, its gate steps, a sample host of its own and its docs. Plan, with both Codex review rounds:
+  `docs/plans/2026-09-20-modeleditor-012-split-to-xafmodeleditor.md`. **The MODELEDITOR sections further down are
+  history**; the plans they link to now live in the new repository's `docs/plans/`, as do `model-editor-scope.md`, the
+  DevExpress support request draft and the "Runtime Model Editor" half of `docs/api-notes.md`.
+- **This repository is the builder and nothing else:** Core, Module, Blazor, Appearance, the sample, 157 unit tests and
+  a gate of 102 assertions, all green after the removal (`dotnet build` clean, gate exit 0).
+- **Two repositories now, and they collide if run together.** Both pin DevExpress 26.1.4 — move them together — and
+  both gates use port :5100, so never run them at the same time. Their LocalDB catalogs are separate
+  (`XafLayoutBuilder.Sample` and `XafModelEditor.Sample`), which is what keeps one gate from clearing the other's
+  `ModelDifferences` rows.
+- **What the split cost, for the next time one is done:** six gate runs to green, and every failure was the copied
+  sample's fixture rather than the moved code — a module name in a selector, a column that was generated here and not
+  there, a view the builder used to declare, a readiness marker that depended on which tab was open. The add-on itself
+  produced no failure after the move.
+- **Codex found one P1 in the move and one miss in the removal.** The P1: replacing the layout designer's
+  "Live group caption" marker with default field names let a designer that ignores the user layer pass — that caption
+  existed because an earlier step wrote it into Admin's differences. The gate now makes that customization itself. The
+  miss: `docs/api-notes.md` kept its whole Runtime Model Editor section after the copy; it is a pointer now.
+- **Open on the board (project 32):** MODELEDITOR-012 itself (this split, ready for Confirm Done), REL-001,
+  DXSUPPORT-001 (sixteen items, now in the new repository and to be sent from there), and the phase 2 card.
+  RUNTIME-001 was closed 2026-09-20 with its conclusion.
+- **The loop, unchanged:** plan in `docs/plans/`, Codex plan review, tests red first, build, unit tests, E2E gate, Codex
+  diff review, fix and re-review, stop the broker after every review, commit with exact files. Gate and Codex never at
+  the same time. Codex on this machine is flaky: "setup refresh had errors" means it read nothing and reported nothing —
+  retry rather than believe a clean result.
 
-**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 283 unit tests
-pass, and the E2E gate exits 0 with every assertion from section 8 plus the round trip, the
-startup-failure check and the degraded-mode check. The repository is public on GitHub, MIT licensed.
-Open work lives on ContextBoard, project **XafLayoutBuilder** (id 32).
+**State: the POC is complete.** All seven sessions are done, `dotnet build` is clean, 157 unit tests pass, and the E2E
+gate exits 0. The repository is public on GitHub, MIT licensed. Open work lives on ContextBoard, project
+**XafLayoutBuilder** (id 32).
 
 ## Session 2026-09-19: MODELEDITOR-009 (differences XML, modules, Generate content, Merge to shared)
 
