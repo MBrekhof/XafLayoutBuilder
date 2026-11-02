@@ -23,6 +23,50 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
             CSharpLayoutPrinter.PrintDetail(exported, nameof(ModelTestContact)));
     }
 
+    // The catch-all group only exists while something is unplaced, and the exporter recovers the policy from that
+    // group. With every member placed there is no group to recover it from, so the export must carry the opt-in some
+    // other way or it silently drops it and the next new property hits XLB002 (Codex review 2026-09-20).
+    [Fact]
+    public void ExportDetail_KeepsTheUnplacedOptIn_WhenNothingIsCurrentlyUnplaced() {
+        var (exported, _) = LayoutExporter.ExportDetail(fixture.Class<ModelTestFullyPlaced>().DefaultDetailView);
+        Assert.Equal("Other", exported.UnplacedGroupId);
+    }
+
+    // Codex diff review of EXPORT-002: a customised root group stops the exporter unwrapping Main, so the catch-all
+    // group is no longer a root element and the detection above misses it -- while the new fallback still reports the
+    // policy. The export would then name "Other" both as a group and as the catch-all, which the builder rejects.
+    [Fact]
+    public void ExportDetail_WithACustomisedRootGroup_DoesNotNameTheCatchAllTwice() {
+        var view = fixture.Class<ModelTestCustomRoot>().DefaultDetailView;
+        var main = view.Layout.OfType<IModelLayoutGroup>().Single(g => g.Id == "Main");
+        main.ShowCaption = true;
+        try {
+            var (exported, _) = LayoutExporter.ExportDetail(view);
+            LayoutSpecChecks.Validate(exported);
+            Assert.Equal("Other", exported.UnplacedGroupId);
+            Assert.Empty(exported.HiddenMembers);
+        }
+        finally { main.ShowCaption = false; }
+    }
+
+    // Codex diff review round 2: the catch-all can also sit under a tabbed group -- here as one of its tabs -- which takes
+    // its own branch in the exporter. Detection has to reach it there too, or the policy is recovered from the layout
+    // marker while the group is still printed as a tab: the same duplicate id as the customised-root case above.
+    [Fact]
+    public void ExportDetail_WithTheCatchAllInsideATab_DoesNotNameItTwice() {
+        var view = fixture.Class<ModelTestTabbedCatchAll>().DefaultDetailView;
+        var tabs = view.Layout.OfType<IModelLayoutGroup>().Single(g => g.Id == "Main")
+            .OfType<IModelTabbedGroup>().Single();
+        var inTab = tabs.AddNode<IModelLayoutGroup>("Other");
+        ((DevExpress.ExpressApp.Model.Core.ModelNode)inTab).SetValue(DetailViewLayoutUpdater.CatchAllMarker, true);
+        try {
+            var (exported, _) = LayoutExporter.ExportDetail(view);
+            LayoutSpecChecks.Validate(exported);
+            Assert.Equal("Other", exported.UnplacedGroupId);
+        }
+        finally { inTab.Remove(); }
+    }
+
     [Fact]
     public void ExportColumns_OfTheUntouchedModel_ListsTheSourceColumnsAndLookup() {
         var modelClass = fixture.Class<ModelTestOrder>();
@@ -79,7 +123,7 @@ public class LayoutExporterTests(ApplicationModelFixture fixture) {
         Assert.Equal(ModelTestTwoBands.BuildListViewColumns()!.Columns, exported.Columns);
     }
 
-    // BAND-001, Codex re-review: XAF Blazor renders one band level, so a band nested in another (possible from XAFML) exports
+    // BAND-001, Codex re-review: the builder has one band level (XAF Blazor renders deeper, DOC-001), so a band nested in another exports
     // its columns under the outermost band, with a note, instead of an export that splits the outer band in two.
     [Fact]
     public void ExportColumns_FlattensANestedBandIntoItsOuterBand_AndSaysSo() {

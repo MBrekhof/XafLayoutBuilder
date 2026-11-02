@@ -70,8 +70,8 @@ Playwright 1.49 uses `chromium-1148`; if the gate exits 2, run
 
 ## Non-negotiables (start document section 10, plus what the sessions added)
 
-- **DevExpress 26.1 only**, at the version in `Directory.Build.props` (`DevExpressVersion`, 26.1.4;
-  the packages accept `[26.1.4,26.2)`). Never mix in 25.2 packages, never float the version again.
+- **DevExpress 26.1 only**, at the version in `Directory.Build.props` (`DevExpressVersion`, 26.1.6;
+  the packages accept `[26.1.6,26.2)`). Never mix in 25.2 packages, never float the version again.
 - **Package versions:** `PackageVersion` in `Directory.Build.props`, never `Version` (XAF records the
   module's assembly version in the database and refuses a lower one). Bump it before each push to
   the private GitHub Packages feed (source `github-mbrekhof`); a pushed version cannot be pushed again.

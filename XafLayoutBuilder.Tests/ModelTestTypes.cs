@@ -194,6 +194,56 @@ public class ModelTestContact : ISupportViewLayoutCustomization {
     public static ListColumnsSpec? BuildListViewColumns() => null;
 }
 
+// Opted into the catch-all, but every member is placed right now, so the updater makes no catch-all group. The export
+// must still print .Unplaced(...): dropping it would restore the strict rule for the next property added to the class.
+[DomainComponent]
+public class ModelTestFullyPlaced : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    public string? City { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestFullyPlaced>.Create()
+            .Group("Details", g => g.Item(x => x.Name).Item(x => x.City))
+            .Unplaced(UnplacedMembers.AppendToGroup("Other"))
+            .Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
+// EXPORT-002, Codex diff review: the same shape as ModelTestContact (one member placed, one left to the catch-all),
+// for the test that customises the root group. A type of its own so that mutation cannot reach the round-trip test.
+[DomainComponent]
+public class ModelTestCustomRoot : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    public string? Phone { get; set; }
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestCustomRoot>.Create()
+            .Group("Identification", g => g.Item(x => x.Name))
+            .Unplaced(UnplacedMembers.AppendToGroup("Other"))
+            .Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
+// Codex diff review round 2 of EXPORT-002: a tabbed group plus the catch-all policy, with every member placed so the
+// updater makes no catch-all group of its own. The test stamps one inside the tab, which is where a later layer (an
+// administrator dragging it in the layout editor) can put it.
+[DomainComponent]
+public class ModelTestTabbedCatchAll : ISupportViewLayoutCustomization {
+    public string? Name { get; set; }
+    public IList<ModelTestLine> Lines { get; } = new List<ModelTestLine>();
+
+    public static DetailLayoutSpec? BuildDetailViewLayout() =>
+        LayoutBuilder<ModelTestTabbedCatchAll>.Create()
+            .Group("Details", g => g.Item(x => x.Name))
+            .Tabs("Tabs", t => t.TabFor(x => x.Lines))
+            .Unplaced(UnplacedMembers.AppendToGroup("Other"))
+            .Build();
+
+    public static ListColumnsSpec? BuildListViewColumns() => null;
+}
+
 // Both place a member XAF generates no editor for (XLB001). Two identical types because a view's layout is generated
 // once, on first read: one is read with FailFastOnLayoutErrors on, the other with it off.
 [DomainComponent]

@@ -158,7 +158,7 @@ Each line says where it was verified. Skill material for `skills/xaf-layout-buil
   `BandsLayout`. XAF Blazor uses bands only when `Enable` is set and groups data columns by
   `OwnerBand` (`DxGridBase/DxGridColumnsListEditorModelSynchronizer.cs` line 99,
   `DxGridBandLayoutModelSynchronizer.cs` lines 180-210); dxdocs (List Views: Banded Column Layout)
-  says Blazor does not support multi-level bands. Siblings and bands sort by `Index`
+  says Blazor does not support multi-level bands; the source says otherwise (DOC-001, "Bands, nested" below). Siblings and bands sort by `Index`
   (`ModelBandedLayoutItemComparer`, `Model/ColumnModelNodesComparer.cs` line 48). Writing `BandsLayout`
   from the columns updater stays in the generated layer, because the generator-in-progress counter
   belongs to the layer's root (`Model/Core/ModelNode.cs` lines 430, 460-463, 1249-1251).
@@ -391,10 +391,23 @@ Paths: `CA` = `Sources\DevExpress.ExpressApp.Modules\DevExpress.ExpressApp.Condi
 - In-process model: `DesignerModelFactory` adds each `RequiredModuleTypes` entry (`XA\Utils\DesignerModelFactory.cs`
   415-424); the test fixture lists `ConditionalAppearanceModule` and the add-on module explicitly.
 
+## Bands, nested (DOC-001, verified 2026-09-20)
+
+XAF Blazor renders a band inside a band. `DxGridBandLayoutModelSynchronizer.cs` 194-213 walks the band
+tree recursively and 87-92 builds the nested layout; `DxGridColumnsListEditorModelSynchronizer.cs` 73-75
+recurses in turn while applying the visible indexes. So the builder's one-level `.Band(...)` is its own
+choice, and README used to give a rendering limit as the reason, which was wrong.
+
+## Generator updater timing (verified 2026-09-20)
+
+`ModelNodesGeneratorUpdater` registration and execution happen after every module's `CustomizeTypesInfo`
+for a normal startup: `XafApplication.cs` 1971-1983 (26.1.6) into `ApplicationModulesManager.cs` 327-336 and
+164-176, then `ApplicationModelsManager.cs` 92-102 with 375 and 379, `ModelApplicationCreator.cs` 229-236
+and `ModelNodeGenerator.cs` 59-64 and 113-119. Earlier this note claimed the ordering on the sample's
+behaviour alone; these are the citations. It holds for the normal startup path. It is not a guarantee
+about every way a model can be built: this repository's own tests build one through
+`DesignerModelFactory` (`ApplicationModelFixture.cs`), which is a different path.
+
 ## Still open
 
-- Bands (`IModelListView.BandsLayout`, `IModelBandsLayout` is added as a child node at
-  `ModelListViewNodesGenerator.cs` line 82). Not investigated further; phase 2 at the earliest.
-- `ModelNodesGeneratorUpdater` registration timing vs `CustomizeTypesInfo`: updaters run during
-  model generation, which happens after all modules' `CustomizeTypesInfo`. Confirmed indirectly by
-  the sample (Order's spec resolves in the updater); not traced in source.
+- Nothing. The bands and updater-timing questions above were settled on 2026-09-20.

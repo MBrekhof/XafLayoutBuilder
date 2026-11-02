@@ -89,7 +89,7 @@ public sealed class ApplicationModelFixture : IDisposable {
             RequiredModuleTypes.Add(typeof(XafLayoutBuilder.Appearance.XafLayoutBuilderAppearanceModule));
             foreach (var type in new[] { typeof(ModelTestCustomer), typeof(ModelTestLine), typeof(ModelTestOrder), typeof(ModelTestContact),
                          typeof(ModelTestStrictBroken), typeof(ModelTestDegradedBroken), typeof(ModelTestShipment), typeof(ModelTestParcel), typeof(ModelTestGrouped), typeof(ModelTestTicket), typeof(ModelTestBanded), typeof(ModelTestTwoBands), typeof(ModelTestNestedBands), typeof(ModelTestTiedBands), typeof(ModelTestServiceOrder), typeof(ModelTestLaterRemoval),
-                         typeof(ModelTestStyled), typeof(ModelTestAppearanceClashStrict), typeof(ModelTestAppearanceClashDegraded), typeof(ModelTestAppearanceBroken), typeof(ModelTestAppearanceExport),
+                         typeof(ModelTestFullyPlaced), typeof(ModelTestCustomRoot), typeof(ModelTestTabbedCatchAll), typeof(ModelTestStyled), typeof(ModelTestAppearanceClashStrict), typeof(ModelTestAppearanceClashDegraded), typeof(ModelTestAppearanceBroken), typeof(ModelTestAppearanceExport),
                          typeof(ModelTestAppearanceOnBrokenLayout), typeof(ModelTestAppearanceBadCriteriaDegraded), typeof(ModelTestAppearanceOverridden) })
                 AdditionalExportedTypes.Add(type);
         }

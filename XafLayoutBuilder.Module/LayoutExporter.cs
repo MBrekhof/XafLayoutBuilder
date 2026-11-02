@@ -28,11 +28,19 @@ public static class LayoutExporter {
         // freezing today's leftovers into a group would quietly restore strict XLB002 for the next new property.
         string? unplacedGroupId = null;
         var fromCatchAll = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var element in rootElements.OfType<IModelLayoutGroup>().Where(IsCatchAll).ToList()) {
+        // Codex diff review of EXPORT-002: a customised root group is exported as an ordinary group instead of being
+        // unwrapped, and the catch-all then sits inside it rather than among the root elements. Find it wherever it is,
+        // or the export would name the id both as a group and as the policy, which the builder rejects.
+        var catchAllGroups = new HashSet<IModelLayoutGroup>();
+        foreach (var element in Descend(rootElements).OfType<IModelLayoutGroup>().Where(IsCatchAll).ToList()) {
             if (unplacedGroupId is not null) {
-                skipped.Add($"skipped: more than one catch-all group; \"{element.Id}\" was exported as an ordinary group");
+                // Inside the one already taken, it goes with it; elsewhere it stays an ordinary group.
+                skipped.Add(catchAllGroups.Any(taken => Descend([taken]).Contains(element))
+                    ? $"skipped: more than one catch-all group; \"{element.Id}\" sat inside the one that was exported as .Unplaced(...) and went with it"
+                    : $"skipped: more than one catch-all group; \"{element.Id}\" was exported as an ordinary group");
                 continue;
             }
+            catchAllGroups.Add(element);
             unplacedGroupId = element.Id;
             foreach (var member in element.OfType<IModelLayoutViewItem>()
                          .Select(i => (i.ViewItem as IModelPropertyEditor)?.PropertyName)
@@ -40,8 +48,13 @@ public static class LayoutExporter {
                 fromCatchAll.Add(member);
             if (element.Count != fromCatchAll.Count)
                 skipped.Add($"note: the catch-all group \"{element.Id}\" holds something other than plain editors; only .Unplaced(...) was exported");
-            rootElements.Remove(element);
+            if (!rootElements.Remove(element))
+                skipped.Add($"note: the catch-all group \"{element.Id}\" sat inside \"{ParentIdOf(element)}\"; .Unplaced(...) recreates it beside the layout's own nodes");
         }
+
+        // EXPORT-002: with every member placed the updater made no catch-all group, so the opt-in is read from the
+        // layout node, where the updater records it whatever the members happen to be doing today.
+        unplacedGroupId ??= ((ModelNode)view.Layout).GetValue<string>(DetailViewLayoutUpdater.UnplacedPolicyMarker);
 
         var nodes = rootElements.Select(e => Convert(e, inTab: false)).OfType<LayoutNodeSpec>().ToList();
         var placed = new HashSet<string>(new DetailLayoutSpec(type.FullName!, nodes, []).Members(), StringComparer.Ordinal);
@@ -57,9 +70,12 @@ public static class LayoutExporter {
         LayoutNodeSpec? Convert(IModelViewLayoutElement element, bool inTab) {
             switch (element) {
                 case IModelTabbedGroup tabs:
-                    return new TabbedGroupSpec(tabs.Id, tabs.OrderBy(t => t.Index ?? int.MaxValue).Select(t => ConvertGroup(t, inTab: true)).ToList());
+                    // The skip below never sees a tab, so it is applied here as well.
+                    return new TabbedGroupSpec(tabs.Id, tabs.OrderBy(t => t.Index ?? int.MaxValue)
+                        .Where(t => !catchAllGroups.Contains(t)).Select(t => ConvertGroup(t, inTab: true)).ToList());
                 case IModelLayoutGroup group:
-                    return ConvertGroup(group, inTab);
+                    // Dropped above and reconstructed as .Unplaced(...); printing it as a group too would collide.
+                    return catchAllGroups.Contains(group) ? null : ConvertGroup(group, inTab);
                 case IModelLayoutViewItem item:
                     if (item.ViewItem is IModelPropertyEditor pe) {
                         var member = Simple(pe.PropertyName, $"layout item \"{item.Id}\"");
@@ -90,6 +106,27 @@ public static class LayoutExporter {
     }
 
     static bool IsCatchAll(IModelLayoutGroup group) => ((ModelNode)group).GetValue<bool>(DetailViewLayoutUpdater.CatchAllMarker);
+
+    /// <summary>
+    /// Every element of the layout below (and including) the ones given, depth first. A tabbed group is matched before a
+    /// plain one, as everywhere else here: its tabs are groups of their own and a catch-all can sit in one of them
+    /// (Codex diff review round 2).
+    /// </summary>
+    static IEnumerable<IModelViewLayoutElement> Descend(IEnumerable<IModelViewLayoutElement> elements) {
+        foreach (var element in elements) {
+            yield return element;
+            IEnumerable<IModelViewLayoutElement>? children = element switch {
+                IModelTabbedGroup tabs => tabs,
+                IModelLayoutGroup group => group,
+                _ => null,
+            };
+            if (children is null) continue;
+            foreach (var child in Descend(children)) yield return child;
+        }
+    }
+
+    static string ParentIdOf(IModelViewLayoutElement element) =>
+        (((IModelNode)element).Parent as IModelViewLayoutElement)?.Id ?? "the layout";
 
     /// <summary>
     /// Caption is localizable, so `HasValue` looks in the current language aspect and misses a generated value.
@@ -151,7 +188,7 @@ public static class LayoutExporter {
             }
         }
 
-        // One band level is all the builder has and all XAF Blazor renders: a column in a nested band exports under the
+        // One band level is all the builder has (XAF Blazor itself renders deeper, DOC-001): a column in a nested band exports under the
         // outermost band, which keeps that band's columns adjacent.
         static IModelBand? Outermost(IModelBand? band) {
             while (band?.OwnerBand is { } parent) band = parent;

@@ -258,7 +258,7 @@ public static partial class LayoutSpecChecks {
                 if (hidden.Contains(c.Member)) throw new LayoutSpecException($"{type}: column '{c.Member}' is both listed and hidden.");
             }
             // BAND-001: every band has an id of its own and at least one column, every column's band is declared, and a band's
-            // columns are next to each other (one level of bands over adjacent columns, which is what XAF Blazor renders).
+            // columns are next to each other (one level of bands over adjacent columns, the builder's choice; XAF Blazor renders deeper, DOC-001).
             var bands = s.Bands ?? [];
             if (bands.Any(b => string.IsNullOrWhiteSpace(b?.Id))) throw new LayoutSpecException($"{type}: a band has no id.");
             if (bands.GroupBy(b => b.Id, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1) is { } twiceBand)

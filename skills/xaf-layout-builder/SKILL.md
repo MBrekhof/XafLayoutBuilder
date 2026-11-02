@@ -137,8 +137,8 @@ ListView's spec is ignored. Do not try to give a builder layout to a view that e
   first, so it takes no `sortIndex`.
 - `.Band("Identity", b => b.Column(x => x.Number).Column(x => x.Customer), caption: "Order")` puts a
   band header over the columns declared inside it; they keep their place in the column order, and a
-  null caption shows the id. One level only (no `Band` inside `Band`, which XAF Blazor would not
-  render), a band's columns must be adjacent, and `.Lookup(...)` takes no bands.
+  null caption shows the id. One level only (no `Band` inside `Band`; the builder's choice, XAF Blazor
+  does render nested bands), a band's columns must be adjacent, and `.Lookup(...)` takes no bands.
 - `Hide` keeps the column in the column chooser, and leaving a member out does the same, as long as
   XAF generated a column for it. Lookup views generate almost none, so in a `.Lookup(...)` list a
   member you neither list nor hide has no column at all.

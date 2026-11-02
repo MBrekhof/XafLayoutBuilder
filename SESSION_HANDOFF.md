@@ -14,7 +14,7 @@ Updated 2026-09-20 (MODELEDITOR-012: the runtime Model Editor split out into its
   DevExpress support request draft and the "Runtime Model Editor" half of `docs/api-notes.md`.
 - **This repository is the builder and nothing else:** Core, Module, Blazor, Appearance, the sample, 157 unit tests and
   a gate of 102 assertions, all green after the removal (`dotnet build` clean, gate exit 0).
-- **Two repositories now, and they collide if run together.** Both pin DevExpress 26.1.4 — move them together — and
+- **Two repositories now, and they collide if run together.** Both pin DevExpress 26.1.6 — move them together — and
   both gates use port :5100, so never run them at the same time. Their LocalDB catalogs are separate
   (`XafLayoutBuilder.Sample` and `XafModelEditor.Sample`), which is what keeps one gate from clearing the other's
   `ModelDifferences` rows.

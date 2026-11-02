@@ -53,7 +53,8 @@ public sealed class ListViewColumnsBuilder<T> {
 
     /// <summary>
     /// A band (BAND-001): a header over the columns <paramref name="columns"/> declares, which keep their place in the column
-    /// order. A null <paramref name="caption"/> shows the id. One level only: XAF Blazor renders no band inside a band.
+    /// order. A null <paramref name="caption"/> shows the id. One level only -- the builder's choice, not XAF's limit:
+    /// Blazor does render nested bands (DOC-001, docs/api-notes.md).
     /// </summary>
     public ListViewColumnsBuilder<T> Band(string id, Action<ListViewColumnsBuilder<T>> columns, string? caption = null) {
         if (currentBand is not null) throw new LayoutSpecException($"{typeof(T).Name}: Band() cannot be nested inside Band().");

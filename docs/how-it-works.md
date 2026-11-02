@@ -91,7 +91,7 @@ Bands (`.Band(...)`) are applied by the same updater. It turns on `BandsLayout.E
 `IModelBand` per band at the position of its first column, and points each of the band's columns at
 it through `IModelBandedColumn.OwnerBand`, which is how XAF itself relates columns to bands. The spec
 keeps its flat column list: a column names its band, so a spec without bands is unchanged, JSON
-included. One level only, because XAF Blazor renders no band inside a band.
+included. One level only, the builder's choice: XAF Blazor does render a band inside a band (DOC-001).
 
 Unlike the DetailView, the generated columns are kept. Listed columns get their order, width,
 caption and sort. Every other column is set to index -1: not shown, still offered by the column

@@ -4,8 +4,8 @@
     <!-- The one DevExpress version for the repository (BPGDemo pins the same one). The samples use it exactly; the
          packages accept any 26.1 patch at or above it and refuse 26.2, whose assemblies must never be mixed with 26.1.
          Move both together. -->
-    <DevExpressVersion>26.1.4</DevExpressVersion>
-    <DevExpressPackageRange>[26.1.4,26.2)</DevExpressPackageRange>
+    <DevExpressVersion>26.1.6</DevExpressVersion>
+    <DevExpressPackageRange>[26.1.6,26.2)</DevExpressPackageRange>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Only Core, Module, Blazor and Appearance are packages; they set IsPackable. PackageVersion rather than Version: XAF

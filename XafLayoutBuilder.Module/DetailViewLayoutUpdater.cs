@@ -16,6 +16,13 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
     internal const string CatchAllMarker = "XafLayoutBuilder.UnplacedGroup";
 
     /// <summary>
+    /// EXPORT-002: model value recording the <see cref="UnplacedMembers.AppendToGroup"/> id on the layout itself. The
+    /// catch-all group exists only while something is unplaced, so it cannot carry the policy: an export taken while
+    /// every member happens to be placed would drop .Unplaced(...) and restore strict XLB002 for the next property.
+    /// </summary>
+    internal const string UnplacedPolicyMarker = "XafLayoutBuilder.UnplacedPolicy";
+
+    /// <summary>
     /// RECHECK-001: model value marking a layout this updater applied. The startup check re-checks only a view without it,
     /// one whose updater failed, perhaps in an earlier check, and that XAF will not generate again.
     /// </summary>
@@ -70,8 +77,12 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
         main.ShowCaption = false;
         for (var i = 0; i < spec.Nodes.Count; i++) Add(main, spec.Nodes[i], i, inTab: false);
 
-        if (unplaced.Count > 0 && spec.UnplacedGroupId is { } catchAll) {
-            var catchAllGroup = main.AddNode<IModelLayoutGroup>(catchAll);
+        if (spec.UnplacedGroupId is { } catchAll) {
+            // The policy goes on the layout, which always exists; the group below only while something is unplaced.
+            node.SetValue(UnplacedPolicyMarker, catchAll);
+        }
+        if (unplaced.Count > 0 && spec.UnplacedGroupId is { } catchAllId) {
+            var catchAllGroup = main.AddNode<IModelLayoutGroup>(catchAllId);
             catchAllGroup.Index = spec.Nodes.Count;
             catchAllGroup.Direction = XafFlow.Vertical;
             catchAllGroup.ShowCaption = true;
@@ -80,7 +91,7 @@ public sealed class DetailViewLayoutUpdater : ModelNodesGeneratorUpdater<ModelDe
             ((ModelNode)catchAllGroup).SetValue(CatchAllMarker, true);
             // Set the caption rather than leaving XAF to compute it: a group holding one item takes that item's
             // caption, so a catch-all called "Other" with a single leftover member would be headed "City".
-            catchAllGroup.Caption = catchAll;
+            catchAllGroup.Caption = catchAllId;
             for (var i = 0; i < unplaced.Count; i++) {
                 var item = catchAllGroup.AddNode<IModelLayoutViewItem>(unplaced[i]);
                 item.ViewItem = viewItems[unplaced[i]];

@@ -5,7 +5,7 @@ generated-layer defaults. The running Blazor app stays the visual designer. The 
 becomes a fluent builder next to the business class instead of `Model.xafml`.
 
 **Status: proof of concept, version 0.3.0, complete against its start document** (`XafLayoutBuilder-START.md`).
-Built and tested with DevExpress XAF 26.1.4, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
+Built and tested with DevExpress XAF 26.1.6, .NET 10, EF Core 10, SQL Server LocalDB and Blazor
 Server. One subject (the sample `Order`), one end-to-end gate, and the limitations listed below.
 
 > **Inspired by [DevExpress Support Center ticket T1206756](https://supportcenter.devexpress.com/ticket/details/T1206756)**,
@@ -145,7 +145,7 @@ Register the feed once per machine, for restore, with a token that has `read:pac
 Without `--store-password-in-clear-text` NuGet stores the password encrypted (Windows only). If the
 `gh` token changes, run the same command as `dotnet nuget update source` or restores fail with 401.
 The feed does not accept the same version twice, so bump `PackageVersion` in
-`Directory.Build.props` before every push, and give the changelog's Unreleased lines that version. The packages need DevExpress 26.1.4 or a later 26.1
+`Directory.Build.props` before every push, and give the changelog's Unreleased lines that version. The packages need DevExpress 26.1.6 or a later 26.1
 patch and refuse 26.2; the version the repository builds against is `DevExpressVersion` in the same
 file.
 
@@ -226,8 +226,10 @@ specs, and a printer turns specs into the builder C#.
 - A derived class keeps XAF's default layout unless it declares its own; to start from its base's,
   it re-implements `ISupportViewLayoutCustomization` with `LayoutBuilder<Derived>.Extend<Base>()` and
   `ListViewColumnsBuilder<Derived>.Extend<Base>()`, adding its members with `InGroup(...)` and the usual calls.
-- ListView bands are one level deep, `.Band(id, b => ..., caption: ...)` over adjacent columns, which
-  is what XAF Blazor renders; a `.Lookup(...)` has none.
+- ListView bands are one level deep, `.Band(id, b => ..., caption: ...)` over adjacent columns; a
+  `.Lookup(...)` has none. That is the builder's choice, not a rendering limit: XAF Blazor does render
+  nested bands, recursively (`DxGridBandLayoutModelSynchronizer.cs` 87-92 and 194-213, with
+  `DxGridColumnsListEditorModelSynchronizer.cs` 73-75). Deeper bands are unbuilt, not impossible (DOC-001).
 - Administrator and user differences override the builder, by design. A user who customised a
   property keeps seeing their value after the builder changes, until their differences are reset.
 - Every visible member must be placed or hidden in a DetailView layout, so adding a property to a
